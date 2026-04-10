@@ -771,6 +771,7 @@ export default function CamNoteEditor({
   const [regeneratingSections, setRegeneratingSections] = useState<Set<string>>(new Set())
   const [generationError, setGenerationError] = useState('')
   const [exportingDocx, setExportingDocx] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Save (debounced auto-save on section change) ──
@@ -872,6 +873,33 @@ export default function CamNoteEditor({
       URL.revokeObjectURL(url)
     } finally {
       setExportingDocx(false)
+    }
+  }
+
+  const handleExportPdf = async () => {
+    const { blockers } = computeExportReadiness(sections)
+    if (blockers.length > 0) {
+      alert(`Cannot export — resolve these issues first:\n\n• ${blockers.join('\n• ')}`)
+      return
+    }
+    setExportingPdf(true)
+    try {
+      const content = buildDocxContent()
+      const res = await fetch('/api/python-proxy/export-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memo_content: content, company_name: companyName }),
+      })
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `CAM_${companyName.replace(/\s+/g, '_')}_FY${financialYear}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setExportingPdf(false)
     }
   }
 
@@ -1008,6 +1036,17 @@ export default function CamNoteEditor({
               </Button>
             )
           })()}
+          <Button
+            variant="outline" size="sm"
+            onClick={handleExportPdf}
+            disabled={exportingPdf}
+            className="text-xs font-medium"
+          >
+            {exportingPdf
+              ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              : <Download className="h-3.5 w-3.5 mr-1.5" />}
+            Export PDF
+          </Button>
         </div>
       </div>
 

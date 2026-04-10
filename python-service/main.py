@@ -374,6 +374,106 @@ async def export_docx_endpoint(data: dict):
         raise HTTPException(500, f"DOCX export failed: {str(e)}")
 
 
+@app.post("/export-pdf")
+async def export_pdf_endpoint(data: dict):
+    """Export memo text to PDF and return the file."""
+    memo_content = data.get("memo_content", "")
+    company_name = data.get("company_name", "Borrower")
+    if not memo_content:
+        raise HTTPException(400, "memo_content is required")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp_path = tmp.name
+
+    try:
+        # Try weasyprint first
+        try:
+            import markdown as md_lib
+            import weasyprint
+
+            html_body = md_lib.markdown(memo_content, extensions=["tables", "fenced_code"])
+            html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body {{ font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.6;
+          margin: 2cm; color: #1a1a1a; }}
+  h1 {{ font-size: 18pt; color: #0D1B2A; border-bottom: 2px solid #0D1B2A; padding-bottom: 8px; }}
+  h2 {{ font-size: 13pt; color: #0D1B2A; margin-top: 24px; border-bottom: 1px solid #d1d5db;
+        padding-bottom: 4px; }}
+  table {{ width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 9pt; }}
+  th {{ background: #f3f4f6; padding: 6px 10px; text-align: left; border: 1px solid #d1d5db; }}
+  td {{ padding: 6px 10px; border: 1px solid #d1d5db; }}
+  .footer {{ font-size: 8pt; color: #6b7280; margin-top: 24px; border-top: 1px solid #d1d5db;
+             padding-top: 8px; }}
+</style>
+</head>
+<body>
+{html_body}
+<div class="footer">AI-assisted draft — reviewed and approved by RM — CreditGuard AI — CONFIDENTIAL</div>
+</body>
+</html>"""
+            weasyprint.HTML(string=html).write_pdf(tmp_path)
+        except ImportError:
+            # Fallback: use reportlab for basic PDF
+            import markdown as md_lib
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import cm
+            from reportlab.lib import colors
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+            from reportlab.lib.enums import TA_LEFT
+
+            doc = SimpleDocTemplate(tmp_path, pagesize=A4,
+                leftMargin=2*cm, rightMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+            styles = getSampleStyleSheet()
+            story = []
+
+            # Title
+            title_style = ParagraphStyle('Title', parent=styles['Title'],
+                textColor=colors.HexColor('#0D1B2A'), fontSize=18, spaceAfter=12)
+            story.append(Paragraph(f"Credit Appraisal Memorandum — {company_name}", title_style))
+            story.append(Spacer(1, 0.5*cm))
+
+            heading2_style = ParagraphStyle('H2', parent=styles['Heading2'],
+                textColor=colors.HexColor('#0D1B2A'), fontSize=13, spaceBefore=16, spaceAfter=6)
+            body_style = ParagraphStyle('Body', parent=styles['Normal'],
+                fontSize=10, leading=16, spaceAfter=8)
+
+            for line in memo_content.split('\n'):
+                line = line.strip()
+                if not line:
+                    story.append(Spacer(1, 0.2*cm))
+                elif line.startswith('## '):
+                    story.append(Paragraph(line[3:], heading2_style))
+                elif line.startswith('# '):
+                    story.append(Paragraph(line[2:], title_style))
+                else:
+                    # Escape HTML entities
+                    line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    story.append(Paragraph(line, body_style))
+
+            footer_style = ParagraphStyle('Footer', parent=styles['Normal'],
+                fontSize=8, textColor=colors.grey, spaceBefore=20)
+            story.append(Paragraph("AI-assisted draft — reviewed and approved by RM — CreditGuard AI — CONFIDENTIAL",
+                footer_style))
+            doc.build(story)
+
+        safe_name = company_name.replace(" ", "_").replace("/", "-")
+        return FileResponse(
+            tmp_path,
+            media_type="application/pdf",
+            filename=f"CAM_{safe_name}.pdf",
+            background=None,
+        )
+    except Exception as e:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        logger.error(f"PDF export failed: {e}", exc_info=True)
+        raise HTTPException(500, f"PDF export failed: {str(e)}")
+
+
 @app.post("/cam/draft-sections")
 async def draft_cam_sections_endpoint(data: dict):
     """
