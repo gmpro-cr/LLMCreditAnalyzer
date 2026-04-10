@@ -48,25 +48,30 @@ async def extract(
     file: UploadFile = File(...),
     company_name: str = Form(default=""),
 ):
-    """
-    Step 1 of pipeline: Upload PDF → extract financials → compute ratios.
-    Returns structured JSON (no memo yet).
-    """
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(400, "Only PDF files are supported")
+    fname = (file.filename or "").lower()
+    is_pdf   = fname.endswith(".pdf")
+    is_excel = fname.endswith(".xlsx") or fname.endswith(".xls")
+
+    if not is_pdf and not is_excel:
+        raise HTTPException(400, "Only PDF and Excel (.xlsx) files are supported")
 
     content = await file.read()
-    if len(content) < 1000:
-        raise HTTPException(400, "File too small — upload a valid annual report PDF")
+    if len(content) < 100:
+        raise HTTPException(400, "File too small — upload a valid financial document")
 
     logger.info(f"Extracting: {file.filename} ({len(content)/1024/1024:.1f} MB) company={company_name!r}")
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+    suffix = ".pdf" if is_pdf else ".xlsx"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(content)
         tmp_path = tmp.name
 
     try:
-        financials = extract_financials_multi_pass(tmp_path, company_name)
+        if is_excel:
+            from extractor import extract_excel_cma
+            financials = extract_excel_cma(tmp_path, company_name)
+        else:
+            financials = extract_financials_multi_pass(tmp_path, company_name)
         ratios = calculate_ratios(financials)
         logger.info(f"Extraction complete. Ratios computed: {list(ratios.keys())}")
         return {"financials": financials, "ratios": ratios, "company_name": company_name or financials.get("company_info", {}).get("name", "")}
