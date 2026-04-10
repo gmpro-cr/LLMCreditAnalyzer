@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Sparkles, Save, RefreshCw, Download, CheckCircle, AlertCircle, Plus, Trash2, ChevronDown, ChevronRight, Loader2, Lock, Unlock } from 'lucide-react'
+import { ArrowLeft, Sparkles, Save, RefreshCw, Download, CheckCircle, AlertCircle, Plus, Trash2, ChevronDown, ChevronRight, Loader2, Lock, Unlock, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -771,6 +771,9 @@ export default function CamNoteEditor({
   const [regeneratingSections, setRegeneratingSections] = useState<Set<string>>(new Set())
   const [generationError, setGenerationError] = useState('')
   const [exportingDocx, setExportingDocx] = useState(false)
+  const [showVersions, setShowVersions] = useState(false)
+  const [versions, setVersions] = useState<{id: string; label: string; created_at: string}[]>([])
+  const [savingVersion, setSavingVersion] = useState(false)
   const [exportingPdf, setExportingPdf] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -900,6 +903,43 @@ export default function CamNoteEditor({
       URL.revokeObjectURL(url)
     } finally {
       setExportingPdf(false)
+    }
+  }
+
+  const handleSaveVersion = async () => {
+    const label = window.prompt(
+      'Version label (e.g. "Before Credit Committee"):',
+      `Draft ${new Date().toLocaleDateString('en-IN')}`
+    )
+    if (!label) return
+    setSavingVersion(true)
+    try {
+      await fetch(`/api/borrowers/${borrowerId}/cam-note/${uploadId}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, snapshot: sections }),
+      })
+    } finally {
+      setSavingVersion(false)
+    }
+  }
+
+  const handleLoadVersions = async () => {
+    const res = await fetch(`/api/borrowers/${borrowerId}/cam-note/${uploadId}/versions`)
+    if (res.ok) {
+      const { versions: v } = await res.json()
+      setVersions(v ?? [])
+    }
+    setShowVersions(true)
+  }
+
+  const handleRestoreVersion = async (versionId: string) => {
+    if (!window.confirm('Restore this version? Current unsaved changes will be overwritten.')) return
+    const res = await fetch(`/api/borrowers/${borrowerId}/cam-note/${uploadId}/versions/${versionId}`)
+    if (res.ok) {
+      const data = await res.json()
+      setSections(data.snapshot)
+      setShowVersions(false)
     }
   }
 
@@ -1047,12 +1087,57 @@ export default function CamNoteEditor({
               : <Download className="h-3.5 w-3.5 mr-1.5" />}
             Export PDF
           </Button>
+          <Button variant="outline" size="sm" onClick={handleSaveVersion} disabled={savingVersion} className="text-xs">
+            {savingVersion ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+            {!savingVersion && 'Save Version'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleLoadVersions} className="text-xs">
+            <FileText className="h-3.5 w-3.5 mr-1" /> History
+          </Button>
         </div>
       </div>
 
       {generationError && (
         <div className="mx-6 mt-3 px-4 py-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 shrink-0">
           {generationError}
+        </div>
+      )}
+
+      {/* Version history panel */}
+      {showVersions && (
+        <div className="mx-6 mt-3 rounded-xl border border-border shrink-0" style={{ background: 'oklch(0.993 0.003 78)' }}>
+          <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+            <span className="text-sm font-semibold text-foreground">Version History</span>
+            <button onClick={() => setShowVersions(false)} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              Close
+            </button>
+          </div>
+          <div className="p-4">
+            {versions.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No saved versions yet. Click &quot;Save Version&quot; to create one.</p>
+            ) : (
+              <div className="space-y-2">
+                {versions.map(v => (
+                  <div key={v.id} className="flex items-center justify-between rounded-lg px-3 py-2.5"
+                    style={{ background: 'oklch(0.978 0.006 78)', border: '1px solid var(--border)' }}>
+                    <div>
+                      <p className="text-xs font-medium text-foreground">{v.label}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {new Date(v.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleRestoreVersion(v.id)}
+                      className="text-xs font-medium px-2.5 py-1 rounded-lg transition-all"
+                      style={{ background: '#0D1B2A', color: '#fff' }}
+                    >
+                      Restore
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
