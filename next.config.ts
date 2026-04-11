@@ -1,7 +1,9 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  // All pages are dynamic — no static prerendering (Supabase requires runtime env vars)
+  output: 'standalone',
+  experimental: {},
+}
 
-export default nextConfig;
+export default nextConfig

@@ -158,9 +158,43 @@ def _gemini_call(prompt: str) -> str:
         return ""
 
 
+def _claude_call(prompt: str) -> str:
+    """Call Claude via the `claude` CLI (uses Claude Code Pro subscription — no API key needed)."""
+    import subprocess
+    system = (
+        "You are a senior credit risk analyst at an Indian commercial bank. "
+        "Write formal, concise, banker-grade credit appraisal sections. "
+        "Use ONLY the data provided. Do NOT fabricate figures. "
+        "Output ONLY the requested section text in plain prose (no extra headings)."
+    )
+    full_prompt = f"{system}\n\n{prompt}"
+    try:
+        result = subprocess.run(
+            ["claude", "-p", full_prompt],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode != 0:
+            logger.error(f"Claude CLI error: {result.stderr}")
+            return ""
+        return result.stdout.strip()
+    except Exception as e:
+        logger.error(f"Claude CLI call error: {e}")
+        return ""
+
+
 def _llm(prompt: str) -> str:
-    provider = os.getenv("MEMO_PROVIDER", "ollama").lower()
-    if provider == "gemini":
+    provider = os.getenv("MEMO_PROVIDER", "gemini").lower()
+    if provider == "claude":
+        result = _claude_call(prompt)
+        if result:
+            return result
+        logger.warning("Claude CLI unavailable, falling back to Gemini")
+        result = _gemini_call(prompt)
+        if result:
+            return result
+    elif provider == "gemini":
         result = _gemini_call(prompt)
         if result:
             return result
