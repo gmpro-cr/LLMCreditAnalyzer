@@ -223,6 +223,68 @@ export const ListRiskFlagsResponseItem = zod.object({
 export const ListRiskFlagsResponse = zod.array(ListRiskFlagsResponseItem);
 
 /**
+ * @summary Search for publicly listed Indian companies by name or ticker
+ */
+export const SearchCompaniesQueryParams = zod.object({
+  q: zod.coerce.string(),
+});
+
+export const SearchCompaniesResponseItem = zod.object({
+  ticker: zod.string(),
+  name: zod.string(),
+  exchange: zod.string(),
+  sector: zod.string().optional(),
+  typeDisp: zod.string().optional(),
+});
+export const SearchCompaniesResponse = zod.array(SearchCompaniesResponseItem);
+
+/**
+ * @summary Fetch comprehensive public financial data for a listed company
+ */
+export const GetCompanyPublicDataQueryParams = zod.object({
+  ticker: zod.coerce.string(),
+});
+
+export const GetCompanyPublicDataResponse = zod.object({
+  ticker: zod.string(),
+  name: zod.string(),
+  exchange: zod.string(),
+  sector: zod.string().optional(),
+  industry: zod.string().optional(),
+  website: zod.string().optional(),
+  description: zod.string().optional(),
+  employees: zod.number().optional(),
+  cin: zod.string().optional(),
+  marketCap: zod.number().optional(),
+  currentPrice: zod.number().optional(),
+  peRatio: zod.number().optional(),
+  pbRatio: zod.number().optional(),
+  debtToEquity: zod.number().optional(),
+  currentRatio: zod.number().optional(),
+  returnOnEquity: zod.number().optional(),
+  returnOnAssets: zod.number().optional(),
+  revenueGrowth: zod.number().optional(),
+  grossMargin: zod.number().optional(),
+  ebitdaMargin: zod.number().optional(),
+  netProfitMargin: zod.number().optional(),
+  financialHistory: zod
+    .array(
+      zod.object({
+        year: zod.string(),
+        revenue: zod.number(),
+        ebitda: zod.number().optional(),
+        netProfit: zod.number(),
+        totalDebt: zod.number().optional(),
+        totalAssets: zod.number().optional(),
+        cash: zod.number().optional(),
+      }),
+    )
+    .optional(),
+  dataSource: zod.string(),
+  fetchedAt: zod.coerce.date(),
+});
+
+/**
  * @summary Get overall dashboard statistics
  */
 export const GetDashboardStatsResponse = zod.object({

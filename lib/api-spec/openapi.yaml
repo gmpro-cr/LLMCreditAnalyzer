@@ -16,6 +16,8 @@ tags:
     description: Credit memo sections and drafts
   - name: dashboard
     description: Dashboard aggregates and analytics
+  - name: companies
+    description: Public company data lookup from stock exchanges
 
 paths:
   /healthz:
@@ -219,6 +221,46 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/RiskFlag"
+
+  /companies/search:
+    get:
+      operationId: searchCompanies
+      tags: [companies]
+      summary: Search for publicly listed Indian companies by name or ticker
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of matching company suggestions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CompanySuggestion"
+
+  /companies/data:
+    get:
+      operationId: getCompanyPublicData
+      tags: [companies]
+      summary: Fetch comprehensive public financial data for a listed company
+      parameters:
+        - name: ticker
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Public company data including financials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyPublicData"
 
   /dashboard/stats:
     get:
@@ -502,3 +544,104 @@ components:
         - status
         - count
         - label
+
+    CompanySuggestion:
+      type: object
+      properties:
+        ticker:
+          type: string
+        name:
+          type: string
+        exchange:
+          type: string
+        sector:
+          type: string
+        typeDisp:
+          type: string
+      required:
+        - ticker
+        - name
+        - exchange
+
+    FinancialYear:
+      type: object
+      properties:
+        year:
+          type: string
+        revenue:
+          type: number
+        ebitda:
+          type: number
+        netProfit:
+          type: number
+        totalDebt:
+          type: number
+        totalAssets:
+          type: number
+        cash:
+          type: number
+      required:
+        - year
+        - revenue
+        - netProfit
+
+    CompanyPublicData:
+      type: object
+      properties:
+        ticker:
+          type: string
+        name:
+          type: string
+        exchange:
+          type: string
+        sector:
+          type: string
+        industry:
+          type: string
+        website:
+          type: string
+        description:
+          type: string
+        employees:
+          type: integer
+        cin:
+          type: string
+        marketCap:
+          type: number
+        currentPrice:
+          type: number
+        peRatio:
+          type: number
+        pbRatio:
+          type: number
+        debtToEquity:
+          type: number
+        currentRatio:
+          type: number
+        returnOnEquity:
+          type: number
+        returnOnAssets:
+          type: number
+        revenueGrowth:
+          type: number
+        grossMargin:
+          type: number
+        ebitdaMargin:
+          type: number
+        netProfitMargin:
+          type: number
+        financialHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/FinancialYear"
+        dataSource:
+          type: string
+        fetchedAt:
+          type: string
+          format: date-time
+      required:
+        - ticker
+        - name
+        - exchange
+        - dataSource
+        - fetchedAt

@@ -19,13 +19,17 @@ import type {
 import type {
   ActivityItem,
   Case,
+  CompanyPublicData,
+  CompanySuggestion,
   CreateCaseBody,
   DashboardStats,
   GenerateResponse,
+  GetCompanyPublicDataParams,
   HealthStatus,
   ListCasesParams,
   MemoSection,
   RiskFlag,
+  SearchCompaniesParams,
   StatusBreakdownItem,
   UpdateCaseBody,
   UpdateSectionBody,
@@ -882,6 +886,200 @@ export function useListRiskFlags<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListRiskFlagsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Search for publicly listed Indian companies by name or ticker
+ */
+export const getSearchCompaniesUrl = (params: SearchCompaniesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/companies/search?${stringifiedParams}`
+    : `/api/companies/search`;
+};
+
+export const searchCompanies = async (
+  params: SearchCompaniesParams,
+  options?: RequestInit,
+): Promise<CompanySuggestion[]> => {
+  return customFetch<CompanySuggestion[]>(getSearchCompaniesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getSearchCompaniesQueryKey = (params?: SearchCompaniesParams) => {
+  return [`/api/companies/search`, ...(params ? [params] : [])] as const;
+};
+
+export const getSearchCompaniesQueryOptions = <
+  TData = Awaited<ReturnType<typeof searchCompanies>>,
+  TError = ErrorType<unknown>,
+>(
+  params: SearchCompaniesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof searchCompanies>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getSearchCompaniesQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof searchCompanies>>> = ({
+    signal,
+  }) => searchCompanies(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof searchCompanies>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type SearchCompaniesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof searchCompanies>>
+>;
+export type SearchCompaniesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Search for publicly listed Indian companies by name or ticker
+ */
+
+export function useSearchCompanies<
+  TData = Awaited<ReturnType<typeof searchCompanies>>,
+  TError = ErrorType<unknown>,
+>(
+  params: SearchCompaniesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof searchCompanies>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getSearchCompaniesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Fetch comprehensive public financial data for a listed company
+ */
+export const getGetCompanyPublicDataUrl = (
+  params: GetCompanyPublicDataParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/companies/data?${stringifiedParams}`
+    : `/api/companies/data`;
+};
+
+export const getCompanyPublicData = async (
+  params: GetCompanyPublicDataParams,
+  options?: RequestInit,
+): Promise<CompanyPublicData> => {
+  return customFetch<CompanyPublicData>(getGetCompanyPublicDataUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCompanyPublicDataQueryKey = (
+  params?: GetCompanyPublicDataParams,
+) => {
+  return [`/api/companies/data`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetCompanyPublicDataQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCompanyPublicData>>,
+  TError = ErrorType<unknown>,
+>(
+  params: GetCompanyPublicDataParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCompanyPublicData>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetCompanyPublicDataQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCompanyPublicData>>
+  > = ({ signal }) =>
+    getCompanyPublicData(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCompanyPublicData>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCompanyPublicDataQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCompanyPublicData>>
+>;
+export type GetCompanyPublicDataQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Fetch comprehensive public financial data for a listed company
+ */
+
+export function useGetCompanyPublicData<
+  TData = Awaited<ReturnType<typeof getCompanyPublicData>>,
+  TError = ErrorType<unknown>,
+>(
+  params: GetCompanyPublicDataParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCompanyPublicData>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCompanyPublicDataQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

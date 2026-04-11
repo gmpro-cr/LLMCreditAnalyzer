@@ -174,6 +174,51 @@ export interface StatusBreakdownItem {
   label: string;
 }
 
+export interface CompanySuggestion {
+  ticker: string;
+  name: string;
+  exchange: string;
+  sector?: string;
+  typeDisp?: string;
+}
+
+export interface FinancialYear {
+  year: string;
+  revenue: number;
+  ebitda?: number;
+  netProfit: number;
+  totalDebt?: number;
+  totalAssets?: number;
+  cash?: number;
+}
+
+export interface CompanyPublicData {
+  ticker: string;
+  name: string;
+  exchange: string;
+  sector?: string;
+  industry?: string;
+  website?: string;
+  description?: string;
+  employees?: number;
+  cin?: string;
+  marketCap?: number;
+  currentPrice?: number;
+  peRatio?: number;
+  pbRatio?: number;
+  debtToEquity?: number;
+  currentRatio?: number;
+  returnOnEquity?: number;
+  returnOnAssets?: number;
+  revenueGrowth?: number;
+  grossMargin?: number;
+  ebitdaMargin?: number;
+  netProfitMargin?: number;
+  financialHistory?: FinancialYear[];
+  dataSource: string;
+  fetchedAt: string;
+}
+
 export type ListCasesParams = {
   status?: ListCasesStatus;
   search?: string;
@@ -188,3 +233,11 @@ export const ListCasesStatus = {
   approved: "approved",
   rejected: "rejected",
 } as const;
+
+export type SearchCompaniesParams = {
+  q: string;
+};
+
+export type GetCompanyPublicDataParams = {
+  ticker: string;
+};

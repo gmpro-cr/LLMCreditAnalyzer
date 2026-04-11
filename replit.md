@@ -28,6 +28,13 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ### API Server (`artifacts/api-server`)
 - Express 5 at `/api`
 - Routes: `/api/cases`, `/api/cases/:id`, `/api/cases/:id/sections`, `/api/cases/:id/generate`, `/api/cases/:id/risk-flags`, `/api/dashboard/stats`, `/api/dashboard/recent-activity`, `/api/dashboard/status-breakdown`
+- `/api/companies/search?q=...` — Screener.in-backed search for NSE/BSE listed companies
+- `/api/companies/data?ticker=...` — Fetches full financials (P&L, balance sheet, key ratios) from Screener.in for any listed Indian company; returns revenue/EBITDA/profit/assets for last 5 FYs + key ratios (P/E, P/B, ROE, market cap)
+
+#### Public Data Extraction (Screener.in)
+- Uses `cheerio` for HTML parsing of Screener.in company pages
+- No API key required — uses public stock exchange disclosure data
+- Yahoo Finance was tried but blocked by Replit IP (429 rate limit); Screener.in works reliably
 
 ## Database Schema
 
