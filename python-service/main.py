@@ -7,17 +7,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 import tempfile
 import os
+import asyncio
 import json
 import logging
 import httpx
 from dotenv import load_dotenv
 
-from extractor import extract_financials_multi_pass
+from extractor import extract_financials_multi_pass, extract_excel_cma
 from ratios import calculate_ratios, evaluate_covenants
 from memo import generate_cam_memo, export_to_docx
 from researcher import run_research
-from public_data import fetch_all_public_data, fetch_stock_quote, fetch_screener_financials
-from cam_sections import generate_cam_sections
+from public_data import fetch_all_public_data, fetch_stock_quote, fetch_screener_financials, fetch_bse_annual_reports_multi
+from cam_sections import generate_cam_sections, _llm
 from risk_flags import generate_risk_flags
 
 load_dotenv()
@@ -68,7 +69,7 @@ async def extract(
 
     try:
         if is_excel:
-            from extractor import extract_excel_cma
+
             financials = extract_excel_cma(tmp_path, company_name)
         else:
             financials = extract_financials_multi_pass(tmp_path, company_name)
@@ -203,6 +204,209 @@ async def get_stock_quote(symbol: str):
         raise HTTPException(500, str(e))
 
 
+@app.post("/fetch-annual-reports")
+async def fetch_annual_reports_endpoint(data: dict):
+    """
+    Fetch last 3 annual report PDFs for a listed company (BSE → IR fallback).
+    Extract financials from each PDF.
+    Input: {symbol, company_name}
+    Output: {reports: [{fiscal_year, size_kb, source, financials, ratios}], merged_financials, company_name}
+    """
+    symbol = data.get("symbol", "")
+    company_name = data.get("company_name", "")
+    if not symbol:
+        raise HTTPException(400, "symbol is required")
+
+    reports_meta = await asyncio.to_thread(fetch_bse_annual_reports_multi, symbol, company_name, 3)
+
+    if not reports_meta:
+        raise HTTPException(404, f"No annual reports found for {symbol}")
+
+    results = []
+
+    for meta in reports_meta:
+        pdf_path = meta.get("pdf_path")
+        if not pdf_path or not os.path.exists(pdf_path):
+            continue
+        try:
+            financials = await asyncio.to_thread(extract_financials_multi_pass, pdf_path, company_name)
+            ratios = calculate_ratios(financials)
+            results.append({
+                "fiscal_year": meta["fiscal_year"],
+                "size_kb": meta["size_kb"],
+                "source": meta["source"],
+                "source_url": meta.get("source_url", ""),
+                "financials": financials,
+                "ratios": ratios,
+            })
+        except Exception as e:
+            logger.warning(f"Extraction failed for {meta['fiscal_year']}: {e}")
+            results.append({
+                "fiscal_year": meta["fiscal_year"],
+                "size_kb": meta["size_kb"],
+                "source": meta["source"],
+                "error": str(e),
+            })
+        finally:
+            try:
+                os.unlink(pdf_path)
+            except Exception:
+                pass
+
+    # Build multi-year merged structure (Screener-compatible format)
+    valid = sorted(
+        [r for r in results if "financials" in r and "error" not in r],
+        key=lambda x: x["fiscal_year"]
+    )
+
+    # Also try Screener for authoritative multi-year data
+    screener_data: dict = {}
+    try:
+        screener_data = await asyncio.to_thread(fetch_screener_financials, symbol, company_name)
+    except Exception as e:
+        logger.warning(f"Screener fetch failed alongside PDF extraction: {e}")
+
+    if screener_data and screener_data.get("profit_loss", {}).get("years"):
+        # Screener has proper multi-year arrays — use as primary merged source
+        merged = screener_data
+        merged["source"] = "screener+pdf"
+        # Overlay latest-year detailed data from PDF extraction (notes, WC, cash flow)
+        if valid:
+            latest_fin = valid[-1]["financials"]
+            for key in ("notes_analysis", "cash_flow"):
+                if latest_fin.get(key):
+                    merged[key] = latest_fin[key]
+    elif valid:
+        # Build multi-year structure from PDF extractions
+        years = [r["fiscal_year"] for r in valid]
+
+        def _get_pl(r, *keys):
+            d = r.get("financials", {}).get("profit_loss", {})
+            for k in keys:
+                if not isinstance(d, dict):
+                    return None
+                d = d.get(k)
+            return d
+
+        def _get_bs(r, *keys):
+            d = r.get("financials", {}).get("balance_sheet", {})
+            for k in keys:
+                if not isinstance(d, dict):
+                    return None
+                d = d.get(k)
+            return d
+
+        revenue_arr = [
+            _get_pl(r, "revenue", "revenue_from_operations") or _get_pl(r, "revenue", "total_income")
+            for r in valid
+        ]
+        pat_arr = [_get_pl(r, "profit_metrics", "profit_after_tax") for r in valid]
+        ebitda_arr = [_get_pl(r, "profit_metrics", "ebitda") for r in valid]
+        pbt_arr = [_get_pl(r, "profit_metrics", "profit_before_tax") for r in valid]
+        interest_arr = [_get_pl(r, "expenses", "finance_costs") for r in valid]
+        dep_arr = [_get_pl(r, "expenses", "depreciation_amortization") for r in valid]
+        total_assets_arr = [_get_bs(r, "assets", "total_assets") for r in valid]
+        equity_arr = [_get_bs(r, "equity", "total_equity") for r in valid]
+        borrowings_arr = [
+            (_get_bs(r, "liabilities", "non_current_liabilities", "long_term_borrowings") or 0)
+            + (_get_bs(r, "liabilities", "current_liabilities", "short_term_borrowings") or 0)
+            for r in valid
+        ]
+
+        latest = valid[-1]["financials"]
+        merged = {
+            "source": "pdf_extraction",
+            "company_info": latest.get("company_info", {}),
+            "profit_loss": {
+                "years": years,
+                "revenue": revenue_arr,
+                "pat": pat_arr,
+                "ebitda": ebitda_arr,
+                "pbt": pbt_arr,
+                "interest": interest_arr,
+                "depreciation": dep_arr,
+                # Scalar aliases for backward compat
+                "revenue_from_operations": {"current": revenue_arr[-1] if revenue_arr else None},
+                "profit_after_tax": {"current": pat_arr[-1] if pat_arr else None},
+                "finance_costs": {"current": interest_arr[-1] if interest_arr else None},
+            },
+            "balance_sheet": {
+                "years": years,
+                "total_assets": total_assets_arr,
+                "borrowings": borrowings_arr,
+                "total_equity": equity_arr,
+                # Full latest-year nested structure for ratio calculations
+                **{k: v for k, v in latest.get("balance_sheet", {}).items()
+                   if k not in ("years", "total_assets", "borrowings", "total_equity")},
+            },
+            "cash_flow": latest.get("cash_flow", {}),
+            "notes_analysis": latest.get("notes_analysis", {}),
+        }
+    else:
+        merged = {}
+
+    return {"reports": results, "merged_financials": merged, "company_name": company_name or symbol}
+
+
+@app.post("/extract-organogram")
+async def extract_organogram_endpoint(
+    file: UploadFile = File(...),
+    company_name: str = Form(default=""),
+):
+    """
+    Extract group structure from an uploaded organogram image or PDF.
+    Returns {ocr_text, entities, summary}
+    """
+    content = await file.read()
+    fname = (file.filename or "").lower()
+    suffix = ".pdf" if fname.endswith(".pdf") else ".png"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        if suffix == ".pdf":
+            financials = extract_financials_multi_pass(tmp_path, company_name)
+            raw_text = str(financials)[:4000]
+        else:
+            try:
+                import pytesseract
+                from PIL import Image
+                img = Image.open(tmp_path)
+                raw_text = pytesseract.image_to_string(img)
+            except ImportError:
+                raw_text = f"[Image uploaded: {file.filename}. Install pytesseract for OCR.]"
+
+        prompt = f"""Extract the group organogram / corporate structure from this text.
+Return JSON with keys:
+- "entities": list of {{"name": str, "type": "parent|subsidiary|associate|jv", "ownership_pct": number|null, "parent": str|null}}
+- "summary": 2-3 sentence plain-English description of the group structure
+
+Text:
+{raw_text[:4000]}
+
+Respond with only valid JSON."""
+
+        llm_response = _llm(prompt)
+        try:
+            cleaned = llm_response.strip().strip("```json").strip("```").strip()
+            parsed = json.loads(cleaned)
+        except Exception:
+            parsed = {"entities": [], "summary": llm_response[:500]}
+
+        return {
+            "ocr_text": raw_text[:3000],
+            "entities": parsed.get("entities", []),
+            "summary": parsed.get("summary", ""),
+        }
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+
 @app.post("/public-data/generate-memo")
 async def generate_memo_from_public_data(data: dict):
     """
@@ -306,18 +510,31 @@ async def generate_memo_from_public_data(data: dict):
 async def research_company(data: dict):
     """
     Autoresearch agent: run web research on a company and return a Research Brief.
-    Input: {company_name, industry, financials_snapshot (optional)}
-    Output: {brief, sources, queries_run}
+    Also fetches Screener.in multi-year financials for the company (best-effort).
+    Input: {company_name, sector/industry, financials_snapshot (optional)}
+    Output: {brief, sources, queries_run, financials (if found on Screener)}
     """
     company_name = data.get("company_name", "")
-    industry     = data.get("industry", "Manufacturing")
+    industry     = data.get("industry", "") or data.get("sector", "Manufacturing")
     snapshot     = data.get("financials_snapshot", {})
 
     if not company_name:
         raise HTTPException(400, "company_name is required")
 
     try:
-        result = run_research(company_name, industry, snapshot)
+        # Run web research (async-safe via thread)
+        result = await asyncio.to_thread(run_research, company_name, industry, snapshot)
+
+        # Also fetch Screener financials in parallel (best-effort)
+        screener_fin: dict = {}
+        try:
+            screener_fin = await asyncio.to_thread(fetch_screener_financials, company_name, company_name)
+        except Exception as se:
+            logger.warning(f"[Research] Screener fetch failed: {se}")
+
+        if screener_fin and screener_fin.get("profit_loss", {}).get("years"):
+            result["financials"] = screener_fin
+
         return result
     except Exception as e:
         logger.error(f"Research failed: {e}", exc_info=True)
@@ -386,79 +603,44 @@ async def export_pdf_endpoint(data: dict):
         tmp_path = tmp.name
 
     try:
-        # Try weasyprint first
-        try:
-            import markdown as md_lib
-            import weasyprint
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
-            html_body = md_lib.markdown(memo_content, extensions=["tables", "fenced_code"])
-            html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  body {{ font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.6;
-          margin: 2cm; color: #1a1a1a; }}
-  h1 {{ font-size: 18pt; color: #0D1B2A; border-bottom: 2px solid #0D1B2A; padding-bottom: 8px; }}
-  h2 {{ font-size: 13pt; color: #0D1B2A; margin-top: 24px; border-bottom: 1px solid #d1d5db;
-        padding-bottom: 4px; }}
-  table {{ width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 9pt; }}
-  th {{ background: #f3f4f6; padding: 6px 10px; text-align: left; border: 1px solid #d1d5db; }}
-  td {{ padding: 6px 10px; border: 1px solid #d1d5db; }}
-  .footer {{ font-size: 8pt; color: #6b7280; margin-top: 24px; border-top: 1px solid #d1d5db;
-             padding-top: 8px; }}
-</style>
-</head>
-<body>
-{html_body}
-<div class="footer">AI-assisted draft — reviewed and approved by RM — CreditGuard AI — CONFIDENTIAL</div>
-</body>
-</html>"""
-            weasyprint.HTML(string=html).write_pdf(tmp_path)
-        except ImportError:
-            # Fallback: use reportlab for basic PDF
-            import markdown as md_lib
-            from reportlab.lib.pagesizes import A4
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-            from reportlab.lib.units import cm
-            from reportlab.lib import colors
-            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-            from reportlab.lib.enums import TA_LEFT
+        doc = SimpleDocTemplate(tmp_path, pagesize=A4,
+            leftMargin=2*cm, rightMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+        styles = getSampleStyleSheet()
+        story = []
 
-            doc = SimpleDocTemplate(tmp_path, pagesize=A4,
-                leftMargin=2*cm, rightMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
-            styles = getSampleStyleSheet()
-            story = []
+        title_style = ParagraphStyle('Title', parent=styles['Title'],
+            textColor=colors.HexColor('#0D1B2A'), fontSize=18, spaceAfter=12)
+        story.append(Paragraph(f"Credit Appraisal Memorandum — {company_name}", title_style))
+        story.append(Spacer(1, 0.5*cm))
 
-            # Title
-            title_style = ParagraphStyle('Title', parent=styles['Title'],
-                textColor=colors.HexColor('#0D1B2A'), fontSize=18, spaceAfter=12)
-            story.append(Paragraph(f"Credit Appraisal Memorandum — {company_name}", title_style))
-            story.append(Spacer(1, 0.5*cm))
+        heading2_style = ParagraphStyle('H2', parent=styles['Heading2'],
+            textColor=colors.HexColor('#0D1B2A'), fontSize=13, spaceBefore=16, spaceAfter=6)
+        body_style = ParagraphStyle('Body', parent=styles['Normal'],
+            fontSize=10, leading=16, spaceAfter=8)
 
-            heading2_style = ParagraphStyle('H2', parent=styles['Heading2'],
-                textColor=colors.HexColor('#0D1B2A'), fontSize=13, spaceBefore=16, spaceAfter=6)
-            body_style = ParagraphStyle('Body', parent=styles['Normal'],
-                fontSize=10, leading=16, spaceAfter=8)
+        for line in memo_content.split('\n'):
+            line = line.strip()
+            if not line:
+                story.append(Spacer(1, 0.2*cm))
+            elif line.startswith('## '):
+                story.append(Paragraph(line[3:], heading2_style))
+            elif line.startswith('# '):
+                story.append(Paragraph(line[2:], title_style))
+            else:
+                line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                story.append(Paragraph(line, body_style))
 
-            for line in memo_content.split('\n'):
-                line = line.strip()
-                if not line:
-                    story.append(Spacer(1, 0.2*cm))
-                elif line.startswith('## '):
-                    story.append(Paragraph(line[3:], heading2_style))
-                elif line.startswith('# '):
-                    story.append(Paragraph(line[2:], title_style))
-                else:
-                    # Escape HTML entities
-                    line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                    story.append(Paragraph(line, body_style))
-
-            footer_style = ParagraphStyle('Footer', parent=styles['Normal'],
-                fontSize=8, textColor=colors.grey, spaceBefore=20)
-            story.append(Paragraph("AI-assisted draft — reviewed and approved by RM — CreditGuard AI — CONFIDENTIAL",
-                footer_style))
-            doc.build(story)
+        footer_style = ParagraphStyle('Footer', parent=styles['Normal'],
+            fontSize=8, textColor=colors.grey, spaceBefore=20)
+        story.append(Paragraph("AI-assisted draft — reviewed and approved by RM — CreditGuard AI — CONFIDENTIAL",
+            footer_style))
+        doc.build(story)
 
         safe_name = company_name.replace(" ", "_").replace("/", "-")
         return FileResponse(

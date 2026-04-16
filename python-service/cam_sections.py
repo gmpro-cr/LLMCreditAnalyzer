@@ -39,6 +39,9 @@ AI_SECTIONS = [
     "industry_analysis",
     "financial_analysis",
     "working_capital",
+    "banking_arrangement",
+    "proposed_structure",
+    "peer_comparison",
     "key_issues",
     "recommendation",
     "executive_summary",   # generated last — synthesises all others
@@ -101,6 +104,54 @@ SECTION_PROMPTS = {
         "business overview in 2–3 sentences, key financial highlights (revenue, PAT, DSCR, leverage), "
         "credit strengths, top 2–3 risk factors, and the recommended credit decision. "
         "This is the first section a credit committee member will read — make it crisp and decisive."
+    ),
+    "banking_arrangement": (
+        "Generate a structured Banking Arrangement section for a Credit Appraisal Memorandum. "
+        "Include:\n"
+        "1. A markdown table of the borrower's existing credit facilities with ALL banks, with columns: "
+        "Bank Name | Facility Type | Sanctioned Limit (₹ Cr) | Outstanding (₹ Cr) | Security | Remarks. "
+        "If specific details are not available in the data, use '[To be obtained]' as placeholder — DO NOT fabricate figures.\n"
+        "2. Account conduct summary: any instances of irregularity, bounced instruments, overutilisation.\n"
+        "3. CIBIL/CMR score and status (use '[To be verified]' if not available).\n"
+        "4. Total banking system exposure (sum across all lenders).\n"
+        "5. One paragraph on the proposed bank's relationship with the borrower if any.\n"
+        "Use a professional formal tone. Flag clearly what information is pending."
+    ),
+    "proposed_structure": (
+        "Generate the Proposed Credit Facility Structure section. Include:\n"
+        "1. Facility details: Type (Working Capital — Cash Credit/Overdraft), Amount (₹ Cr), Tenor, "
+        "Purpose, Disbursement mode.\n"
+        "2. Drawing Power (DP) Calculation using Indian banking norms (Tandon Committee Method II):\n"
+        "   Present a markdown table:\n"
+        "   | Item | Amount (₹ Cr) |\n"
+        "   | Inventory (at cost) | [value or 'As per stock statement'] |\n"
+        "   | Trade Receivables (< 90 days) | [value or 'As per debtor ageing'] |\n"
+        "   | Other Current Assets | [value] |\n"
+        "   | **Total Current Assets (A)** | [total] |\n"
+        "   | Less: Trade Creditors | [value] |\n"
+        "   | Less: Other Current Liabilities | [value] |\n"
+        "   | **Total Current Liabilities excl. Bank Borrowings (B)** | [total] |\n"
+        "   | **Working Capital Gap (A-B)** | [gap] |\n"
+        "   | Bank Financing (75% of WCG — Method II) | [75% of gap] |\n"
+        "   | **Drawing Power (min of Bank Financing & Limit)** | [DP] |\n"
+        "   Use actual balance sheet figures where available. Flag '[Requires stock statement]' where live data is needed.\n"
+        "3. Security structure:\n"
+        "   - Primary: Hypothecation of entire current assets (stock, book debts) — first charge\n"
+        "   - Collateral: [as applicable]\n"
+        "   - Guarantee: Corporate/personal guarantee if applicable\n"
+        "4. Pricing: Interest rate (Base Rate / MCLR + spread), processing fee, review frequency.\n"
+        "5. Repayment: For WC — annual review; for term — EMI schedule.\n"
+        "Use actual financial data from the context where available."
+    ),
+    "peer_comparison": (
+        "Write a Peer Comparison section with:\n"
+        "1. A markdown table comparing the borrower against 3-4 named peer companies on these metrics:\n"
+        "   Company | Revenue (₹ Cr) | EBITDA Margin % | PAT Margin % | D/E Ratio | Interest Coverage | ROCE % | Credit Rating\n"
+        "   Use the peer list and financial data provided. If peer financials are not in the data, "
+        "   use approximate publicly known figures with a note '(approximate)'.\n"
+        "2. A 2-3 sentence narrative on how the borrower compares to peers — strengths and gaps.\n"
+        "3. Industry median benchmarks for the sector where available.\n"
+        "Base this on the sector and peers provided in the context."
     ),
 }
 
@@ -208,69 +259,187 @@ def _llm(prompt: str) -> str:
 
 # ── Context builder ───────────────────────────────────────────────────────────
 
+def _fmt(v, decimals=2):
+    """Format a number or return 'N/A'."""
+    if v is None:
+        return "N/A"
+    try:
+        return f"{float(v):,.{decimals}f}"
+    except (TypeError, ValueError):
+        return str(v)
+
+
 def _build_context_text(financials: Dict, ratios: Dict, company_name: str, research_brief: str) -> str:
     lines = [f"COMPANY: {company_name}"]
 
     ci = financials.get("company_info", {})
     if ci.get("industry"):
         lines.append(f"INDUSTRY: {ci['industry']}")
-    if ci.get("description"):
-        lines.append(f"DESCRIPTION: {ci['description']}")
+    if ci.get("about") or ci.get("description"):
+        lines.append(f"ABOUT: {(ci.get('about') or ci.get('description', ''))[:400]}")
+    if ci.get("key_points"):
+        lines.append("KEY POINTS: " + " | ".join(str(x) for x in ci["key_points"][:6]))
 
-    # P&L multi-year if available (Screener format)
     pl = financials.get("profit_loss", {})
-    years  = pl.get("years",   [])
-    rev    = pl.get("revenue", [])
-    pat    = pl.get("pat",     [])
-    ebitda = pl.get("ebitda",  [])
-    if years:
-        lines.append("\nFINANCIALS (₹ Cr):")
-        for i, yr in enumerate(years):
-            r = rev[i]   if i < len(rev)    else None
-            p = pat[i]   if i < len(pat)    else None
-            e = ebitda[i] if i < len(ebitda) else None
-            lines.append(
-                f"  {yr}: Revenue={r}, PAT={p}, EBITDA={e}"
-            )
-    else:
-        # Single-year from structured financials
-        rev_c = pl.get("revenue", {})
-        if isinstance(rev_c, dict):
-            lines.append(f"\nREVENUE: {rev_c.get('revenue_from_operations') or rev_c.get('total_income')}")
-
     bs = financials.get("balance_sheet", {})
-    borrow = bs.get("borrowings", [])
-    if borrow:
-        lines.append(f"BORROWINGS: {borrow}")
-    networth = bs.get("equity", {})
-    if isinstance(networth, dict):
-        eq = networth.get("total_equity")
-        if eq:
-            lines.append(f"NET WORTH: ₹{eq} Cr")
+    cf = financials.get("cash_flow", {})
 
+    years  = pl.get("years", [])
+    rev    = pl.get("revenue", [])
+    pat    = pl.get("pat", [])
+    ebitda = pl.get("ebitda", [])
+    pbt    = pl.get("pbt", [])
+    interest = pl.get("interest", []) or pl.get("finance_costs", [])
+    dep    = pl.get("depreciation", [])
+
+    bs_years = bs.get("years", years)
+    borrowings = bs.get("borrowings", [])
+    total_equity = bs.get("total_equity", [])
+    total_assets = bs.get("total_assets", [])
+
+    # Normalise to lists
+    def _to_list(x):
+        return x if isinstance(x, list) else []
+
+    rev = _to_list(rev); pat = _to_list(pat); ebitda = _to_list(ebitda)
+    pbt = _to_list(pbt); interest = _to_list(interest); dep = _to_list(dep)
+    borrowings = _to_list(borrowings); total_equity = _to_list(total_equity)
+    total_assets = _to_list(total_assets)
+
+    if years:
+        # ── Multi-year financial table ────────────────────────────────────────
+        col_w = 14
+        header = "Metric".ljust(28) + "".join(str(y).rjust(col_w) for y in years)
+        sep = "-" * (28 + col_w * len(years))
+        table_rows = ["\nFINANCIALS (₹ Crore):", sep, header, sep]
+
+        def row(label, arr):
+            return label.ljust(28) + "".join(_fmt(arr[i] if i < len(arr) else None).rjust(col_w) for i in range(len(years)))
+
+        table_rows.append(row("Revenue from Operations", rev))
+        table_rows.append(row("EBITDA", ebitda))
+
+        # EBITDA margin %
+        ebitda_margins = []
+        for i in range(len(years)):
+            r_v = rev[i] if i < len(rev) else None
+            e_v = ebitda[i] if i < len(ebitda) else None
+            m = round(e_v / r_v * 100, 1) if r_v and e_v and r_v > 0 else None
+            ebitda_margins.append(m)
+        table_rows.append(row("EBITDA Margin %", ebitda_margins))
+        table_rows.append(row("Profit Before Tax", pbt))
+        table_rows.append(row("Profit After Tax (PAT)", pat))
+
+        # PAT margin %
+        pat_margins = []
+        for i in range(len(years)):
+            r_v = rev[i] if i < len(rev) else None
+            p_v = pat[i] if i < len(pat) else None
+            m = round(p_v / r_v * 100, 1) if r_v and p_v and r_v > 0 else None
+            pat_margins.append(m)
+        table_rows.append(row("PAT Margin %", pat_margins))
+        table_rows.append(row("Finance Costs", interest))
+        table_rows.append(row("Depreciation", dep))
+        table_rows.append(sep)
+        table_rows.append(row("Total Assets", total_assets))
+        table_rows.append(row("Total Borrowings", borrowings))
+        table_rows.append(row("Total Equity / Net Worth", total_equity))
+
+        # D/E ratio
+        de_ratios = []
+        for i in range(len(years)):
+            b = borrowings[i] if i < len(borrowings) else None
+            e = total_equity[i] if i < len(total_equity) else None
+            de_ratios.append(round(b / e, 2) if b is not None and e and e > 0 else None)
+        table_rows.append(row("Debt / Equity Ratio", de_ratios))
+
+        # Interest coverage
+        icr_series = []
+        for i in range(len(years)):
+            eb = ebitda[i] if i < len(ebitda) else None
+            fi = interest[i] if i < len(interest) else None
+            icr_series.append(round(eb / fi, 2) if eb and fi and fi > 0 else None)
+        table_rows.append(row("Interest Coverage (x)", icr_series))
+
+        table_rows.append(sep)
+        lines.extend(table_rows)
+
+        # CAGR summary
+        if len(years) >= 2:
+            n = len(years) - 1
+            if rev and rev[0] and rev[-1] and rev[0] > 0:
+                cagr = round(((rev[-1] / rev[0]) ** (1 / n) - 1) * 100, 1)
+                lines.append(f"Revenue CAGR ({n}yr): {cagr}%")
+            if pat and pat[0] and pat[-1] and pat[0] > 0 and pat[-1] > 0:
+                cagr = round(((pat[-1] / pat[0]) ** (1 / n) - 1) * 100, 1)
+                lines.append(f"PAT CAGR ({n}yr): {cagr}%")
+
+        # Cash flow summary
+        cfo_years = cf.get("years", [])
+        cfo_vals = cf.get("operating", [])
+        if cfo_years and cfo_vals:
+            lines.append("Operating Cash Flow (₹ Cr): " +
+                         ", ".join(f"{y}: {_fmt(v)}" for y, v in zip(cfo_years, cfo_vals)))
+
+    else:
+        # Single-year fallback
+        rev_d = pl.get("revenue", {})
+        if isinstance(rev_d, dict):
+            rv = rev_d.get("revenue_from_operations") or rev_d.get("total_income")
+            lines.append(f"\nREVENUE: ₹{_fmt(rv)} Cr")
+        pm = pl.get("profit_metrics", {})
+        if isinstance(pm, dict):
+            lines.append(f"PAT: ₹{_fmt(pm.get('profit_after_tax'))} Cr | EBITDA: ₹{_fmt(pm.get('ebitda'))} Cr")
+
+        eq = bs.get("equity", {})
+        if isinstance(eq, dict) and eq.get("total_equity"):
+            lines.append(f"NET WORTH: ₹{_fmt(eq['total_equity'])} Cr")
+
+    # Screener ratios if available
+    screener_ratios = financials.get("key_ratios_from_screener", {})
+    if screener_ratios:
+        lines.append("\nKEY RATIOS (Screener):")
+        for k, v in screener_ratios.items():
+            if v is not None and not isinstance(v, list):
+                lines.append(f"  {k}: {v}")
+
+    # Computed ratios
     key_ratios = {
         "Debt/Equity": ratios.get("debt_equity"),
         "Current Ratio": ratios.get("current_ratio"),
-        "Interest Coverage": ratios.get("interest_coverage"),
+        "Interest Coverage (x)": ratios.get("interest_coverage"),
         "DSCR": ratios.get("dscr"),
         "EBITDA Margin %": ratios.get("ebitda_margin"),
         "ROCE %": ratios.get("roce"),
+        "Debtor Days": screener_ratios.get("debtor_days") or ratios.get("debtor_days"),
+        "Inventory Days": screener_ratios.get("inventory_days") or ratios.get("inventory_days"),
+        "Creditor Days": screener_ratios.get("payable_days") or ratios.get("payable_days"),
     }
     kr_lines = [f"  {k}: {v}" for k, v in key_ratios.items() if v is not None]
     if kr_lines:
-        lines.append("\nKEY RATIOS:\n" + "\n".join(kr_lines))
+        lines.append("\nCOMPUTED RATIOS:\n" + "\n".join(kr_lines))
 
-    screener = financials.get("screener", {})
-    prom = screener.get("promoter_holding") or financials.get("promoter_holding")
+    # Shareholding
+    sh = financials.get("shareholding", {})
+    prom = sh.get("promoter_holding_pct") or financials.get("company_info", {}).get("promoter_holding")
     if prom:
-        lines.append(f"PROMOTER HOLDING: {prom}%")
+        lines.append(f"\nPROMOTER HOLDING: {prom}%")
+        trend = sh.get("promoter_trend", [])
+        if trend:
+            lines.append("Promoter trend: " + ", ".join(f"{t['period']}: {t['pct']}%" for t in trend[-4:]))
 
+    # Peers
     peers = financials.get("peers", [])
     if peers:
-        lines.append(f"\nPEERS: {', '.join(str(p.get('name', p)) for p in peers[:5])}")
+        lines.append(f"\nPEER COMPANIES: {', '.join(str(p.get('Name', p.get('name', str(p)))) for p in peers[:5])}")
+
+    # Credit ratings
+    ratings = financials.get("company_info", {}).get("credit_ratings", [])
+    if ratings:
+        lines.append("\nCREDIT RATINGS: " + " | ".join(str(r) for r in ratings[:3]))
 
     if research_brief:
-        lines.append(f"\nWEB RESEARCH BRIEF:\n{research_brief[:3000]}")
+        lines.append(f"\nWEB RESEARCH BRIEF:\n{research_brief[:4000]}")
 
     return "\n".join(lines)
 
@@ -352,16 +521,19 @@ def _parse_sections(raw: str) -> Dict[str, str]:
 # ── Confidence rules ──────────────────────────────────────────────────────────
 
 SECTION_CONFIDENCE: Dict[str, tuple] = {
-    "company_background":  ("high",   "Extracted directly from structured company data"),
-    "group_structure":     ("medium", "Inferred from available data; verify with MCA records"),
-    "management_profile":  ("medium", "Based on available promoter data; KYC verification required"),
-    "business_model":      ("medium", "Inferred from financials and research; verify key claims"),
-    "industry_analysis":   ("medium", "Drawn from sector knowledge base and web research"),
-    "financial_analysis":  ("high",   "Derived from computed financial ratios and extracted data"),
-    "working_capital":     ("medium", "Inferred from balance sheet; verify against stock statement"),
-    "key_issues":          ("medium", "Synthesised from ratios and research; RM judgement required"),
-    "recommendation":      ("low",    "AI scaffold only — recommendation MUST be authored by RM"),
-    "executive_summary":   ("medium", "Synthesised from all other sections; review each source section"),
+    "company_background":   ("high",   "Extracted directly from structured company data"),
+    "group_structure":      ("medium", "Inferred from available data; verify with MCA records"),
+    "management_profile":   ("medium", "Based on available promoter data; KYC verification required"),
+    "business_model":       ("medium", "Inferred from financials and research; verify key claims"),
+    "industry_analysis":    ("medium", "Drawn from sector knowledge base and web research"),
+    "financial_analysis":   ("high",   "Derived from computed financial ratios and extracted data"),
+    "working_capital":      ("medium", "Inferred from balance sheet; verify against stock statement"),
+    "banking_arrangement":  ("low",    "Template only — RM must obtain CIBIL, CMR, and existing facility details"),
+    "proposed_structure":   ("medium", "DP calculation uses balance sheet data; update with fresh stock statement"),
+    "peer_comparison":      ("medium", "Peer figures are approximate; verify against latest annual reports"),
+    "key_issues":           ("medium", "Synthesised from ratios and research; RM judgement required"),
+    "recommendation":       ("low",    "AI scaffold only — recommendation MUST be authored by RM"),
+    "executive_summary":    ("medium", "Synthesised from all other sections; review each source section"),
 }
 
 

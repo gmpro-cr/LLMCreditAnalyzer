@@ -273,16 +273,20 @@ def _synthesize(
 ) -> str:
     fin_sum = _fin_summary(fin_snapshot)
 
-    prompt = f"""You are a senior credit risk analyst. Using the multi-round web research below, write a comprehensive
-Research Brief that will feed into a Credit Risk Summary.
+    prompt = f"""You are a senior credit risk analyst. Using the research below (LLM parametric knowledge + multi-round web research), write a comprehensive Research Brief for a Credit Appraisal Memorandum.
+
+The research includes:
+- [LLM WIKI] sections: the model's parametric training knowledge — broad background, use for context
+- Web search results: live facts, recent news, current ratings — prioritise these over LLM Wiki when they conflict
 
 Company: {company_name}
 Industry: {industry} (India)
 3-Year Financial Snapshot:
 {fin_sum}
 
-Write exactly these 7 sections. Be SPECIFIC — cite actual facts, names, figures, and dates found in the research.
-Do NOT fabricate. Write "Not found" if nothing relevant was discovered.
+Write exactly these 7 sections. Be SPECIFIC — cite actual facts, names, figures, and dates.
+Do NOT fabricate figures. Mark anything from LLM Wiki (not web-confirmed) as "(from LLM knowledge — verify)".
+Write "Not found" if nothing relevant was discovered.
 Do NOT include any thinking tags or reasoning traces.
 
 ## Company Overview
@@ -323,6 +327,67 @@ ALL RESEARCH DATA (multi-round):
 
     # Fallback: return raw context excerpt if Gemini unavailable
     return all_context[:3000]
+
+
+# ── LLM Wiki lookup ───────────────────────────────────────────────────────────
+
+def llm_wiki_lookup(company_name: str, sector: str) -> str:
+    """
+    Karpathy LLM-as-Wikipedia: query the model for its parametric knowledge
+    about the company BEFORE any web search. Returns a structured wiki-style
+    profile that seeds the research context.
+
+    The LLM already knows well-known Indian listed companies — their business,
+    promoters, group structure, sector dynamics, regulatory context — from training
+    data. This gives instant, broad base knowledge that the DDG research loop then
+    fills with recent/specific facts.
+    """
+    prompt = f"""You are an encyclopaedia of Indian business and finance.
+Write a structured factual wiki profile for the company below, drawing ONLY on your training knowledge.
+Mark facts you are uncertain about with "(unverified)". Write "Not known" for gaps.
+Do NOT invent specific figures — use ranges or qualitative descriptions if unsure.
+
+COMPANY: {company_name}
+SECTOR: {sector}
+
+Write exactly these sections:
+
+## Business Overview
+(What the company does: core products/services, revenue streams, scale, geographic footprint,
+year of incorporation, listing exchange. 4-5 sentences.)
+
+## Group Structure & Promoters
+(Parent group if any, key promoters/founders and their background, promoter holding %
+and any known pledging. Key subsidiaries and associates.)
+
+## Management
+(MD/CEO name and tenure, key board members, management track record, any governance concerns known.)
+
+## Industry Position
+(Market position — leader/challenger/niche. Named key competitors. Customer segments.
+Known key clients if any. Entry barriers in this sector.)
+
+## Sector Dynamics — {sector}
+(India-specific: market size, growth rate, key demand drivers, regulatory environment,
+input cost pressures, government policy tailwinds/headwinds, recent sector events.)
+
+## Known Credit & Risk Signals
+(Any known credit ratings — agency and rating. History of defaults, restructuring, NPA.
+Promoter pledging. Material legal cases. Major contingent liabilities. Auditor changes.)
+
+## Recent Developments
+(Bullet points: major expansions, acquisitions, leadership changes, order wins, funding rounds,
+any negative events in 2022-2025 you are aware of.)
+
+Be concise. Each section: 3-5 sentences or bullet points."""
+
+    result = _llm_call(prompt)
+    if not result:
+        return ""
+    # Strip any thinking traces
+    result = re.sub(r'<think>.*?</think>', '', result, flags=re.DOTALL).strip()
+    logger.info(f"[LLM Wiki] Generated profile for {company_name} ({len(result)} chars)")
+    return result
 
 
 # ── Main entry point ───────────────────────────────────────────────────────────
@@ -385,17 +450,27 @@ def run_research(
     def _context_so_far() -> str:
         return "\n\n---\n\n".join(all_snippets)
 
-    # ── Round 0: Bootstrap ─────────────────────────────────────────────────────
+    # ── LLM Wiki: seed with parametric knowledge BEFORE any web search ────────
+    # The LLM already knows well-known Indian listed companies from training data.
+    # This gives rich base context instantly; the DDG loop fills in recent/specific facts.
+    logger.info(f"[Research] LLM Wiki lookup for {company_name}")
+    wiki_profile = llm_wiki_lookup(company_name, industry)
+    if wiki_profile:
+        all_snippets.insert(0, f"[LLM WIKI — PARAMETRIC KNOWLEDGE]\n{wiki_profile}")
+        logger.info(f"[Research] LLM Wiki seeded {len(wiki_profile)} chars into context")
+
+    # ── Round 0: Bootstrap DDG search ─────────────────────────────────────────
+    # Focus the seed queries on gaps the LLM Wiki won't have: recent news + live data
     seed_queries = [
-        f"{company_name} company profile business India {industry}",
-        f"{company_name} latest news 2024 2025 revenue profit growth India",
-        f"{company_name} promoters management credit rating ICRA CRISIL India",
+        f"{company_name} latest news 2024 2025 revenue profit results India",
+        f"{company_name} promoters management credit rating ICRA CRISIL 2024 2025",
+        f"{company_name} annual report FY2025 FY2024 financial results India",
     ]
     new_sources = _run_queries(seed_queries)
     _fetch_pages(new_sources, max_pages=2)
 
     if not all_snippets:
-        logger.warning(f"[Research] No bootstrap results for {company_name}")
+        logger.warning(f"[Research] No results for {company_name}")
         return {"brief": "", "sources": [], "queries_run": queries_run}
 
     # ── Rounds 1…N: Karpathy-style LLM-driven iterative deepening ──────────────

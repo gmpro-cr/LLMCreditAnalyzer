@@ -97,7 +97,7 @@ def extract_pages_by_statement(pdf_path: str) -> Dict[str, str]:
 
 
 def _call_claude(text: str, prompt: str, label: str) -> dict:
-    """Call Claude via the `claude` CLI (uses Claude Code Pro subscription — no API key needed)."""
+    """Call Claude via the `claude` CLI — passes prompt via stdin to avoid arg-length limits."""
     import subprocess
     full_prompt = (
         "You are a financial data extractor. Return ONLY valid JSON, no markdown, no explanation.\n\n"
@@ -107,7 +107,8 @@ def _call_claude(text: str, prompt: str, label: str) -> dict:
     )
     try:
         result = subprocess.run(
-            ["claude", "-p", full_prompt],
+            ["claude", "-p", "-"],
+            input=full_prompt,
             capture_output=True,
             text=True,
             timeout=300,

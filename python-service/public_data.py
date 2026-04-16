@@ -635,6 +635,107 @@ def fetch_bse_annual_report(symbol: str, company_name: str = "") -> Optional[str
         return None
 
 
+def fetch_bse_annual_reports_multi(symbol: str, company_name: str = "", n_years: int = 3) -> list:
+    """
+    Fetch last n_years annual report PDFs from BSE for a listed company.
+    Falls back to IR website DDG search if BSE returns fewer than requested.
+    Returns list of {fiscal_year, pdf_path, size_kb, source} dicts.
+    """
+    results = []
+    bse_code = _get_bse_code(symbol)
+
+    # ── BSE path ──────────────────────────────────────────────────────────────
+    if bse_code:
+        try:
+            resp = httpx.get(
+                "https://api.bseindia.com/BseIndiaAPI/api/AnnualReports/w",
+                params={"scripcode": bse_code, "type": "Company"},
+                headers={**HEADERS, "Referer": "https://www.bseindia.com/"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            filings = resp.json()
+            reports = filings if isinstance(filings, list) else filings.get("Table", [])
+            reports = sorted(reports, key=lambda x: x.get("NEWDTE", ""), reverse=True)
+
+            for rpt in reports[:n_years]:
+                pdf_url = rpt.get("FILINGURL") or rpt.get("PDFURL") or rpt.get("pdf_url")
+                if not pdf_url:
+                    continue
+                if not pdf_url.startswith("http"):
+                    pdf_url = "https://www.bseindia.com" + pdf_url
+                try:
+                    pdf_resp = httpx.get(pdf_url, headers=HEADERS, timeout=120, follow_redirects=True)
+                    pdf_resp.raise_for_status()
+                    if len(pdf_resp.content) < 10000:
+                        continue
+                    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+                    tmp.write(pdf_resp.content)
+                    tmp.close()
+                    # Extract fiscal year from date string e.g. "31/03/2024" → "FY2024"
+                    date_str = rpt.get("NEWDTE", "")
+                    year = ""
+                    if date_str:
+                        parts = date_str.replace("-", "/").split("/")
+                        for p in parts:
+                            if len(p) == 4 and p.isdigit():
+                                year = f"FY{p}"
+                                break
+                    results.append({
+                        "fiscal_year": year or f"FY{2025 - len(results)}",
+                        "pdf_path": tmp.name,
+                        "size_kb": len(pdf_resp.content) // 1024,
+                        "source": "bse",
+                    })
+                    logger.info(f"Downloaded BSE annual report {year}: {tmp.name}")
+                except Exception as e:
+                    logger.warning(f"Failed to download BSE report: {e}")
+                    continue
+        except Exception as e:
+            logger.warning(f"BSE annual reports fetch failed: {e}")
+
+    # ── IR website DDG fallback ───────────────────────────────────────────────
+    if len(results) < n_years:
+        needed = n_years - len(results)
+        try:
+            from ddgs import DDGS
+            query = f'"{company_name or symbol}" annual report filetype:pdf investor relations'
+            with DDGS() as ddgs:
+                hits = list(ddgs.text(query, max_results=10))
+            pdf_urls = [h.get("href", "") for h in hits if h.get("href", "").lower().endswith(".pdf")]
+            existing_years = {r["fiscal_year"] for r in results}
+            current_year = 2024  # start one below current year for DDG-found older reports
+            for pdf_url in pdf_urls[:needed]:
+                try:
+                    pdf_resp = httpx.get(pdf_url, headers=HEADERS, timeout=120, follow_redirects=True)
+                    pdf_resp.raise_for_status()
+                    if len(pdf_resp.content) < 10000:
+                        continue
+                    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+                    tmp.write(pdf_resp.content)
+                    tmp.close()
+                    while f"FY{current_year}" in existing_years:
+                        current_year -= 1
+                    year = f"FY{current_year}"
+                    existing_years.add(year)
+                    current_year -= 1
+                    results.append({
+                        "fiscal_year": year,
+                        "pdf_path": tmp.name,
+                        "size_kb": len(pdf_resp.content) // 1024,
+                        "source": "ir_website",
+                        "source_url": pdf_url,
+                    })
+                    logger.info(f"Downloaded IR website report {year}: {tmp.name}")
+                except Exception as e:
+                    logger.warning(f"IR website PDF download failed: {e}")
+                    continue
+        except Exception as e:
+            logger.warning(f"IR website fallback failed: {e}")
+
+    return results
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def fetch_all_public_data(symbol: str, company_name: str = "", industry: str = "") -> dict:
