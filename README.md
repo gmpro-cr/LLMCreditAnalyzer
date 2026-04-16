@@ -1,6 +1,6 @@
-# CreditGuard AI 🏦🛡️
+# LLMCreditAnalyser 🏦🛡️
 
-**CreditGuard AI** is an intelligent, automated credit risk analysis platform designed for commercial banks and lending institutions. It takes raw financial data (documents, PDFs, or Screener data), computes complex financial ratios, automatically scouts the web for qualitative risk signals, and generates a formal, decision-grade **Credit Risk Summary**. 
+**LLMCreditAnalyser** is an intelligent, automated credit risk analysis platform designed for commercial banks and lending institutions. It takes raw financial data (documents, PDFs, or Screener data), computes complex financial ratios, automatically scouts the web for qualitative risk signals, and generates a formal, decision-grade **Credit Appraisal Memorandum**. 
 
 Instead of analysts spending hours hunting through annual reports and calculating metrics, CreditGuard AI does the heavy lifting in seconds, freeing up human experts to make the final lending decisions.
 
