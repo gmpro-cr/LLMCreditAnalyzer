@@ -127,22 +127,55 @@ def _call_claude(text: str, prompt: str, label: str) -> dict:
         return {}
 
 
+def _call_groq(text: str, prompt: str, label: str) -> dict:
+    try:
+        from groq import Groq
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            return {}
+        client = Groq(api_key=api_key)
+        full_prompt = "You are a financial data extractor. Return ONLY valid JSON, no markdown, no explanation.\n\n" + prompt + "\n\nTEXT:\n" + text[:8000]
+        chat = client.chat.completions.create(
+            model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            messages=[{"role": "user", "content": full_prompt}],
+            temperature=0.1,
+            max_tokens=2048,
+        )
+        raw = chat.choices[0].message.content.strip()
+        raw = re.sub(r"^```json?\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw)
+        result = json.loads(raw)
+        logger.info(f"[{label}] Groq OK")
+        return result
+    except Exception as e:
+        logger.error(f"[{label}] Groq error: {e}")
+        return {}
+
+
 def _call_llm(text: str, prompt: str, label: str) -> dict:
-    """Send text+prompt to LLM (Claude/Gemini primary, Ollama fallback). Returns parsed JSON."""
-    provider = os.getenv("EXTRACTION_PROVIDER", "gemini").lower()
-    if provider == "claude":
+    """Send text+prompt to LLM. Returns parsed JSON."""
+    provider = os.getenv("EXTRACTION_PROVIDER", "groq").lower()
+    if provider == "groq":
+        result = _call_groq(text, prompt, label)
+        if result:
+            return result
+        logger.warning(f"[{label}] Groq failed, falling back to Gemini")
+    elif provider == "claude":
         result = _call_claude(text, prompt, label)
         if result:
             return result
-        logger.warning(f"[{label}] Claude CLI unavailable, falling back to Gemini")
-        result = _call_gemini(text, prompt, label)
+        logger.warning(f"[{label}] Claude CLI unavailable, falling back to Groq")
+        result = _call_groq(text, prompt, label)
         if result:
             return result
     elif provider == "gemini":
         result = _call_gemini(text, prompt, label)
         if result:
             return result
-        logger.warning(f"[{label}] Gemini failed, falling back to Ollama")
+        logger.warning(f"[{label}] Gemini failed, falling back to Groq")
+        result = _call_groq(text, prompt, label)
+        if result:
+            return result
     return _call_ollama(text, prompt, label)
 
 

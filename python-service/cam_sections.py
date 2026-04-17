@@ -174,6 +174,31 @@ SECTION_PROMPTS = {
 
 # ── LLM helpers ───────────────────────────────────────────────────────────────
 
+def _groq_call(prompt: str) -> str:
+    try:
+        from groq import Groq
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            return ""
+        client = Groq(api_key=api_key)
+        system = (
+            "You are a senior credit risk analyst at an Indian commercial bank. "
+            "Write formal, concise, banker-grade credit appraisal sections. "
+            "Use ONLY the data provided. Do NOT fabricate figures. "
+            "Output ONLY the requested section text in plain prose (no extra headings)."
+        )
+        chat = client.chat.completions.create(
+            model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=2048,
+        )
+        return chat.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error(f"Groq call error: {e}")
+        return ""
+
+
 def _ollama_call(prompt: str) -> str:
     url   = os.getenv("OLLAMA_URL", "http://localhost:11434")
     model = os.getenv("OLLAMA_MODEL", "qwen3:8b")
@@ -252,25 +277,32 @@ def _claude_call(prompt: str) -> str:
 
 
 def _llm(prompt: str) -> str:
-    provider = os.getenv("MEMO_PROVIDER", "gemini").lower()
-    if provider == "claude":
+    provider = os.getenv("MEMO_PROVIDER", "groq").lower()
+    if provider == "groq":
+        result = _groq_call(prompt)
+        if result:
+            return result
+        logger.warning("Groq failed, falling back to Gemini")
+    elif provider == "claude":
         result = _claude_call(prompt)
         if result:
             return result
-        logger.warning("Claude CLI unavailable, falling back to Gemini")
-        result = _gemini_call(prompt)
+        logger.warning("Claude CLI unavailable, falling back to Groq")
+        result = _groq_call(prompt)
         if result:
             return result
     elif provider == "gemini":
         result = _gemini_call(prompt)
         if result:
             return result
-        logger.warning("Gemini failed, falling back to Ollama")
+        logger.warning("Gemini failed, falling back to Groq")
+        result = _groq_call(prompt)
+        if result:
+            return result
     result = _ollama_call(prompt)
     if result:
         return result
-    logger.warning("Ollama failed, falling back to Gemini")
-    return _gemini_call(prompt)
+    return _groq_call(prompt)
 
 
 # ── Context builder ───────────────────────────────────────────────────────────

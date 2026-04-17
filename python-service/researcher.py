@@ -69,18 +69,53 @@ def _fetch_page(url: str, max_chars: int = PAGE_MAX_CHARS) -> str:
 def _llm_call(prompt: str) -> Optional[str]:
     """
     Call the configured LLM.
-    Primary: Ollama (local).  Fallback: Gemini if GEMINI_API_KEY is set.
-    Controlled by RESEARCHER_PROVIDER env var ("ollama" | "gemini"), default "ollama".
+    Controlled by RESEARCHER_PROVIDER env var ("groq" | "gemini" | "ollama"), default "groq".
     """
-    provider = os.getenv("RESEARCHER_PROVIDER", "ollama").lower()
+    provider = os.getenv("RESEARCHER_PROVIDER", "groq").lower()
 
-    if provider == "ollama" or provider not in ("gemini",):
-        result = _ollama_call(prompt)
+    if provider == "groq":
+        result = _groq_call(prompt)
         if result:
             return result
-        logger.warning("[Research] Ollama call failed, trying Gemini fallback")
+        logger.warning("[Research] Groq failed, trying Gemini fallback")
+        return _gemini_call(prompt)
 
-    return _gemini_call(prompt)
+    if provider == "gemini":
+        result = _gemini_call(prompt)
+        if result:
+            return result
+        logger.warning("[Research] Gemini failed, trying Groq fallback")
+        return _groq_call(prompt)
+
+    result = _ollama_call(prompt)
+    if result:
+        return result
+    logger.warning("[Research] Ollama call failed, trying Groq fallback")
+    return _groq_call(prompt)
+
+
+def _groq_call(prompt: str) -> Optional[str]:
+    try:
+        from groq import Groq
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            return None
+        client = Groq(api_key=api_key)
+        system = (
+            "You are a senior credit analyst conducting web research for "
+            "a Credit Appraisal Memorandum at an Indian bank. "
+            "Be concise, factual, and cite specific details from the research provided."
+        )
+        chat = client.chat.completions.create(
+            model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=2048,
+        )
+        return chat.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error(f"[Research] Groq call failed: {e}")
+        return None
 
 
 def _ollama_call(prompt: str) -> Optional[str]:
