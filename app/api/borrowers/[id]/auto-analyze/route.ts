@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
-export const maxDuration = 300 // 5 minutes
+export const maxDuration = 60
 
 /**
  * POST /api/borrowers/:id/auto-analyze

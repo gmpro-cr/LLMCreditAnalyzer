@@ -596,50 +596,264 @@ async def export_pdf_endpoint(data: dict):
     """Export memo text to PDF and return the file."""
     memo_content = data.get("memo_content", "")
     company_name = data.get("company_name", "Borrower")
-    if not memo_content:
-        raise HTTPException(400, "memo_content is required")
+    sections = data.get("sections", {})   # optional: dict of {title: content}
+    if not memo_content and not sections:
+        raise HTTPException(400, "memo_content or sections is required")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp_path = tmp.name
 
     try:
+        import re as _re
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import cm
         from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.platypus import (
+            SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+            HRFlowable, KeepTogether,
+        )
+        from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 
-        doc = SimpleDocTemplate(tmp_path, pagesize=A4,
-            leftMargin=2*cm, rightMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
-        styles = getSampleStyleSheet()
+        PAGE_W = A4[0] - 4 * cm   # usable width
+        NAVY   = colors.HexColor('#0D1B2A')
+        GOLD   = colors.HexColor('#C9A84C')
+        LGREY  = colors.HexColor('#F5F5F5')
+        MGREY  = colors.HexColor('#CCCCCC')
+
+        doc = SimpleDocTemplate(
+            tmp_path, pagesize=A4,
+            leftMargin=2*cm, rightMargin=2*cm, topMargin=2.2*cm, bottomMargin=2*cm,
+            title=f"CAM — {company_name}", author="CreditGuard AI",
+        )
+        base_styles = getSampleStyleSheet()
+
+        s_cover_title = ParagraphStyle('CoverTitle', fontSize=22, leading=28,
+            textColor=NAVY, fontName='Helvetica-Bold', spaceAfter=6, alignment=TA_LEFT)
+        s_cover_sub = ParagraphStyle('CoverSub', fontSize=11, leading=16,
+            textColor=colors.HexColor('#555555'), spaceAfter=4, alignment=TA_LEFT)
+        s_h1 = ParagraphStyle('H1', fontSize=14, leading=18, fontName='Helvetica-Bold',
+            textColor=NAVY, spaceBefore=18, spaceAfter=4, borderPad=0)
+        s_h2 = ParagraphStyle('H2', fontSize=11, leading=15, fontName='Helvetica-Bold',
+            textColor=NAVY, spaceBefore=10, spaceAfter=4)
+        s_body = ParagraphStyle('Body', fontSize=9.5, leading=15,
+            textColor=colors.black, spaceAfter=6, alignment=TA_LEFT)
+        s_bullet = ParagraphStyle('Bullet', fontSize=9.5, leading=14,
+            leftIndent=12, bulletIndent=0, spaceAfter=3)
+        s_tbl_hdr = ParagraphStyle('TblHdr', fontSize=8.5, leading=12,
+            fontName='Helvetica-Bold', textColor=colors.white, alignment=TA_CENTER)
+        s_tbl_cell = ParagraphStyle('TblCell', fontSize=8, leading=11,
+            textColor=colors.black, alignment=TA_LEFT)
+        s_tbl_cell_r = ParagraphStyle('TblCellR', fontSize=8, leading=11,
+            textColor=colors.black, alignment=TA_RIGHT)
+        s_footer = ParagraphStyle('Footer', fontSize=7.5, textColor=colors.grey,
+            spaceBefore=16, alignment=TA_CENTER)
+        s_disclaimer = ParagraphStyle('Disc', fontSize=7, textColor=colors.HexColor('#888888'),
+            spaceBefore=4, alignment=TA_CENTER)
+
+        def safe_xml(text: str) -> str:
+            """Escape XML chars, then restore approved ReportLab tags."""
+            text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            # Restore bold: **word** → <b>word</b>
+            text = _re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+            # Restore italic: *word* or _word_
+            text = _re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
+            return text
+
+        def parse_md_table(lines: list[str]):
+            """Parse markdown table lines into list-of-lists. Returns None if not a table."""
+            rows = []
+            for line in lines:
+                line = line.strip()
+                if not line.startswith('|'):
+                    break
+                if _re.match(r'^\|[-| :]+\|$', line):   # separator row
+                    continue
+                cells = [c.strip() for c in line.strip('|').split('|')]
+                rows.append(cells)
+            return rows if len(rows) >= 2 else None
+
+        def build_rl_table(rows: list[list[str]]) -> Table:
+            """Build a styled ReportLab Table from a list-of-lists."""
+            n_cols = max(len(r) for r in rows)
+            # First column wider, rest equal
+            col_w = [PAGE_W * 0.38] + [(PAGE_W * 0.62) / max(n_cols - 1, 1)] * (n_cols - 1)
+            pdf_rows = []
+            for i, row in enumerate(rows):
+                # Pad short rows
+                row = row + [''] * (n_cols - len(row))
+                if i == 0:
+                    pdf_rows.append([Paragraph(safe_xml(c), s_tbl_hdr) for c in row])
+                else:
+                    cells = []
+                    for j, c in enumerate(row):
+                        style = s_tbl_cell_r if j > 0 else s_tbl_cell
+                        cells.append(Paragraph(safe_xml(c), style))
+                    pdf_rows.append(cells)
+
+            tbl = Table(pdf_rows, colWidths=col_w, repeatRows=1)
+            tbl_style = TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), NAVY),
+                ('TEXTCOLOR',  (0, 0), (-1, 0), colors.white),
+                ('FONTNAME',   (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE',   (0, 0), (-1, 0), 8.5),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, LGREY]),
+                ('GRID',       (0, 0), (-1, -1), 0.4, MGREY),
+                ('VALIGN',     (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING',  (0, 0), (-1, -1), 5),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+                ('TOPPADDING',   (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING',(0, 0), (-1, -1), 4),
+            ])
+            tbl.setStyle(tbl_style)
+            return tbl
+
+        SECTION_TITLES = {
+            "executive_summary":     "1. Executive Summary",
+            "group_organogram":      "2. Group Structure / Organogram",
+            "promoter_background":   "3. Promoter & Management Profile",
+            "business_profile":      "4. Business Profile",
+            "industry_analysis":     "5. Industry Analysis",
+            "financial_analysis":    "6. Financial Analysis & CMA",
+            "working_capital_analysis": "7. Working Capital Assessment",
+            "banking_arrangement":   "8. Banking Arrangement",
+            "proposed_structure":    "9. Proposed Credit Structure",
+            "peer_comparison":       "10. Peer Comparison",
+            "risk_summary":          "11. Key Issues & Risk Assessment",
+            "recommendation":        "12. Recommendation & Covenants",
+        }
+
+        def render_markdown_block(text: str, story: list):
+            """Convert a markdown content block into ReportLab flowables."""
+            lines = text.split('\n')
+            i = 0
+            while i < len(lines):
+                line = lines[i]
+                stripped = line.strip()
+
+                # Blank line
+                if not stripped:
+                    story.append(Spacer(1, 0.15*cm))
+                    i += 1
+                    continue
+
+                # Heading ## or ###
+                if stripped.startswith('### '):
+                    story.append(Paragraph(safe_xml(stripped[4:]), s_h2))
+                    i += 1
+                    continue
+                if stripped.startswith('## '):
+                    story.append(Paragraph(safe_xml(stripped[3:]), s_h2))
+                    i += 1
+                    continue
+
+                # Markdown table: collect all consecutive table lines
+                if stripped.startswith('|'):
+                    tbl_lines = []
+                    while i < len(lines) and lines[i].strip().startswith('|'):
+                        tbl_lines.append(lines[i])
+                        i += 1
+                    rows = parse_md_table(tbl_lines)
+                    if rows:
+                        story.append(Spacer(1, 0.2*cm))
+                        story.append(build_rl_table(rows))
+                        story.append(Spacer(1, 0.2*cm))
+                    continue
+
+                # Bullet point
+                if stripped.startswith('- ') or stripped.startswith('* '):
+                    story.append(Paragraph('• ' + safe_xml(stripped[2:]), s_bullet))
+                    i += 1
+                    continue
+
+                # Numbered list
+                if _re.match(r'^\d+[\.\)]\s', stripped):
+                    story.append(Paragraph(safe_xml(stripped), s_bullet))
+                    i += 1
+                    continue
+
+                # Horizontal rule
+                if stripped in ('---', '***', '___'):
+                    story.append(HRFlowable(width='100%', thickness=0.5, color=MGREY))
+                    i += 1
+                    continue
+
+                # Normal paragraph
+                story.append(Paragraph(safe_xml(stripped), s_body))
+                i += 1
+
+        # ── Cover page ────────────────────────────────────────────────────────
         story = []
+        story.append(Spacer(1, 1.5*cm))
+        story.append(HRFlowable(width='100%', thickness=3, color=GOLD))
+        story.append(Spacer(1, 0.4*cm))
+        story.append(Paragraph("CREDIT APPRAISAL MEMORANDUM", s_cover_title))
+        story.append(Paragraph(company_name, ParagraphStyle('CoName', fontSize=16,
+            fontName='Helvetica-Bold', textColor=GOLD, spaceAfter=10)))
+        story.append(Spacer(1, 0.3*cm))
 
-        title_style = ParagraphStyle('Title', parent=styles['Title'],
-            textColor=colors.HexColor('#0D1B2A'), fontSize=18, spaceAfter=12)
-        story.append(Paragraph(f"Credit Appraisal Memorandum — {company_name}", title_style))
-        story.append(Spacer(1, 0.5*cm))
+        import datetime
+        today = datetime.date.today().strftime("%d %B %Y")
+        story.append(Paragraph(f"Date: {today}  |  Prepared by: CreditGuard AI (RM Review Required)", s_cover_sub))
+        story.append(Paragraph("Status: AI-Assisted Draft — Confidential — Not for Distribution", s_cover_sub))
+        story.append(Spacer(1, 0.4*cm))
+        story.append(HRFlowable(width='100%', thickness=1, color=NAVY))
+        story.append(Spacer(1, 2*cm))
 
-        heading2_style = ParagraphStyle('H2', parent=styles['Heading2'],
-            textColor=colors.HexColor('#0D1B2A'), fontSize=13, spaceBefore=16, spaceAfter=6)
-        body_style = ParagraphStyle('Body', parent=styles['Normal'],
-            fontSize=10, leading=16, spaceAfter=8)
+        # Cover summary table
+        cover_rows = [
+            ["Borrower", company_name],
+            ["Sector", sections.get("_meta_sector", "Pharmaceuticals")],
+            ["Facility", sections.get("_meta_facility", "Term Loan — ₹500 Crore")],
+            ["Date", today],
+            ["RM", sections.get("_meta_rm", "Gaurav Mahale")],
+            ["Status", "AI Draft — Pending RM Review"],
+        ]
+        cover_tbl = Table(cover_rows, colWidths=[PAGE_W*0.3, PAGE_W*0.7])
+        cover_tbl.setStyle(TableStyle([
+            ('FONTNAME',  (0,0), (0,-1), 'Helvetica-Bold'),
+            ('FONTSIZE',  (0,0), (-1,-1), 9.5),
+            ('LEADING',   (0,0), (-1,-1), 14),
+            ('TEXTCOLOR', (0,0), (0,-1), NAVY),
+            ('ROWBACKGROUNDS', (0,0), (-1,-1), [colors.white, LGREY]),
+            ('GRID', (0,0), (-1,-1), 0.3, MGREY),
+            ('LEFTPADDING',  (0,0), (-1,-1), 6),
+            ('RIGHTPADDING', (0,0), (-1,-1), 6),
+            ('TOPPADDING',   (0,0), (-1,-1), 5),
+            ('BOTTOMPADDING',(0,0), (-1,-1), 5),
+        ]))
+        story.append(cover_tbl)
+        story.append(Spacer(1, 1*cm))
+        story.append(Paragraph(
+            "This memorandum has been AI-assisted and must be reviewed, verified, and approved by the "
+            "Relationship Manager and Credit Officer before submission to the Sanctioning Authority. "
+            "All figures must be verified against audited financial statements.",
+            s_disclaimer))
 
-        for line in memo_content.split('\n'):
-            line = line.strip()
-            if not line:
-                story.append(Spacer(1, 0.2*cm))
-            elif line.startswith('## '):
-                story.append(Paragraph(line[3:], heading2_style))
-            elif line.startswith('# '):
-                story.append(Paragraph(line[2:], title_style))
-            else:
-                line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                story.append(Paragraph(line, body_style))
+        from reportlab.platypus import PageBreak
+        story.append(PageBreak())
 
-        footer_style = ParagraphStyle('Footer', parent=styles['Normal'],
-            fontSize=8, textColor=colors.grey, spaceBefore=20)
-        story.append(Paragraph("AI-assisted draft — reviewed and approved by RM — CreditGuard AI — CONFIDENTIAL",
-            footer_style))
+        # ── Section content ───────────────────────────────────────────────────
+        if sections:
+            for sec_key, sec_title in SECTION_TITLES.items():
+                content = sections.get(sec_key, '')
+                if not content or not content.strip():
+                    continue
+                story.append(Paragraph(sec_title, s_h1))
+                story.append(HRFlowable(width='100%', thickness=1.5, color=GOLD, spaceAfter=6))
+                render_markdown_block(content, story)
+                story.append(Spacer(1, 0.3*cm))
+        else:
+            render_markdown_block(memo_content, story)
+
+        # ── Footer ────────────────────────────────────────────────────────────
+        story.append(Spacer(1, 1*cm))
+        story.append(HRFlowable(width='100%', thickness=0.5, color=MGREY))
+        story.append(Paragraph(
+            "CreditGuard AI — AI-Assisted Credit Appraisal Draft — CONFIDENTIAL — "
+            "Must be reviewed and approved by authorised credit officer before submission.",
+            s_footer))
+
         doc.build(story)
 
         safe_name = company_name.replace(" ", "_").replace("/", "-")

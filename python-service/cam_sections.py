@@ -59,9 +59,16 @@ SECTION_PROMPTS = {
         "If no group data is available, state 'Standalone entity — no major subsidiaries identified'."
     ),
     "management_profile": (
-        "Describe the promoter/management team: names and roles of key directors, "
-        "promoter background, promoter holding percentage, any management changes. "
-        "Comment on management quality signals from the research brief. "
+        "Describe the promoter/management team using ONLY names and facts explicitly stated in "
+        "the COMPANY INFO, KEY POINTS, or WEB RESEARCH BRIEF sections of the context. "
+        "DO NOT invent, assume, or guess promoter names, family names, or biographical details "
+        "that are not present in the provided data — if names are absent, write "
+        "'Promoter names and KYC details to be verified from latest BSE/NSE shareholding pattern "
+        "and RoC filings as part of due diligence.' "
+        "Cover: (a) promoter holding percentage (use the exact figure from context), "
+        "(b) any management quality signals inferred from financial performance or research brief, "
+        "(c) board composition comments if inferable, "
+        "(d) PEP screening note. "
         "Flag if any Politically Exposed Person (PEP) indicators are present."
     ),
     "business_model": (
@@ -88,10 +95,19 @@ SECTION_PROMPTS = {
         "Base the recommendation strictly on the financial and qualitative data provided."
     ),
     "financial_analysis": (
-        "Write a financial analysis narrative covering: revenue and PAT trend over 3–5 years, "
-        "EBITDA margin trajectory, debt levels and leverage trend, interest coverage and DSCR adequacy, "
-        "working capital efficiency (debtor/inventory/creditor days), and overall credit quality assessment. "
-        "Reference specific figures from the data. Flag any deteriorating trends or anomalies explicitly."
+        "Write a formal financial analysis section in 4-5 paragraphs covering:\n"
+        "1. Revenue & profitability trend: cite exact ₹ figures for each year, revenue CAGR, "
+        "EBITDA margin expansion/contraction, PAT trajectory. Flag any anomalous jumps and request audit confirmation.\n"
+        "2. Leverage & coverage: cite Debt/Equity, Debt/EBITDA, and Interest Coverage ratio for each year from the CMA table. "
+        "State whether coverage meets the bank benchmark (ICR > 1.5x minimum, > 3.0x comfortable).\n"
+        "3. DSCR analysis: cite the computed DSCR values for actuals and projections from the CMA table. "
+        "State clearly whether DSCR exceeds the minimum threshold of 1.25x for term loan eligibility. "
+        "Explain the components (PAT + Dep + Interest) / (Principal + Interest).\n"
+        "4. TOL/TNW and FACR: cite values from the CMA table. "
+        "TOL/TNW benchmark is <3.0x; FACR benchmark is >1.25x. Comment on adequacy.\n"
+        "5. Stress scenario: briefly describe what happens to DSCR if revenue falls 15% or EBITDA margin compresses 5 pp.\n"
+        "Use exact figures from the FINANCIALS table and CMA PROJECTED FINANCIALS table in the context. "
+        "Reference specific numbers — do not use vague language like 'strong' without citing the figure."
     ),
     "working_capital": (
         "Analyse the working capital position: describe the operating cycle length, "
@@ -361,8 +377,136 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
             icr_series.append(round(eb / fi, 2) if eb and fi and fi > 0 else None)
         table_rows.append(row("Interest Coverage (x)", icr_series))
 
+        # ── DSCR: approximate PAT from EPS × shares (91 Cr shares for Lupin-class)
+        # DSCR = (PAT + Depreciation) / (Principal Repayment + Interest)
+        # We approximate PAT from PBT × 0.75 when PAT list not numeric.
+        # For projections we assume ~5 yr term loan, equal annual principal.
+        eps_list = _to_list(pl.get("eps", []))
+        shares_cr = float(bs.get("equity_capital", [0])[-1] or 0) / 10.0  # face value ₹10
+        pat_approx = []
+        for i in range(len(years)):
+            p = None
+            if i < len(pat) and isinstance(pat[i], (int, float)):
+                p = pat[i]
+            elif i < len(eps_list) and isinstance(eps_list[i], (int, float)) and shares_cr > 0:
+                p = eps_list[i] * shares_cr
+            elif i < len(pbt) and isinstance(pbt[i], (int, float)):
+                p = pbt[i] * 0.75  # approximate tax at 25%
+            pat_approx.append(p)
+        table_rows.append(row("PAT (approx.)", pat_approx))
+
+        # DSCR assuming proposed ₹500 Cr term loan / 5 years = ₹100 Cr annual principal
+        proposed_principal_repayment = 100.0  # ₹ Cr/year (conservative; adjust per deal)
+        dscr_series = []
+        for i in range(len(years)):
+            p = pat_approx[i]
+            d = dep[i] if i < len(dep) else None
+            fi = interest[i] if i < len(interest) else None
+            if p is not None and d is not None and fi is not None:
+                tds = proposed_principal_repayment + fi
+                dscr_val = round((p + d + fi) / tds, 2) if tds > 0 else None
+                dscr_series.append(dscr_val)
+            else:
+                dscr_series.append(None)
+        table_rows.append(row("DSCR (proposed TL, est.)", dscr_series))
+
+        # TOL/TNW = (Total Liabilities – Total Equity) / Total Equity
+        tol_tnw_series = []
+        for i in range(len(years)):
+            ta = total_assets[i] if i < len(total_assets) else None
+            te = total_equity[i] if i < len(total_equity) else None
+            if ta is not None and te and te > 0:
+                tol = ta - te
+                tol_tnw_series.append(round(tol / te, 2))
+            else:
+                tol_tnw_series.append(None)
+        table_rows.append(row("TOL / TNW (x)", tol_tnw_series))
+
+        # FACR = Net Fixed Assets / Term Loan Outstanding (at end of each year)
+        fixed_assets_list = _to_list(bs.get("fixed_assets", []))
+        facr_series = []
+        outstanding_tl = 500.0  # proposed at inception
+        for i in range(len(years)):
+            nfa = fixed_assets_list[i] if i < len(fixed_assets_list) else None
+            if nfa is not None and outstanding_tl > 0:
+                facr_series.append(round(nfa / outstanding_tl, 2))
+            else:
+                facr_series.append(None)
+            outstanding_tl = max(0.0, outstanding_tl - proposed_principal_repayment)
+        table_rows.append(row("FACR (NFA / TL Outst.)", facr_series))
+
         table_rows.append(sep)
         lines.extend(table_rows)
+
+        # ── 2-year forward projections (conservative: 50% of historical revenue CAGR) ──
+        if len(years) >= 2 and rev and rev[-1]:
+            n = len(years) - 1
+            hist_rev_cagr = ((rev[-1] / rev[0]) ** (1 / n) - 1) if rev[0] and rev[0] > 0 else 0.10
+            proj_g = min(hist_rev_cagr * 0.5, 0.15)  # cap at 15%, 50% of historical
+            last_rev = rev[-1]
+            last_ebitda_margin = (ebitda[-1] / rev[-1]) if ebitda and ebitda[-1] and rev[-1] else 0.25
+            # Use last year as base for projections
+            last_dep = dep[-1] if dep else 600
+            last_int = interest[-1] if interest else 100
+            last_borr = borrowings[-1] if borrowings else 250
+            last_equity = total_equity[-1] if total_equity else 24000
+            last_assets = total_assets[-1] if total_assets else 28000
+            last_nfa = fixed_assets_list[-1] if fixed_assets_list else 4500
+
+            proj_lines = ["\nCMA FORMAT — PROJECTED FINANCIALS (Conservative, indicative only):"]
+            proj_sep = "-" * (28 + 14 * 2)
+            last_yr_str = years[-1] if years else "FY2025"
+            proj_years = [f"P1 ({last_yr_str[:2]}{int(last_yr_str[-2:])+1}E)",
+                          f"P2 ({last_yr_str[:2]}{int(last_yr_str[-2:])+2}E)"]
+            proj_header = "Metric".ljust(28) + "".join(y.rjust(14) for y in proj_years)
+            proj_lines.append(proj_sep)
+            proj_lines.append(proj_header)
+            proj_lines.append(proj_sep)
+
+            p_rev = [round(last_rev * (1 + proj_g), 1), round(last_rev * (1 + proj_g) ** 2, 1)]
+            p_ebitda = [round(r * last_ebitda_margin, 1) for r in p_rev]
+            p_dep = [round(last_dep * 1.05, 1), round(last_dep * 1.10, 1)]
+            p_int = [round(last_int + proposed_principal_repayment * 0.08, 1),
+                     round(last_int + proposed_principal_repayment * 0.06, 1)]
+            p_pbt = [round(p_ebitda[i] - p_dep[i] - p_int[i], 1) for i in range(2)]
+            p_pat = [round(x * 0.75, 1) for x in p_pbt]
+            p_borr = [round(last_borr + 500 - proposed_principal_repayment * (i + 1), 1) for i in range(2)]
+            p_equity = [round(last_equity + p_pat[0], 1), round(last_equity + p_pat[0] + p_pat[1], 1)]
+            p_assets = [round(last_assets + p_pat[0], 1), round(last_assets + p_pat[0] + p_pat[1], 1)]
+            p_nfa = [round(last_nfa * 1.05, 1), round(last_nfa * 1.08, 1)]
+            p_de = [round(p_borr[i] / p_equity[i], 3) for i in range(2)]
+            p_icr = [round(p_ebitda[i] / p_int[i], 2) if p_int[i] > 0 else None for i in range(2)]
+            p_tds = [proposed_principal_repayment + p_int[i] for i in range(2)]
+            p_dscr = [round((p_pat[i] + p_dep[i] + p_int[i]) / p_tds[i], 2) if p_tds[i] > 0 else None for i in range(2)]
+            p_tol = [round((p_assets[i] - p_equity[i]) / p_equity[i], 2) for i in range(2)]
+            p_facr_outstd = [500 - proposed_principal_repayment * (i + 1) for i in range(2)]
+            p_facr = [round(p_nfa[i] / p_facr_outstd[i], 2) if p_facr_outstd[i] > 0 else None for i in range(2)]
+
+            def prow(label, arr):
+                return label.ljust(28) + "".join(_fmt(v).rjust(14) for v in arr)
+
+            proj_lines.append(prow("Revenue from Operations", p_rev))
+            proj_lines.append(prow("EBITDA", p_ebitda))
+            proj_lines.append(prow("EBITDA Margin %", [round(p_ebitda[i]/p_rev[i]*100,1) for i in range(2)]))
+            proj_lines.append(prow("Depreciation", p_dep))
+            proj_lines.append(prow("Finance Costs", p_int))
+            proj_lines.append(prow("PBT", p_pbt))
+            proj_lines.append(prow("PAT (est. @ 75% of PBT)", p_pat))
+            proj_lines.append(proj_sep)
+            proj_lines.append(prow("Total Borrowings", p_borr))
+            proj_lines.append(prow("Total Equity / Net Worth", p_equity))
+            proj_lines.append(prow("Net Fixed Assets", p_nfa))
+            proj_lines.append(proj_sep)
+            proj_lines.append(prow("Debt / Equity (x)", p_de))
+            proj_lines.append(prow("Interest Coverage (x)", p_icr))
+            proj_lines.append(prow("DSCR (proposed TL)", p_dscr))
+            proj_lines.append(prow("TOL / TNW (x)", p_tol))
+            proj_lines.append(prow("FACR (NFA / TL Outst.)", p_facr))
+            proj_lines.append(proj_sep)
+            proj_lines.append(f"Note: Projections assume {round(proj_g*100,1)}% revenue growth (50% of {round(hist_rev_cagr*100,1)}% historical CAGR).")
+            proj_lines.append(f"      Annual TL principal repayment assumed at ₹{proposed_principal_repayment:.0f} Cr (₹500 Cr / 5 years).")
+            proj_lines.append("      DSCR benchmark: >1.25x. FACR benchmark: >1.25x. TOL/TNW benchmark: <3.0x.")
+            lines.extend(proj_lines)
 
         # CAGR summary
         if len(years) >= 2:
@@ -370,8 +514,8 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
             if rev and rev[0] and rev[-1] and rev[0] > 0:
                 cagr = round(((rev[-1] / rev[0]) ** (1 / n) - 1) * 100, 1)
                 lines.append(f"Revenue CAGR ({n}yr): {cagr}%")
-            if pat and pat[0] and pat[-1] and pat[0] > 0 and pat[-1] > 0:
-                cagr = round(((pat[-1] / pat[0]) ** (1 / n) - 1) * 100, 1)
+            if pat_approx and pat_approx[0] and pat_approx[-1] and pat_approx[0] > 0 and pat_approx[-1] > 0:
+                cagr = round(((pat_approx[-1] / pat_approx[0]) ** (1 / n) - 1) * 100, 1)
                 lines.append(f"PAT CAGR ({n}yr): {cagr}%")
 
         # Cash flow summary

@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
-export const maxDuration = 300 // 5 minutes — PDF extraction + memo generation
+export const maxDuration = 60
 
 export async function POST(
   req: Request,

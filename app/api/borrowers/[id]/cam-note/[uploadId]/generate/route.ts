@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
-export const maxDuration = 300
+export const maxDuration = 60
 
 type Params = { params: Promise<{ id: string; uploadId: string }> }
 

@@ -80,7 +80,32 @@ create policy "Users manage covenants via borrower" on public.covenants
     )
   );
 
+-- ── MEMO VERSIONS ─────────────────────────────────────────────────────────
+create table if not exists public.memo_versions (
+  id          uuid primary key default uuid_generate_v4(),
+  upload_id   uuid not null,
+  borrower_id uuid not null references public.borrowers(id) on delete cascade,
+  label       text not null default 'Draft',
+  snapshot    jsonb not null,
+  created_at  timestamptz not null default now()
+);
+
+alter table public.memo_versions enable row level security;
+create policy "Users manage versions via borrower" on public.memo_versions
+  using (
+    exists (
+      select 1 from public.borrowers b
+      where b.id = memo_versions.borrower_id and b.user_id = auth.uid()
+    )
+  );
+
+-- ── MISSING COLUMNS (run if tables already exist) ──────────────────────────
+alter table public.borrowers add column if not exists symbol text;
+alter table public.borrowers add column if not exists public_data jsonb;
+alter table public.financial_uploads add column if not exists source text;
+
 -- ── INDEXES ────────────────────────────────────────────────────────────────
 create index if not exists idx_borrowers_user_id on public.borrowers(user_id);
 create index if not exists idx_uploads_borrower_id on public.financial_uploads(borrower_id);
 create index if not exists idx_covenants_borrower_id on public.covenants(borrower_id);
+create index if not exists idx_versions_borrower_id on public.memo_versions(borrower_id);
