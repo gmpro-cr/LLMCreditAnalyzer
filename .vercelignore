@@ -1,0 +1,9 @@
+frontend/
+python-service/
+.next/
+node_modules/
+*.db
+*.db-shm
+*.db-wal
+*.docx
+*.pdf
