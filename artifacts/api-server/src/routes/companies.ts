@@ -58,38 +58,53 @@ function extractTableYears(
   return years;
 }
 
+async function searchScreener(q: string) {
+  const url = `${BASE}/api/company/search/?q=${encodeURIComponent(q)}&v=3`;
+  const resp = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(6000) });
+  if (!resp.ok) throw new Error(`Screener returned ${resp.status}`);
+  const raw = (await resp.json()) as Array<{ id?: number; name?: string; url?: string }>;
+  return raw
+    .filter((r) => r.name && r.url)
+    .map((r) => {
+      const parts = (r.url ?? "").split("/").filter(Boolean);
+      const ticker = parts[1] ?? "";
+      return { ticker, name: r.name!, exchange: "NSE/BSE" };
+    })
+    .filter((r) => r.ticker && r.ticker !== "id" && r.ticker.length > 0)
+    .slice(0, 8);
+}
+
+async function searchNSE(q: string) {
+  const url = `https://scanresults.nseindia.com/search/companySearch?searchText=${encodeURIComponent(q)}`;
+  const resp = await fetch(url, {
+    headers: { ...HEADERS, Referer: "https://www.nseindia.com/" },
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!resp.ok) throw new Error(`NSE returned ${resp.status}`);
+  const raw = (await resp.json()) as Array<{ companyName?: string; symbol?: string }>;
+  return raw
+    .filter((r) => r.companyName && r.symbol)
+    .map((r) => ({ ticker: r.symbol!, name: r.companyName!, exchange: "NSE" }))
+    .slice(0, 8);
+}
+
 router.get("/search", async (req, res) => {
   const q = String(req.query.q ?? "").trim();
   if (!q || q.length < 2) return res.json([]);
 
+  // Try Screener first, fall back to NSE
   try {
-    const url = `${BASE}/api/company/search/?q=${encodeURIComponent(q)}&v=3`;
-    const resp = await fetch(url, { headers: HEADERS });
-    if (!resp.ok) throw new Error(`Screener returned ${resp.status}`);
-
-    const raw = (await resp.json()) as Array<{
-      id?: number;
-      name?: string;
-      url?: string;
-    }>;
-
-    const suggestions = raw
-      .filter((r) => r.name && r.url)
-      .map((r) => {
-        const parts = (r.url ?? "").split("/").filter(Boolean);
-        const ticker = parts[1] ?? "";
-        return {
-          ticker,
-          name: r.name!,
-          exchange: "NSE/BSE",
-        };
-      })
-      .filter((r) => r.ticker && r.ticker !== "id" && r.ticker.length > 0)
-      .slice(0, 8);
-
-    return res.json(suggestions);
+    const results = await searchScreener(q);
+    if (results.length > 0) return res.json(results);
   } catch (err) {
-    logger.error({ err }, "Company search failed");
+    logger.warn({ err }, "Screener search failed, trying NSE fallback");
+  }
+
+  try {
+    const results = await searchNSE(q);
+    return res.json(results);
+  } catch (err) {
+    logger.error({ err }, "All company search sources failed");
     return res.status(502).json({ error: "Failed to search companies" });
   }
 });
