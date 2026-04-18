@@ -6,13 +6,13 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: GROQ_API_KEY
+      - key: OPENROUTER_API_KEY
         sync: false
-      - key: GROQ_MODEL
-        value: llama-3.3-70b-versatile
+      - key: OPENROUTER_MODEL
+        value: deepseek/deepseek-chat:free
       - key: MEMO_PROVIDER
-        value: groq
+        value: openrouter
       - key: EXTRACTION_PROVIDER
-        value: groq
+        value: openrouter
       - key: RESEARCHER_PROVIDER
-        value: groq
+        value: openrouter

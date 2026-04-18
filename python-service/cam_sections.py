@@ -174,6 +174,31 @@ SECTION_PROMPTS = {
 
 # ── LLM helpers ───────────────────────────────────────────────────────────────
 
+def _openrouter_call(prompt: str) -> str:
+    try:
+        from openai import OpenAI
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            return ""
+        client = OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+        system = (
+            "You are a senior credit risk analyst at an Indian commercial bank. "
+            "Write formal, concise, banker-grade credit appraisal sections. "
+            "Use ONLY the data provided. Do NOT fabricate figures. "
+            "Output ONLY the requested section text in plain prose (no extra headings)."
+        )
+        chat = client.chat.completions.create(
+            model=os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat:free"),
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=2048,
+        )
+        return chat.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error(f"OpenRouter call error: {e}")
+        return ""
+
+
 def _groq_call(prompt: str) -> str:
     try:
         from groq import Groq
@@ -277,8 +302,16 @@ def _claude_call(prompt: str) -> str:
 
 
 def _llm(prompt: str) -> str:
-    provider = os.getenv("MEMO_PROVIDER", "groq").lower()
-    if provider == "groq":
+    provider = os.getenv("MEMO_PROVIDER", "openrouter").lower()
+    if provider == "openrouter":
+        result = _openrouter_call(prompt)
+        if result:
+            return result
+        logger.warning("OpenRouter failed, falling back to Groq")
+        result = _groq_call(prompt)
+        if result:
+            return result
+    elif provider == "groq":
         result = _groq_call(prompt)
         if result:
             return result

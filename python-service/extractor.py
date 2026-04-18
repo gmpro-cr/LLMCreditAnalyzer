@@ -127,6 +127,31 @@ def _call_claude(text: str, prompt: str, label: str) -> dict:
         return {}
 
 
+def _call_openrouter(text: str, prompt: str, label: str) -> dict:
+    try:
+        from openai import OpenAI
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            return {}
+        client = OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+        full_prompt = "You are a financial data extractor. Return ONLY valid JSON, no markdown, no explanation.\n\n" + prompt + "\n\nTEXT:\n" + text[:8000]
+        chat = client.chat.completions.create(
+            model=os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat:free"),
+            messages=[{"role": "user", "content": full_prompt}],
+            temperature=0.1,
+            max_tokens=2048,
+        )
+        raw = chat.choices[0].message.content.strip()
+        raw = re.sub(r"^```json?\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw)
+        result = json.loads(raw)
+        logger.info(f"[{label}] OpenRouter OK")
+        return result
+    except Exception as e:
+        logger.error(f"[{label}] OpenRouter error: {e}")
+        return {}
+
+
 def _call_groq(text: str, prompt: str, label: str) -> dict:
     try:
         from groq import Groq
@@ -154,7 +179,13 @@ def _call_groq(text: str, prompt: str, label: str) -> dict:
 
 def _call_llm(text: str, prompt: str, label: str) -> dict:
     """Send text+prompt to LLM. Returns parsed JSON."""
-    provider = os.getenv("EXTRACTION_PROVIDER", "groq").lower()
+    provider = os.getenv("EXTRACTION_PROVIDER", "openrouter").lower()
+    if provider == "openrouter":
+        result = _call_openrouter(text, prompt, label)
+        if result:
+            return result
+        logger.warning(f"[{label}] OpenRouter failed, falling back to Groq")
+        return _call_groq(text, prompt, label)
     if provider == "groq":
         result = _call_groq(text, prompt, label)
         if result:

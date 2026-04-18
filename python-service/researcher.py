@@ -71,7 +71,14 @@ def _llm_call(prompt: str) -> Optional[str]:
     Call the configured LLM.
     Controlled by RESEARCHER_PROVIDER env var ("groq" | "gemini" | "ollama"), default "groq".
     """
-    provider = os.getenv("RESEARCHER_PROVIDER", "groq").lower()
+    provider = os.getenv("RESEARCHER_PROVIDER", "openrouter").lower()
+
+    if provider == "openrouter":
+        result = _openrouter_call(prompt)
+        if result:
+            return result
+        logger.warning("[Research] OpenRouter failed, trying Groq fallback")
+        return _groq_call(prompt)
 
     if provider == "groq":
         result = _groq_call(prompt)
@@ -92,6 +99,30 @@ def _llm_call(prompt: str) -> Optional[str]:
         return result
     logger.warning("[Research] Ollama call failed, trying Groq fallback")
     return _groq_call(prompt)
+
+
+def _openrouter_call(prompt: str) -> Optional[str]:
+    try:
+        from openai import OpenAI
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            return None
+        client = OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+        system = (
+            "You are a senior credit analyst conducting web research for "
+            "a Credit Appraisal Memorandum at an Indian bank. "
+            "Be concise, factual, and cite specific details from the research provided."
+        )
+        chat = client.chat.completions.create(
+            model=os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat:free"),
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=2048,
+        )
+        return chat.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error(f"[Research] OpenRouter call failed: {e}")
+        return None
 
 
 def _groq_call(prompt: str) -> Optional[str]:
