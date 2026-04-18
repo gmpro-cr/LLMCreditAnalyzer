@@ -1,12 +1,12 @@
 {
   "functions": {
-    "app/api/borrowers/[id]/auto-analyze/route.ts": {
+    "api/borrowers/[id]/auto-analyze": {
       "maxDuration": 60
     },
-    "app/api/borrowers/[id]/cam-note/[uploadId]/generate/route.ts": {
+    "api/borrowers/[id]/cam-note/[uploadId]/generate": {
       "maxDuration": 60
     },
-    "app/api/borrowers/[id]/upload/route.ts": {
+    "api/borrowers/[id]/upload": {
       "maxDuration": 60
     }
   }
