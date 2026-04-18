@@ -1,13 +1,1 @@
-{
-  "functions": {
-    "api/borrowers/[id]/auto-analyze": {
-      "maxDuration": 60
-    },
-    "api/borrowers/[id]/cam-note/[uploadId]/generate": {
-      "maxDuration": 60
-    },
-    "api/borrowers/[id]/upload": {
-      "maxDuration": 60
-    }
-  }
-}
+{}
