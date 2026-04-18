@@ -1,15 +1,6 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
-import { casesTable, memoSectionsTable, activityLogTable } from "@workspace/db";
-import { eq, ilike, and, isNull, sql } from "drizzle-orm";
-import {
-  ListCasesQueryParams,
-  CreateCaseBody,
-  GetCaseParams,
-  UpdateCaseParams,
-  UpdateCaseBody,
-  DeleteCaseParams,
-} from "@workspace/api-zod";
+import { listCases, getCase, createCase, updateCase, deleteCase, insertSections, insertActivity } from "../lib/supabase-db.js";
+import { ListCasesQueryParams, CreateCaseBody, GetCaseParams, UpdateCaseParams, UpdateCaseBody, DeleteCaseParams } from "@workspace/api-zod";
 
 const router = Router();
 
@@ -28,82 +19,57 @@ const MEMO_SECTIONS = [
   { key: "recommendation", title: "Recommendation" },
 ];
 
-function formatCase(c: typeof casesTable.$inferSelect) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function formatCase(c: any) {
   return {
     ...c,
-    facilityAmount: Number(c.facilityAmount),
-    createdAt: c.createdAt.toISOString(),
-    updatedAt: c.updatedAt.toISOString(),
+    borrowerName:   c.borrower_name,
+    facilityType:   c.facility_type,
+    facilityAmount: Number(c.facility_amount),
+    rmName:         c.rm_name,
+    memoProgress:   c.memo_progress,
+    createdAt:      c.created_at,
+    updatedAt:      c.updated_at,
   };
 }
 
 router.get("/", async (req, res) => {
   const params = ListCasesQueryParams.safeParse(req.query);
-  const query = db.select().from(casesTable).$dynamic();
-  const conditions = [];
-
-  if (params.success && params.data.status) {
-    conditions.push(eq(casesTable.status, params.data.status));
-  }
-  if (params.success && params.data.search) {
-    conditions.push(ilike(casesTable.borrowerName, `%${params.data.search}%`));
-  }
-
-  const rows =
-    conditions.length > 0
-      ? await db
-          .select()
-          .from(casesTable)
-          .where(and(...conditions))
-          .orderBy(sql`${casesTable.updatedAt} desc`)
-      : await db.select().from(casesTable).orderBy(sql`${casesTable.updatedAt} desc`);
-
+  const rows = await listCases(params.success ? params.data : {});
   res.json(rows.map(formatCase));
 });
 
 router.post("/", async (req, res) => {
   const body = CreateCaseBody.parse(req.body);
-
-  const [newCase] = await db
-    .insert(casesTable)
-    .values({
-      borrowerName: body.borrowerName,
-      cin: body.cin ?? null,
-      pan: body.pan ?? null,
-      facilityType: body.facilityType,
-      facilityAmount: String(body.facilityAmount),
-      sector: body.sector,
-      rmName: body.rmName,
-      status: "draft",
-      memoProgress: 0,
-    })
-    .returning();
-
-  await db.insert(memoSectionsTable).values(
-    MEMO_SECTIONS.map((s) => ({
-      caseId: newCase.id,
-      sectionKey: s.key,
-      sectionTitle: s.title,
-      content: "",
-      confidence: "pending" as const,
-      isReviewed: false,
-      isLocked: false,
-    }))
-  );
-
-  await db.insert(activityLogTable).values({
-    caseId: newCase.id,
-    borrowerName: newCase.borrowerName,
-    action: "Case created",
-    actor: newCase.rmName,
+  const newCase = await createCase({
+    borrower_name: body.borrowerName,
+    cin: body.cin ?? null,
+    pan: body.pan ?? null,
+    facility_type: body.facilityType,
+    facility_amount: body.facilityAmount,
+    sector: body.sector,
+    rm_name: body.rmName,
+    status: "draft",
+    memo_progress: 0,
   });
 
+  await insertSections(MEMO_SECTIONS.map((s) => ({
+    case_id: newCase.id,
+    section_key: s.key,
+    section_title: s.title,
+    content: "",
+    confidence: "pending",
+    is_reviewed: false,
+    is_locked: false,
+  })));
+
+  await insertActivity({ case_id: newCase.id, borrower_name: newCase.borrower_name, action: "Case created", actor: newCase.rm_name });
   res.status(201).json(formatCase(newCase));
 });
 
 router.get("/:id", async (req, res) => {
   const { id } = GetCaseParams.parse({ id: Number(req.params.id) });
-  const [c] = await db.select().from(casesTable).where(eq(casesTable.id, id));
+  const c = await getCase(id).catch(() => null);
   if (!c) return res.status(404).json({ error: "Not found" });
   return res.json(formatCase(c));
 });
@@ -111,40 +77,26 @@ router.get("/:id", async (req, res) => {
 router.patch("/:id", async (req, res) => {
   const { id } = UpdateCaseParams.parse({ id: Number(req.params.id) });
   const body = UpdateCaseBody.parse(req.body);
-
-  const updates: Record<string, unknown> = { updatedAt: new Date() };
-  if (body.borrowerName !== undefined) updates.borrowerName = body.borrowerName;
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (body.borrowerName !== undefined) updates.borrower_name = body.borrowerName;
   if (body.cin !== undefined) updates.cin = body.cin;
   if (body.pan !== undefined) updates.pan = body.pan;
-  if (body.facilityType !== undefined) updates.facilityType = body.facilityType;
-  if (body.facilityAmount !== undefined) updates.facilityAmount = String(body.facilityAmount);
+  if (body.facilityType !== undefined) updates.facility_type = body.facilityType;
+  if (body.facilityAmount !== undefined) updates.facility_amount = body.facilityAmount;
   if (body.sector !== undefined) updates.sector = body.sector;
-  if (body.rmName !== undefined) updates.rmName = body.rmName;
+  if (body.rmName !== undefined) updates.rm_name = body.rmName;
   if (body.status !== undefined) updates.status = body.status;
 
-  const [updated] = await db
-    .update(casesTable)
-    .set(updates)
-    .where(eq(casesTable.id, id))
-    .returning();
-
+  const updated = await updateCase(id, updates).catch(() => null);
   if (!updated) return res.status(404).json({ error: "Not found" });
 
-  await db.insert(activityLogTable).values({
-    caseId: id,
-    borrowerName: updated.borrowerName,
-    action: body.status ? `Status changed to ${body.status}` : "Case updated",
-    actor: updated.rmName,
-  });
-
+  await insertActivity({ case_id: id, borrower_name: updated.borrower_name, action: body.status ? `Status changed to ${body.status}` : "Case updated", actor: updated.rm_name });
   return res.json(formatCase(updated));
 });
 
 router.delete("/:id", async (req, res) => {
   const { id } = DeleteCaseParams.parse({ id: Number(req.params.id) });
-  await db.delete(memoSectionsTable).where(eq(memoSectionsTable.caseId, id));
-  await db.delete(activityLogTable).where(eq(activityLogTable.caseId, id));
-  await db.delete(casesTable).where(eq(casesTable.id, id));
+  await deleteCase(id);
   res.status(204).send();
 });
 

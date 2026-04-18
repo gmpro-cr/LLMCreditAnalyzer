@@ -1,38 +1,25 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
-import { memoSectionsTable, casesTable, riskFlagsTable, activityLogTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
-import {
-  ListSectionsParams,
-  UpdateSectionParams,
-  UpdateSectionBody,
-  GenerateMemoParams,
-  ListRiskFlagsParams,
-} from "@workspace/api-zod";
+import { listSections, updateSection, bulkUpdateSections, listRiskFlags, insertActivity, updateCase, getCase, getCaseExtractedData } from "../lib/supabase-db.js";
+import { ListSectionsParams, UpdateSectionBody, GenerateMemoParams, ListRiskFlagsParams } from "@workspace/api-zod";
 
 const router = Router({ mergeParams: true });
 
-function formatSection(s: typeof memoSectionsTable.$inferSelect) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function formatSection(s: any) {
   return {
     ...s,
-    updatedAt: s.updatedAt.toISOString(),
-  };
-}
-
-function formatFlag(f: typeof riskFlagsTable.$inferSelect) {
-  return {
-    ...f,
-    mitigation: f.mitigation ?? undefined,
+    caseId:       s.case_id,
+    sectionKey:   s.section_key,
+    sectionTitle: s.section_title,
+    isReviewed:   s.is_reviewed,
+    isLocked:     s.is_locked,
+    updatedAt:    s.updated_at,
   };
 }
 
 router.get("/:id/sections", async (req, res) => {
   const { id } = ListSectionsParams.parse({ id: Number(req.params.id) });
-  const sections = await db
-    .select()
-    .from(memoSectionsTable)
-    .where(eq(memoSectionsTable.caseId, id))
-    .orderBy(memoSectionsTable.id);
+  const sections = await listSections(id);
   res.json(sections.map(formatSection));
 });
 
@@ -41,137 +28,177 @@ router.patch("/:id/sections/:sectionKey", async (req, res) => {
   const sectionKey = req.params.sectionKey;
   const body = UpdateSectionBody.parse(req.body);
 
-  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  const updates: Record<string, unknown> = {};
   if (body.content !== undefined) updates.content = body.content;
-  if (body.isReviewed !== undefined) updates.isReviewed = body.isReviewed;
-  if (body.isLocked !== undefined) updates.isLocked = body.isLocked;
+  if (body.isReviewed !== undefined) updates.is_reviewed = body.isReviewed;
+  if (body.isLocked !== undefined) updates.is_locked = body.isLocked;
 
-  const [updated] = await db
-    .update(memoSectionsTable)
-    .set(updates)
-    .where(
-      and(
-        eq(memoSectionsTable.caseId, id),
-        eq(memoSectionsTable.sectionKey, sectionKey)
-      )
-    )
-    .returning();
-
+  const updated = await updateSection(id, sectionKey, updates).catch(() => null);
   if (!updated) return res.status(404).json({ error: "Section not found" });
 
-  const allSections = await db
-    .select()
-    .from(memoSectionsTable)
-    .where(eq(memoSectionsTable.caseId, id));
-
-  const reviewedCount = allSections.filter((s) => s.isReviewed).length;
-  const progress = Math.round((reviewedCount / allSections.length) * 100);
-
-  await db
-    .update(casesTable)
-    .set({ memoProgress: progress, updatedAt: new Date() })
-    .where(eq(casesTable.id, id));
+  // Recompute memo_progress
+  const allSections = await listSections(id);
+  const progress = Math.round((allSections.filter((s) => s.is_reviewed).length / allSections.length) * 100);
+  await updateCase(id, { memo_progress: progress, updated_at: new Date().toISOString() });
 
   return res.json(formatSection(updated));
 });
 
 router.post("/:id/generate", async (req, res) => {
   const { id } = GenerateMemoParams.parse({ id: Number(req.params.id) });
-  const [c] = await db.select().from(casesTable).where(eq(casesTable.id, id));
+  const c = await getCase(id).catch(() => null);
   if (!c) return res.status(404).json({ error: "Case not found" });
 
-  const GENERATED_CONTENT: Record<string, { content: string; confidence: string }> = {
-    executive_summary: {
-      content: `This credit appraisal memorandum presents the proposal for ${c.borrowerName}, seeking a ${c.facilityType.replace(/_/g, " ")} facility of INR ${Number(c.facilityAmount).toLocaleString("en-IN")} Lakhs from our bank. The borrower operates in the ${c.sector} sector and has demonstrated stable operations over the last three years. Based on our analysis of the submitted financials, industry positioning, and management quality, we recommend approval subject to standard covenants and security structure as detailed herein.`,
-      confidence: "high",
-    },
-    group_organogram: {
-      content: `${c.borrowerName} is the flagship entity of the group. The promoter holds a majority stake with no significant related-party exposure identified. Group companies operate in complementary segments with limited cross-guarantee structures. No adverse entries found against promoter entities in public domain search conducted on ${new Date().toLocaleDateString("en-IN")}.`,
-      confidence: "medium",
-    },
-    promoter_background: {
-      content: `The promoters bring over 15 years of experience in the ${c.sector} sector. The management team has successfully steered the company through multiple business cycles. No wilful default history or adverse court proceedings were identified during KYC verification. Promoter contribution to proposed facility is in line with bank norms.`,
-      confidence: "high",
-    },
-    business_profile: {
-      content: `${c.borrowerName} is engaged in the ${c.sector} business with diversified revenue streams across geographies. The company has an established customer base with no single customer contributing more than 20% of revenue. Supply chain is well-diversified with key raw materials sourced domestically. The business has demonstrated consistent revenue growth of 12-15% CAGR over the last three years.`,
-      confidence: "high",
-    },
-    industry_analysis: {
-      content: `The ${c.sector} industry is expected to grow at 9-11% CAGR over the next three years driven by infrastructure spending and domestic consumption. Regulatory environment remains stable. Key risk factors include commodity price volatility, interest rate sensitivity, and competitive pressure from organized players. The borrower is well-positioned in the mid-segment with pricing power.`,
-      confidence: "medium",
-    },
-    financial_analysis: {
-      content: `FY24 revenue stood at INR 485 Cr (up 14% YoY). EBITDA margins improved to 18.2% from 16.8% in FY23. Net Profit at INR 38 Cr (PAT margin: 7.8%). Key ratios: DSCR: 1.85x (adequate), TOL/TNW: 2.1x (within acceptable range), Current Ratio: 1.42x (comfortable), Debt/Equity: 0.82x (low leverage). No adverse trends identified. Inventory days: 45 days, Debtor days: 62 days — within industry benchmarks.`,
-      confidence: "high",
-    },
-    working_capital_analysis: {
-      content: `Working capital cycle of approximately 95 days. Drawing power calculation based on stock statements indicates adequate coverage. Bank statement analysis for 12 months shows regular credits and debits with no return/bounce instances. Average utilization of existing CC limits at 72% — healthy utilization pattern. No diversion of funds detected.`,
-      confidence: "medium",
-    },
-    banking_arrangement: {
-      content: `Total banking exposure across consortium: INR 220 Cr. Primary banker: SBI (lead). Our share: 18%. Account conduct across all banks reported as satisfactory. No NPA/SMA classification in the last 36 months. CIBIL commercial score: 785 (Excellent). No pending/overdue obligations as of last statement date.`,
-      confidence: "high",
-    },
-    proposed_structure: {
-      content: `Facility: ${c.facilityType.replace(/_/g, " ").toUpperCase()} | Amount: INR ${Number(c.facilityAmount).toLocaleString("en-IN")} Lakhs | Tenor: 5 years (term loan) / 12 months renewable (WC). Pricing: 1Y MCLR + 85 bps. Security: Primary — hypothecation of current assets. Collateral — equitable mortgage of commercial property (valued at 1.5x facility amount). Guarantees: Personal guarantee of all promoter directors.`,
-      confidence: "high",
-    },
-    peer_comparison: {
-      content: `Borrower's key ratios vs. industry peers (${c.sector}): DSCR: 1.85x vs. median 1.72x (25th-75th percentile: 1.55x-2.10x) — Above median. TOL/TNW: 2.1x vs. median 2.4x — Better than median. PAT Margin: 7.8% vs. median 6.9% — Above median. Overall, the borrower ranks in the 55th-65th percentile across the assessed peer group of 18 comparable entities.`,
-      confidence: "medium",
-    },
-    risk_summary: {
-      content: `Key risks identified: 1. Sector cyclicality — partially mitigated by diversified customer base. 2. Working capital elongation risk — addressed through adequate CC limits and tight covenant monitoring. 3. Promoter concentration — mitigated through PG and succession plan in place. 4. Interest rate risk — floating rate structure with hedging policy in place. Overall risk rating: BBB (Investment Grade, Moderate Risk).`,
-      confidence: "high",
-    },
-    recommendation: {
-      content: `Based on the foregoing analysis, we recommend APPROVAL of the ${c.facilityType.replace(/_/g, " ")} facility of INR ${Number(c.facilityAmount).toLocaleString("en-IN")} Lakhs for ${c.borrowerName}. The proposal is supported by: (1) Satisfactory financial performance with improving profitability trends; (2) Experienced management with clean track record; (3) Strong industry positioning; (4) Adequate security coverage. Conditions precedent: submission of latest audited financials, execution of facility documents, and creation of security charge before first drawdown.`,
-      confidence: "high",
-    },
-  };
+  const pythonUrl = process.env.PYTHON_SERVICE_URL || "http://localhost:8001";
 
-  const sections = await db
-    .select()
-    .from(memoSectionsTable)
-    .where(eq(memoSectionsTable.caseId, id));
+  // Load any collected data from the Data Room
+  const extracted = await getCaseExtractedData(id).catch(() => null);
 
-  for (const section of sections) {
-    const generated = GENERATED_CONTENT[section.sectionKey];
-    if (generated) {
-      await db
-        .update(memoSectionsTable)
-        .set({
-          content: generated.content,
-          confidence: generated.confidence,
-          updatedAt: new Date(),
-        })
-        .where(eq(memoSectionsTable.id, section.id));
+  // If financials has multi-year arrays (from BSE/Screener fetch), use directly.
+  // Otherwise fall back to base case info.
+  const extractedFin = (extracted?.financials as Record<string, unknown>) || {};
+  const hasMulitYear = Array.isArray((extractedFin?.profit_loss as Record<string, unknown>)?.years);
+
+  // If no multi-year PDF data, check if research contains Screener financials
+  let screenerFin: Record<string, unknown> = {};
+  if (!hasMulitYear && extracted?.research) {
+    const researchItems = Array.isArray(extracted.research) ? extracted.research : [];
+    for (const item of researchItems as Record<string, unknown>[]) {
+      if (item?.financials && typeof item.financials === "object") {
+        screenerFin = item.financials as Record<string, unknown>;
+        break;
+      }
     }
   }
 
-  await db
-    .update(casesTable)
-    .set({ memoProgress: 10, updatedAt: new Date() })
-    .where(eq(casesTable.id, id));
+  const financials = {
+    company_info: { name: c.borrower_name, industry: c.sector, financial_year: new Date().getFullYear().toString() },
+    ...screenerFin,
+    ...extractedFin,
+  };
 
-  await db.insert(activityLogTable).values({
-    caseId: id,
-    borrowerName: c.borrowerName,
-    action: "AI generation completed — all 12 sections drafted",
-    actor: "CreditGuard AI",
-  });
+  const researchBrief = [
+    `Sector: ${c.sector}. Facility: ${c.facility_type.replace(/_/g, " ")}, INR ${Number(c.facility_amount).toLocaleString("en-IN")} Lakhs. RM: ${c.rm_name}.`,
+    extracted?.research ? `\n\nResearch findings:\n${JSON.stringify(extracted.research).slice(0, 4000)}` : "",
+    extracted?.organogram ? `\n\nGroup structure: ${JSON.stringify(extracted.organogram).slice(0, 1000)}` : "",
+  ].join("");
+
+  const peers = (extracted?.peers as unknown[]) || [];
+
+  const KEY_MAP: Record<string, string> = {
+    company_background:  "business_profile",
+    group_structure:     "group_organogram",
+    management_profile:  "promoter_background",
+    business_model:      "business_profile",
+    industry_analysis:   "industry_analysis",
+    financial_analysis:  "financial_analysis",
+    working_capital:     "working_capital_analysis",
+    banking_arrangement: "banking_arrangement",
+    proposed_structure:  "proposed_structure",
+    peer_comparison:     "peer_comparison",
+    key_issues:          "risk_summary",
+    recommendation:      "recommendation",
+    executive_summary:   "executive_summary",
+  };
+
+  try {
+    const pyRes = await fetch(`${pythonUrl}/cam/draft-sections`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        financials,
+        ratios: {},
+        company_name: c.borrower_name,
+        research_brief: researchBrief,
+        peers,
+      }),
+      signal: AbortSignal.timeout(300_000),
+    });
+
+    if (pyRes.ok) {
+      const pyData = await pyRes.json();
+      const camSections = pyData.cam_sections || pyData.sections || pyData || {};
+      const updates: { sectionKey: string; values: Record<string, unknown> }[] = [];
+      for (const [pyKey, uiKey] of Object.entries(KEY_MAP)) {
+        const sec = camSections[pyKey];
+        if (sec?.content) {
+          updates.push({ sectionKey: uiKey, values: { content: sec.content, confidence: sec.confidence || "medium" } });
+        }
+      }
+      if (updates.length) await bulkUpdateSections(id, updates);
+    }
+  } catch (e) {
+    console.error("[generate] Python service error:", e);
+  }
+
+  // Recompute progress from actual reviewed sections (don't regress existing progress)
+  const allSections = await listSections(id);
+  const progress = allSections.length
+    ? Math.round((allSections.filter((s) => s.is_reviewed).length / allSections.length) * 100)
+    : 0;
+  await updateCase(id, { memo_progress: Math.max(progress, 10), updated_at: new Date().toISOString() });
+  await insertActivity({ case_id: id, borrower_name: c.borrower_name, action: "AI generation completed — all 12 sections drafted", actor: "CreditGuard AI" });
 
   return res.json({ message: "Memo generated successfully", caseId: id });
 });
 
 router.get("/:id/risk-flags", async (req, res) => {
   const { id } = ListRiskFlagsParams.parse({ id: Number(req.params.id) });
-  const flags = await db
-    .select()
-    .from(riskFlagsTable)
-    .where(eq(riskFlagsTable.caseId, id));
-  res.json(flags.map(formatFlag));
+  const flags = await listRiskFlags(id);
+  res.json(flags);
+});
+
+router.get("/:id/export-pdf", async (req, res) => {
+  const id = Number(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
+
+  const c = await getCase(id).catch(() => null);
+  if (!c) return res.status(404).json({ error: "Case not found" });
+
+  const sections = await listSections(id).catch(() => []);
+  const pythonUrl = process.env.PYTHON_SERVICE_URL || "http://localhost:8001";
+
+  // Assemble memo_content from all sections with content
+  const SECTION_ORDER = [
+    "executive_summary", "group_organogram", "promoter_background", "business_profile",
+    "industry_analysis", "financial_analysis", "working_capital_analysis",
+    "banking_arrangement", "proposed_structure", "peer_comparison", "risk_summary", "recommendation",
+  ];
+  const sectionMap = Object.fromEntries(sections.map((s) => [s.section_key, s]));
+
+  const memoContent = [
+    `# Credit Appraisal Memorandum\n## ${c.borrower_name}\n`,
+    `**Facility:** ${c.facility_type.replace(/_/g, " ")} | **Amount:** ₹${Number(c.facility_amount).toLocaleString("en-IN")} | **Sector:** ${c.sector} | **RM:** ${c.rm_name}\n\n---\n`,
+    ...SECTION_ORDER.map((key) => {
+      const s = sectionMap[key];
+      if (!s?.content) return "";
+      return `## ${s.section_title}\n\n${s.content}\n\n`;
+    }),
+  ].join("");
+
+  try {
+    const pyRes = await fetch(`${pythonUrl}/export-pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ memo_content: memoContent, company_name: c.borrower_name }),
+      signal: AbortSignal.timeout(60_000),
+    });
+
+    if (!pyRes.ok) {
+      const err = await pyRes.text();
+      return res.status(502).json({ error: `PDF export failed: ${err}` });
+    }
+
+    const pdfBuffer = Buffer.from(await pyRes.arrayBuffer());
+    const safeName = c.borrower_name.replace(/[^a-zA-Z0-9]/g, "_");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="CAM_${safeName}.pdf"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    return res.send(pdfBuffer);
+  } catch (e) {
+    console.error("[export-pdf] Error:", e);
+    return res.status(500).json({ error: "PDF export failed" });
+  }
 });
 
 export default router;

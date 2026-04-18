@@ -1,22 +1,25 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, Link } from "wouter";
-import { 
-  useGetCase, 
-  useUpdateCase, 
-  useListSections, 
-  useUpdateSection, 
+import {
+  useGetCase,
+  useUpdateCase,
+  useListSections,
+  useUpdateSection,
   useListRiskFlags,
+  useGenerateMemo,
   getGetCaseQueryKey,
   getListSectionsQueryKey,
   getListRiskFlagsQueryKey,
   MemoSection
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { 
-  ArrowLeft, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Clock, 
+import DataRoomTab from "./DataRoomTab";
+import DrawingPowerCalculator from "./DrawingPowerCalculator";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
   FileText,
   Lock,
   Unlock,
@@ -24,7 +27,10 @@ import {
   ChevronRight,
   Eye,
   MoreVertical,
-  Download
+  Download,
+  Sparkles,
+  RefreshCw,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -42,14 +48,16 @@ const CONFIDENCE_COLORS = {
   pending: "bg-blue-500/10 text-blue-600 border-blue-500/20",
 };
 
-function EditorSection({ 
-  section, 
+function EditorSection({
+  section,
   caseId,
-  onSave
-}: { 
-  section: MemoSection; 
+  onSave,
+  dpProps,
+}: {
+  section: MemoSection;
   caseId: number;
   onSave: (id: number, key: string, data: any) => Promise<void>;
+  dpProps?: React.ComponentProps<typeof DrawingPowerCalculator>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [content, setContent] = useState(section.content);
@@ -123,7 +131,7 @@ function EditorSection({
       <CardContent className="p-0">
         {isEditing && !section.isLocked ? (
           <div className="flex flex-col bg-background">
-            <Textarea 
+            <Textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
               className="min-h-[200px] border-0 focus-visible:ring-0 rounded-none resize-y p-6 leading-relaxed bg-transparent"
@@ -135,7 +143,7 @@ function EditorSection({
             </div>
           </div>
         ) : (
-          <div 
+          <div
             className={`p-6 prose prose-sm max-w-none text-foreground leading-relaxed ${!section.isLocked ? "cursor-text hover:bg-muted/10" : "opacity-80"} transition-colors`}
             onClick={() => !section.isLocked && setIsEditing(true)}
           >
@@ -144,6 +152,11 @@ function EditorSection({
             ) : (
               <span className="text-muted-foreground italic">No content generated yet. Click to start writing.</span>
             )}
+          </div>
+        )}
+        {dpProps && (
+          <div className="p-6 pt-0">
+            <DrawingPowerCalculator {...dpProps} />
           </div>
         )}
       </CardContent>
@@ -172,6 +185,25 @@ export default function CaseDetail() {
 
   const updateSection = useUpdateSection();
   const updateCase = useUpdateCase();
+  const generateMemo = useGenerateMemo();
+  const [generating, setGenerating] = useState(false);
+  const [mainTab, setMainTab] = useState<"memo" | "dataroom">("memo");
+
+  const hasContent = sections?.some(s => s.content && s.content.trim().length > 0);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      await generateMemo.mutateAsync({ id });
+      await queryClient.invalidateQueries({ queryKey: getListSectionsQueryKey(id) });
+      await queryClient.invalidateQueries({ queryKey: getGetCaseQueryKey(id) });
+      toast({ title: "Memo generated", description: "All sections have been drafted by AI." });
+    } catch (e) {
+      toast({ title: "Generation failed", description: "Could not reach the AI service. Try again.", variant: "destructive" });
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const handleUpdateSection = useCallback(async (caseId: number, sectionKey: string, data: any) => {
     await updateSection.mutateAsync({ id: caseId, sectionKey, data });
@@ -240,10 +272,28 @@ export default function CaseDetail() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" asChild>
-              <a href="#"><Download className="mr-2 h-4 w-4" /> Export PDF</a>
+            <Button
+              size="sm"
+              onClick={handleGenerate}
+              disabled={generating}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              title={hasContent ? "Re-generate all sections with AI" : "Generate all sections with AI"}
+            >
+              {generating ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…</>
+              ) : hasContent ? (
+                <><RefreshCw className="mr-2 h-4 w-4" /> Re-generate</>
+              ) : (
+                <><Sparkles className="mr-2 h-4 w-4" /> Generate AI Draft</>
+              )}
             </Button>
-            
+
+            <Button variant="outline" size="sm" asChild>
+              <a href={`/api/cases/${id}/export-pdf`} download={`CAM_${caseData.borrowerName}.pdf`}>
+                <Download className="mr-2 h-4 w-4" /> Export PDF
+              </a>
+            </Button>
+
             {caseData.status === 'draft' && (
               <Button size="sm" onClick={() => handleStatusChange('in_review')} className="bg-primary hover:bg-primary/90 text-primary-foreground">
                 Submit for Review
@@ -274,9 +324,25 @@ export default function CaseDetail() {
             <Progress value={caseData.memoProgress} className="h-2" />
           </div>
         </div>
+
+        {/* Main tab bar */}
+        <div className="mt-4 flex gap-1 border-b -mb-px">
+          {(["memo", "dataroom"] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setMainTab(tab)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${mainTab === tab ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            >
+              {tab === "memo" ? "CAM Memo" : "Data Room"}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden">
+        {mainTab === "dataroom" ? (
+          <DataRoomTab caseId={id} companyName={caseData.borrowerName} />
+        ) : (
         <div className="h-full flex flex-col lg:flex-row">
           {/* Main Editor Area */}
           <div className="flex-1 overflow-y-auto p-8 lg:pr-4 relative scroll-smooth" id="editor-container">
@@ -287,11 +353,18 @@ export default function CaseDetail() {
                 ))
               ) : sections && sections.length > 0 ? (
                 sections.map((section) => (
-                  <EditorSection 
-                    key={section.id} 
-                    section={section} 
-                    caseId={id} 
-                    onSave={handleUpdateSection} 
+                  <EditorSection
+                    key={section.id}
+                    section={section}
+                    caseId={id}
+                    onSave={handleUpdateSection}
+                    dpProps={
+                      (section.sectionKey === "proposed_structure" || section.sectionKey === "working_capital_analysis")
+                        ? {
+                            proposedLimit: Math.round((caseData.facilityAmount ?? 0) / 100), // lakhs → crore
+                          }
+                        : undefined
+                    }
                   />
                 ))
               ) : (
@@ -392,6 +465,7 @@ export default function CaseDetail() {
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
