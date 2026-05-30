@@ -1,18 +1,40 @@
+# Render Blueprint — both CreditGuard AI backends (free tier).
+# Deploy via Render → New → Blueprint, pointed at this repo.
+# Set the two `sync: false` secrets (GEMINI_API_KEY, SUPABASE_*) in the dashboard.
 services:
+  # ── Python analysis engine (FastAPI) ──────────────────────────────────────
   - type: web
     name: creditguard-python
     runtime: python
+    plan: free
     rootDir: python-service
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: OPENROUTER_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
-      - key: OPENROUTER_MODEL
-        value: deepseek/deepseek-chat:free
       - key: MEMO_PROVIDER
-        value: openrouter
+        value: gemini
       - key: EXTRACTION_PROVIDER
-        value: openrouter
+        value: gemini
       - key: RESEARCHER_PROVIDER
-        value: openrouter
+        value: gemini
+
+  # ── Express API server (cases CRUD, Supabase, proxies the Python engine) ──
+  - type: web
+    name: creditguard-api
+    runtime: node
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install -g pnpm@9 && pnpm install --ignore-scripts && pnpm --filter @workspace/api-server build
+    startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Points at the Python service above (Render URL = https://<name>.onrender.com).
+      - key: PYTHON_SERVICE_URL
+        value: https://creditguard-python.onrender.com

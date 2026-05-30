@@ -72,16 +72,24 @@ sequenceDiagram
 
 ## 🛠️ Technology Stack
 
-### Frontend
-*   **Framework:** Next.js 16 (App Router)
-*   **Styling:** Tailwind CSS (utility-first, responsive design)
+The app is **three services + a database** (see [`DEPLOY.md`](./DEPLOY.md)):
+
+### Frontend — `frontend/artifacts/creditguard`
+*   **Framework:** React 19 + Vite 7 (SPA, wouter routing)
+*   **Styling:** Tailwind CSS v4 + shadcn/ui (Radix)
 *   **Icons:** Lucide React
 
-### Backend
-*   **Framework:** FastAPI (Python)
-*   **Local AI Inference:** Ollama 
-*   **Cloud AI Fallback:** Google Gemini API
-*   **Web Searching:** DuckDuckGo API hookups 
+### API server — `frontend/artifacts/api-server`
+*   **Framework:** Express 5 (TypeScript, pnpm monorepo)
+*   **Role:** Cases/memo CRUD on Supabase; proxies heavy work to the Python engine
+
+### Analysis engine — `python-service`
+*   **Framework:** FastAPI (Python 3.13)
+*   **AI:** Google Gemini (cloud); OpenRouter / Groq / Ollama also supported via `*_PROVIDER` env
+*   **Data:** Screener.in + Yahoo Finance + BSE annual reports
+
+### Database
+*   **Supabase** (Postgres) — `cases`, `memo_sections`, `risk_flags`
 
 ---
 
