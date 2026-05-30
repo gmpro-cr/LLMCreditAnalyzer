@@ -1,0 +1,647 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: CreditGuard AI — LLM-Powered Credit Memo Generator API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: cases
+    description: Credit memo cases
+  - name: memos
+    description: Credit memo sections and drafts
+  - name: dashboard
+    description: Dashboard aggregates and analytics
+  - name: companies
+    description: Public company data lookup from stock exchanges
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /cases:
+    get:
+      operationId: listCases
+      tags: [cases]
+      summary: List all credit memo cases
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, in_review, approved, rejected]
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of cases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Case"
+    post:
+      operationId: createCase
+      tags: [cases]
+      summary: Create a new credit memo case
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCaseBody"
+      responses:
+        "201":
+          description: Created case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+
+  /cases/{id}:
+    get:
+      operationId: getCase
+      tags: [cases]
+      summary: Get a credit memo case by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Case detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+    patch:
+      operationId: updateCase
+      tags: [cases]
+      summary: Update a credit memo case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCaseBody"
+      responses:
+        "200":
+          description: Updated case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+    delete:
+      operationId: deleteCase
+      tags: [cases]
+      summary: Delete a credit memo case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /cases/{id}/sections:
+    get:
+      operationId: listSections
+      tags: [memos]
+      summary: Get all memo sections for a case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Sections list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MemoSection"
+
+  /cases/{id}/sections/{sectionKey}:
+    patch:
+      operationId: updateSection
+      tags: [memos]
+      summary: Update (edit) a memo section
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: sectionKey
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSectionBody"
+      responses:
+        "200":
+          description: Updated section
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoSection"
+
+  /cases/{id}/generate:
+    post:
+      operationId: generateMemo
+      tags: [memos]
+      summary: Trigger AI generation for a memo case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Generation started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateResponse"
+
+  /cases/{id}/risk-flags:
+    get:
+      operationId: listRiskFlags
+      tags: [memos]
+      summary: Get risk flags for a case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Risk flags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RiskFlag"
+
+  /companies/search:
+    get:
+      operationId: searchCompanies
+      tags: [companies]
+      summary: Search for publicly listed Indian companies by name or ticker
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of matching company suggestions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CompanySuggestion"
+
+  /companies/data:
+    get:
+      operationId: getCompanyPublicData
+      tags: [companies]
+      summary: Fetch comprehensive public financial data for a listed company
+      parameters:
+        - name: ticker
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Public company data including financials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyPublicData"
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get overall dashboard statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /dashboard/recent-activity:
+    get:
+      operationId: getRecentActivity
+      tags: [dashboard]
+      summary: Get recent case activity timeline
+      responses:
+        "200":
+          description: Recent activity items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  /dashboard/status-breakdown:
+    get:
+      operationId: getStatusBreakdown
+      tags: [dashboard]
+      summary: Get case counts broken down by status
+      responses:
+        "200":
+          description: Status breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StatusBreakdownItem"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+
+    Case:
+      type: object
+      properties:
+        id:
+          type: integer
+        borrowerName:
+          type: string
+        cin:
+          type: string
+        pan:
+          type: string
+        facilityType:
+          type: string
+          enum: [term_loan, working_capital, letter_of_credit, bank_guarantee, overdraft]
+        facilityAmount:
+          type: number
+        sector:
+          type: string
+        rmName:
+          type: string
+        status:
+          type: string
+          enum: [draft, in_review, approved, rejected]
+        memoProgress:
+          type: integer
+          description: 0-100 percent progress
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - borrowerName
+        - facilityType
+        - facilityAmount
+        - sector
+        - rmName
+        - status
+        - memoProgress
+        - createdAt
+        - updatedAt
+
+    CreateCaseBody:
+      type: object
+      properties:
+        borrowerName:
+          type: string
+        cin:
+          type: string
+        pan:
+          type: string
+        facilityType:
+          type: string
+          enum: [term_loan, working_capital, letter_of_credit, bank_guarantee, overdraft]
+        facilityAmount:
+          type: number
+        sector:
+          type: string
+        rmName:
+          type: string
+      required:
+        - borrowerName
+        - facilityType
+        - facilityAmount
+        - sector
+        - rmName
+
+    UpdateCaseBody:
+      type: object
+      properties:
+        borrowerName:
+          type: string
+        cin:
+          type: string
+        pan:
+          type: string
+        facilityType:
+          type: string
+          enum: [term_loan, working_capital, letter_of_credit, bank_guarantee, overdraft]
+        facilityAmount:
+          type: number
+        sector:
+          type: string
+        rmName:
+          type: string
+        status:
+          type: string
+          enum: [draft, in_review, approved, rejected]
+
+    MemoSection:
+      type: object
+      properties:
+        id:
+          type: integer
+        caseId:
+          type: integer
+        sectionKey:
+          type: string
+        sectionTitle:
+          type: string
+        content:
+          type: string
+        confidence:
+          type: string
+          enum: [high, medium, low, pending]
+        isReviewed:
+          type: boolean
+        isLocked:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - caseId
+        - sectionKey
+        - sectionTitle
+        - content
+        - confidence
+        - isReviewed
+        - isLocked
+        - updatedAt
+
+    UpdateSectionBody:
+      type: object
+      properties:
+        content:
+          type: string
+        isReviewed:
+          type: boolean
+        isLocked:
+          type: boolean
+
+    GenerateResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        caseId:
+          type: integer
+      required: [message, caseId]
+
+    RiskFlag:
+      type: object
+      properties:
+        id:
+          type: integer
+        caseId:
+          type: integer
+        riskType:
+          type: string
+        severity:
+          type: string
+          enum: [high, medium, low]
+        description:
+          type: string
+        mitigation:
+          type: string
+        isAcknowledged:
+          type: boolean
+      required:
+        - id
+        - caseId
+        - riskType
+        - severity
+        - description
+        - isAcknowledged
+
+    DashboardStats:
+      type: object
+      properties:
+        totalCases:
+          type: integer
+        draftsInProgress:
+          type: integer
+        pendingReview:
+          type: integer
+        approvedThisMonth:
+          type: integer
+        avgDraftTimeHours:
+          type: number
+        timeSavedHours:
+          type: number
+      required:
+        - totalCases
+        - draftsInProgress
+        - pendingReview
+        - approvedThisMonth
+        - avgDraftTimeHours
+        - timeSavedHours
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        caseId:
+          type: integer
+        borrowerName:
+          type: string
+        action:
+          type: string
+        actor:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+      required:
+        - id
+        - caseId
+        - borrowerName
+        - action
+        - actor
+        - timestamp
+
+    StatusBreakdownItem:
+      type: object
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+        label:
+          type: string
+      required:
+        - status
+        - count
+        - label
+
+    CompanySuggestion:
+      type: object
+      properties:
+        ticker:
+          type: string
+        name:
+          type: string
+        exchange:
+          type: string
+        sector:
+          type: string
+        typeDisp:
+          type: string
+      required:
+        - ticker
+        - name
+        - exchange
+
+    FinancialYear:
+      type: object
+      properties:
+        year:
+          type: string
+        revenue:
+          type: number
+        ebitda:
+          type: number
+        netProfit:
+          type: number
+        totalDebt:
+          type: number
+        totalAssets:
+          type: number
+        cash:
+          type: number
+      required:
+        - year
+        - revenue
+        - netProfit
+
+    CompanyPublicData:
+      type: object
+      properties:
+        ticker:
+          type: string
+        name:
+          type: string
+        exchange:
+          type: string
+        sector:
+          type: string
+        industry:
+          type: string
+        website:
+          type: string
+        description:
+          type: string
+        employees:
+          type: integer
+        cin:
+          type: string
+        marketCap:
+          type: number
+        currentPrice:
+          type: number
+        peRatio:
+          type: number
+        pbRatio:
+          type: number
+        debtToEquity:
+          type: number
+        currentRatio:
+          type: number
+        returnOnEquity:
+          type: number
+        returnOnAssets:
+          type: number
+        revenueGrowth:
+          type: number
+        grossMargin:
+          type: number
+        ebitdaMargin:
+          type: number
+        netProfitMargin:
+          type: number
+        financialHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/FinancialYear"
+        dataSource:
+          type: string
+        fetchedAt:
+          type: string
+          format: date-time
+      required:
+        - ticker
+        - name
+        - exchange
+        - dataSource
+        - fetchedAt

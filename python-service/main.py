@@ -20,6 +20,7 @@ from researcher import run_research
 from public_data import fetch_all_public_data, fetch_stock_quote, fetch_screener_financials, fetch_bse_annual_reports_multi
 from cam_sections import generate_cam_sections, _llm
 from risk_flags import generate_risk_flags
+from bank_statement import analyze_bank_statement, export_to_excel
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -974,3 +975,93 @@ async def analyze_full(
         raise HTTPException(500, f"Analysis failed: {str(e)}")
     finally:
         os.unlink(tmp_path)
+
+
+# ── Bank Statement Analysis ───────────────────────────────────────────────────
+@app.post("/analyze-bank-statement")
+async def analyze_bank_statement_endpoint(
+    file: UploadFile = File(...),
+    period_from: str = Form(""),
+    period_to: str = Form(""),
+    account_holder: str = Form(""),
+):
+    """
+    Banker-grade bank statement analysis.
+    Accepts CSV / Excel / text-based PDF; returns structured analysis with risk flags + score.
+    """
+    if not file.filename:
+        raise HTTPException(400, "No file uploaded")
+    content = await file.read()
+    if len(content) < 200:
+        raise HTTPException(400, "File too small to be a valid bank statement")
+
+    name = file.filename.lower()
+    if not (name.endswith(".csv") or name.endswith(".xlsx") or name.endswith(".xls") or name.endswith(".pdf")):
+        raise HTTPException(400, "Unsupported file type. Upload CSV, Excel, or PDF.")
+
+    try:
+        result = await asyncio.to_thread(
+            analyze_bank_statement,
+            content,
+            file.filename,
+            period_from or None,
+            period_to or None,
+            account_holder or None,
+        )
+        return result
+    except ValueError as ve:
+        logger.error(f"Bank statement parse error: {ve}")
+        raise HTTPException(400, str(ve))
+    except Exception as e:
+        logger.error(f"Bank statement analysis failed: {e}", exc_info=True)
+        raise HTTPException(500, f"Analysis failed: {str(e)}")
+
+
+# ── Bank Statement Excel Export ───────────────────────────────────────────────
+@app.post("/analyze-bank-statement/excel")
+async def export_bank_statement_excel(
+    file: UploadFile = File(...),
+    period_from: str = Form(""),
+    period_to: str = Form(""),
+    account_holder: str = Form(""),
+):
+    """
+    Run bank-statement analysis and return a multi-sheet Excel workbook with:
+    Summary, Risk Flags, Underwriter Notes, Monthly Trend, Transactions (full ledger),
+    Recurring Credits, Recurring Debits, EMI Obligations, Cash Activity,
+    Cheque Returns, Counterparty Concentration.
+    """
+    if not file.filename:
+        raise HTTPException(400, "No file uploaded")
+    content = await file.read()
+    if len(content) < 200:
+        raise HTTPException(400, "File too small to be a valid bank statement")
+
+    name = file.filename.lower()
+    if not (name.endswith(".csv") or name.endswith(".xlsx") or name.endswith(".xls") or name.endswith(".pdf")):
+        raise HTTPException(400, "Unsupported file type. Upload CSV, Excel, or PDF.")
+
+    try:
+        analysis = await asyncio.to_thread(
+            analyze_bank_statement,
+            content,
+            file.filename,
+            period_from or None,
+            period_to or None,
+            account_holder or None,
+        )
+        xlsx_bytes = await asyncio.to_thread(export_to_excel, analysis)
+    except ValueError as ve:
+        raise HTTPException(400, str(ve))
+    except Exception as e:
+        logger.error(f"Bank statement Excel export failed: {e}", exc_info=True)
+        raise HTTPException(500, f"Export failed: {str(e)}")
+
+    from fastapi.responses import Response
+    safe_holder = (account_holder or "statement").replace("/", "_").replace("\\", "_").strip() or "statement"
+    filename_out = f"BankStatementAnalysis_{safe_holder}.xlsx"
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename_out}"'},
+    )

@@ -1,52 +1,64 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
+# ── Dependencies ──────────────────────────────────────────────────────────
+node_modules/
+.pnp
 .pnp.*
+.pnpm-store/
 .yarn/*
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
-
-# next.js
+# ── Build output ──────────────────────────────────────────────────────────
+dist/
+build/
+out/
+out-tsc/
 /.next/
-/out/
+*.tsbuildinfo
+next-env.d.ts
+.vite/
 
-# production
-/build
+# ── Python ────────────────────────────────────────────────────────────────
+python-service/venv/
+**/__pycache__/
+*.pyc
+python-service/.env
 
-# misc
+# ── Env files ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Replit / tooling junk (from the Vite monorepo) ────────────────────────
+.local/
+.cache/
+.expo/
+.expo-shared/
+.sass-cache/
+coverage/
+
+# ── Editors / OS ──────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/settings.json
+.idea/
 .DS_Store
+Thumbs.db
 *.pem
 
-# debug
+# ── Logs ──────────────────────────────────────────────────────────────────
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
+# ── Vercel ────────────────────────────────────────────────────────────────
 .vercel
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-# python
-python-service/venv/
-python-service/__pycache__/
-python-service/*.pyc
-python-service/.env
-
-# sqlite
+# ── SQLite (local dev DB) ─────────────────────────────────────────────────
 *.db
 *.db-shm
 *.db-wal
+
+# ── Local archives (kept out of git; recoverable backups) ─────────────────
+frontend-repo-history.bundle

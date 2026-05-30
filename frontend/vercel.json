@@ -1,0 +1,6 @@
+{
+  "buildCommand": "pnpm --filter @workspace/creditguard build",
+  "outputDirectory": "artifacts/creditguard/dist/public",
+  "installCommand": "pnpm install",
+  "framework": "vite"
+}

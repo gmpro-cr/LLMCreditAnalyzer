@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRD — CreditGuard AI: LLM-Based Credit Memo Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@300;400;500&family=Libre+Franklin:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0d0d0d;
+    --paper: #f5f0e8;
+    --accent: #b5451b;
+    --accent2: #1b4a6b;
+    --muted: #6b6355;
+    --rule: #d4c9b0;
+    --highlight: #fff9e6;
+    --tag-bg: #1b4a6b;
+    --tag-fg: #e8f4ff;
+    --mono: 'DM Mono', monospace;
+    --serif: 'Playfair Display', Georgia, serif;
+    --sans: 'Libre Franklin', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-weight: 300;
+    line-height: 1.75;
+    font-size: 15px;
+  }
+
+  /* HEADER */
+  .masthead {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 56px 64px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .masthead::before {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 320px; height: 320px;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 50%;
+  }
+  .masthead::after {
+    content: '';
+    position: absolute;
+    top: -20px; right: -20px;
+    width: 180px; height: 180px;
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 50%;
+  }
+  .doc-type {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  .masthead h1 {
+    font-family: var(--serif);
+    font-size: clamp(28px, 4vw, 52px);
+    font-weight: 900;
+    line-height: 1.1;
+    max-width: 700px;
+    margin-bottom: 8px;
+  }
+  .masthead h1 span { color: var(--accent); }
+  .subtitle {
+    font-size: 14px;
+    color: rgba(245,240,232,0.55);
+    font-family: var(--mono);
+    margin-bottom: 32px;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  .meta-item { display: flex; flex-direction: column; gap: 2px; }
+  .meta-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: rgba(245,240,232,0.4);
+  }
+  .meta-value {
+    font-size: 13px;
+    color: rgba(245,240,232,0.85);
+    font-weight: 400;
+  }
+
+  /* STATUS PILLS */
+  .status-bar {
+    background: var(--accent);
+    padding: 10px 64px;
+    display: flex;
+    gap: 32px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .status-pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status-pill::before {
+    content: '';
+    width: 6px; height: 6px;
+    background: rgba(255,255,255,0.6);
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  /* LAYOUT */
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 64px 32px;
+  }
+
+  /* SECTION */
+  .section {
+    margin-bottom: 72px;
+  }
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 28px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .section-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    flex-shrink: 0;
+  }
+  .section-title {
+    font-family: var(--serif);
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  /* PROSE */
+  p { margin-bottom: 16px; color: #2a2520; }
+  strong { font-weight: 600; color: var(--ink); }
+
+  /* CALLOUT */
+  .callout {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 24px 28px;
+    margin: 28px 0;
+    border-left: 4px solid var(--accent);
+    font-family: var(--serif);
+    font-size: 17px;
+    font-style: italic;
+    line-height: 1.6;
+  }
+  .callout em { color: var(--accent); font-style: normal; }
+
+  /* INSIGHT BOX */
+  .insight {
+    background: var(--highlight);
+    border: 1px solid #e0d5b0;
+    border-left: 3px solid var(--accent2);
+    padding: 16px 20px;
+    margin: 20px 0;
+    font-size: 14px;
+    color: #2a2520;
+  }
+  .insight-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    margin-bottom: 6px;
+    font-style: normal;
+  }
+
+  /* FEATURE GRID */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 28px 0;
+  }
+  .feature-card {
+    background: var(--paper);
+    padding: 24px;
+  }
+  .feature-icon {
+    font-size: 22px;
+    margin-bottom: 10px;
+    display: block;
+  }
+  .feature-name {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 8px;
+    color: var(--ink);
+  }
+  .feature-desc {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .feature-tag {
+    display: inline-block;
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    background: var(--tag-bg);
+    color: var(--tag-fg);
+    border-radius: 2px;
+  }
+  .feature-tag.mvp { background: var(--accent); }
+  .feature-tag.v2 { background: var(--muted); }
+
+  /* TABLE */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 13.5px;
+  }
+  .data-table th {
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 400;
+  }
+  .data-table td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    color: #2a2520;
+  }
+  .data-table tr:nth-child(even) td { background: rgba(0,0,0,0.02); }
+  .data-table tr:hover td { background: var(--highlight); }
+  .pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-weight: 500;
+  }
+  .pill-high { background: #ffe0d6; color: var(--accent); }
+  .pill-med { background: #deeaf5; color: var(--accent2); }
+  .pill-low { background: #eee; color: #888; }
+  .pill-mvp { background: var(--accent); color: white; }
+  .pill-v2 { background: var(--muted); color: white; }
+  .pill-v3 { background: #aaa; color: white; }
+
+  /* USER JOURNEY */
+  .journey {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 28px 0;
+    position: relative;
+  }
+  .journey::before {
+    content: '';
+    position: absolute;
+    left: 22px;
+    top: 0; bottom: 0;
+    width: 2px;
+    background: var(--rule);
+  }
+  .journey-step {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    padding: 20px 0;
+    position: relative;
+  }
+  .step-num {
+    width: 44px; height: 44px;
+    background: var(--ink);
+    color: var(--paper);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+  .step-num.accent { background: var(--accent); }
+  .step-content { padding-top: 8px; }
+  .step-title {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 16px;
+    margin-bottom: 4px;
+  }
+  .step-desc { font-size: 13.5px; color: var(--muted); }
+
+  /* ARCH DIAGRAM */
+  .arch-block {
+    border: 1px solid var(--rule);
+    padding: 20px 24px;
+    margin: 8px 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .arch-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    width: 130px;
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+  .arch-desc { font-size: 13.5px; color: #2a2520; }
+  .arch-desc code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: rgba(0,0,0,0.06);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+
+  /* RISK */
+  .risk-row {
+    display: grid;
+    grid-template-columns: 1fr 80px 80px 1fr;
+    gap: 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: 13.5px;
+    align-items: start;
+  }
+  .risk-row.header {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-bottom: 10px;
+  }
+
+  /* METRICS */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 28px 0;
+  }
+  .metric-card {
+    background: var(--paper);
+    padding: 20px;
+    text-align: center;
+  }
+  .metric-val {
+    font-family: var(--serif);
+    font-size: 32px;
+    font-weight: 900;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .metric-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ROADMAP */
+  .roadmap {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 28px 0;
+  }
+  .roadmap-phase { background: var(--paper); padding: 24px; }
+  .phase-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .phase-name {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 17px;
+    margin-bottom: 4px;
+  }
+  .phase-period {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  .phase-items { list-style: none; }
+  .phase-items li {
+    font-size: 13px;
+    color: #2a2520;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .phase-items li::before {
+    content: '→';
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 11px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .phase-items li:last-child { border-bottom: none; }
+
+  /* FOOTER */
+  .footer {
+    background: var(--ink);
+    color: rgba(245,240,232,0.4);
+    padding: 24px 64px;
+    font-family: var(--mono);
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .footer span { color: rgba(245,240,232,0.6); }
+
+  /* LIST STYLE */
+  ul.doc-list {
+    list-style: none;
+    padding: 0;
+    margin: 16px 0;
+  }
+  ul.doc-list li {
+    padding: 6px 0 6px 20px;
+    border-bottom: 1px dashed var(--rule);
+    font-size: 14px;
+    color: #2a2520;
+    position: relative;
+  }
+  ul.doc-list li::before {
+    content: '—';
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  @media (max-width: 640px) {
+    .masthead { padding: 36px 24px 28px; }
+    .status-bar { padding: 10px 24px; }
+    .container { padding: 40px 20px; }
+    .roadmap { grid-template-columns: 1fr; }
+    .risk-row { grid-template-columns: 1fr 1fr; }
+    .risk-row.header { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- MASTHEAD -->
+<div class="masthead">
+  <div class="doc-type">Product Requirements Document · v1.0</div>
+  <h1>CreditGuard <span>AI</span><br>Credit Memo Generator</h1>
+  <div class="subtitle">LLM-Powered Credit Analysis & Memo Drafting Platform for Corporate Lenders</div>
+  <div class="meta-row">
+    <div class="meta-item">
+      <span class="meta-label">Author</span>
+      <span class="meta-value">Gaurav · AVP, Yes Bank</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Document Status</span>
+      <span class="meta-value">Draft v1.0</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Target Personas</span>
+      <span class="meta-value">Relationship Managers, Credit Analysts</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Sector</span>
+      <span class="meta-value">Corporate & Mid-Corporate Lending, BFSI</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">MVP Horizon</span>
+      <span class="meta-value">12 Weeks</span>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar">
+  <div class="status-pill">MVP Scope Defined</div>
+  <div class="status-pill">Backend: Python / FastAPI</div>
+  <div class="status-pill">LLM: GPT-4o / Claude 3.5</div>
+  <div class="status-pill">Human-in-the-Loop Design</div>
+  <div class="status-pill">Confidence Indicators</div>
+</div>
+
+<div class="container">
+
+  <!-- 1. PROBLEM -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">01 //</span>
+      <h2 class="section-title">Problem Statement</h2>
+    </div>
+
+    <div class="callout">
+      A senior banker with 9 years of experience spends <em>60–70% of their time</em> writing — not thinking. Credit memos are the bottleneck between deal origination and credit committee approval.
+    </div>
+
+    <p>In Indian corporate and mid-corporate banking, the credit memo (also called Credit Appraisal Memorandum or CAM) is the primary document through which a banker presents a borrower's creditworthiness to a credit committee. These documents are complex, highly structured, and deeply contextual — yet paradoxically, they are still produced manually, often recycled from previous memos with inconsistent quality.</p>
+
+    <p>The current state of credit memo production has three fundamental failure modes:</p>
+
+    <div class="feature-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top: 20px;">
+      <div class="feature-card">
+        <span class="feature-icon">⏱</span>
+        <div class="feature-name">Time Intensive</div>
+        <div class="feature-desc">A single mid-corporate CAM takes 8–16 hours to draft from scratch. RMs spend more time writing than managing relationships or originating deals.</div>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">📉</span>
+        <div class="feature-name">Quality Variance</div>
+        <div class="feature-desc">Memo quality depends heavily on the individual RM's experience and writing ability. Junior analysts produce inconsistent, incomplete memos that get rejected at credit.</div>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🔁</span>
+        <div class="feature-name">Institutional Knowledge Loss</div>
+        <div class="feature-desc">Critical analytical patterns and credit judgments learned over years are locked inside individual bankers' heads, never systematized or shared.</div>
+      </div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-label">Domain Context</div>
+      A standard corporate CAM contains: Group overview, Promoter background, Business profile, Industry analysis, Financial analysis (3–5 years), Working capital assessment, Banking arrangement, Proposed structure, Risk identification, and Recommendation. Each section requires synthesis of data from audited financials, projections, field visits, and external research.
+    </div>
+  </div>
+
+  <!-- 2. VISION -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">02 //</span>
+      <h2 class="section-title">Product Vision & Goals</h2>
+    </div>
+
+    <div class="callout">
+      CreditGuard AI is not an auto-writer. It is an <em>intelligent drafting co-pilot</em> — one that does the structural heavy lifting while keeping the banker firmly in command of credit judgement.
+    </div>
+
+    <p><strong>Vision Statement:</strong> To reduce credit memo drafting time by 70% while improving analytical consistency — enabling relationship managers to focus on deal origination, client relationships, and credit judgement rather than document production.</p>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Goal</th>
+          <th>Metric</th>
+          <th>Target (6M)</th>
+          <th>Target (12M)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Time Reduction</strong> — Hours to produce first draft</td>
+          <td>Avg. drafting hours per CAM</td>
+          <td>8h → 2.5h</td>
+          <td>8h → 1.5h</td>
+        </tr>
+        <tr>
+          <td><strong>Completeness</strong> — All mandatory sections present</td>
+          <td>% memos with all sections populated</td>
+          <td>90%</td>
+          <td>98%</td>
+        </tr>
+        <tr>
+          <td><strong>Credit Committee Acceptance</strong> — First-pass approval rate</td>
+          <td>% memos approved without major revisions</td>
+          <td>Baseline +15%</td>
+          <td>Baseline +30%</td>
+        </tr>
+        <tr>
+          <td><strong>User Adoption</strong> — Active weekly users</td>
+          <td>RMs using the tool at least once/week</td>
+          <td>20 users (pilot bank)</td>
+          <td>100 users</td>
+        </tr>
+        <tr>
+          <td><strong>Trust</strong> — Users editing AI output</td>
+          <td>% sections reviewed before submission</td>
+          <td>100% (by design)</td>
+          <td>100% (by design)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 3. TARGET USERS -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">03 //</span>
+      <h2 class="section-title">Target Users & Personas</h2>
+    </div>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Persona</th>
+          <th>Role</th>
+          <th>Primary Pain</th>
+          <th>Key Need</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Riya</strong>, 4 YOE</td>
+          <td>Credit Analyst / Junior RM</td>
+          <td>Doesn't know what "good" looks like; gets memos rejected repeatedly</td>
+          <td>Structured templates, guided data input, benchmark comparisons</td>
+        </tr>
+        <tr>
+          <td><strong>Gaurav</strong>, 9 YOE</td>
+          <td>Senior RM / AVP</td>
+          <td>Spends 60% of time writing instead of originating</td>
+          <td>Fast first drafts, easy editing, consistent quality across portfolio</td>
+        </tr>
+        <tr>
+          <td><strong>Priya</strong>, 15 YOE</td>
+          <td>Credit Manager / DGM</td>
+          <td>Receives poorly structured memos; approval meetings over-run</td>
+          <td>Standardized format, clear risk flags, auditable outputs</td>
+        </tr>
+        <tr>
+          <td><strong>Rohan</strong></td>
+          <td>Head of Credit / Zonal Head</td>
+          <td>Portfolio risk is opaque; no easy way to compare borrowers</td>
+          <td>Cross-borrower analytics, trend views, NPA early warning signals</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="insight">
+      <div class="insight-label">Primary Focus for MVP</div>
+      MVP targets the Senior RM persona (Gaurav archetype) — 7–12 years experience, manages 25–40 mid-corporate accounts, comfortable with technology, motivated by time savings. Secondary beneficiary is the junior analyst who uses the tool for guided memo production.
+    </div>
+  </div>
+
+  <!-- 4. CORE FEATURES -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">04 //</span>
+      <h2 class="section-title">Core Feature Set</h2>
+    </div>
+
+    <p>Features are organized by release tier. MVP is the non-negotiable core. V2 and V3 add intelligence layers and enterprise scale.</p>
+
+    <div class="feature-grid">
+
+      <div class="feature-card">
+        <span class="feature-icon">📄</span>
+        <div class="feature-name">Document Ingestion Engine</div>
+        <div class="feature-desc">Upload audited financials (PDF, Excel), CA certificate, CMA data, and banking statements. System extracts structured data automatically via OCR + LLM parsing.</div>
+        <span class="feature-tag mvp">MVP</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🧩</span>
+        <div class="feature-name">Structured Memo Sections</div>
+        <div class="feature-desc">Generates all 12 standard CAM sections: Group Organogram, Promoter Background, Business Profile, Industry Analysis, Financial Analysis, WC Assessment, Banking Arrangement, Proposed Structure, Risk Summary, Key Issues, Peer Comparison, and Recommendation.</div>
+        <span class="feature-tag mvp">MVP</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🎚</span>
+        <div class="feature-name">Confidence Indicators</div>
+        <div class="feature-desc">Every AI-generated statement carries a confidence score (High / Medium / Low) with source citation. Low-confidence fields are highlighted for human review before finalisation.</div>
+        <span class="feature-tag mvp">MVP</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">✍️</span>
+        <div class="feature-name">Human-in-the-Loop Editor</div>
+        <div class="feature-desc">Inline editing with section-level lock/unlock. RMs can override any AI output. Edits are tracked and used for prompt improvement over time. No section can be submitted without RM review.</div>
+        <span class="feature-tag mvp">MVP</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">📊</span>
+        <div class="feature-name">Financial Ratio Computation</div>
+        <div class="feature-desc">Auto-calculates DSCR, TOL/TNW, Current Ratio, EBITDA margin, Debt/Equity, Inventory Days, Debtor Days, and trend analysis across 3–5 years from uploaded financials.</div>
+        <span class="feature-tag mvp">MVP</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">⚠️</span>
+        <div class="feature-name">Risk Flag Engine</div>
+        <div class="feature-desc">Automatically identifies and surfaces key credit risks: deteriorating ratios, high leverage, related-party transactions, sector stress, promoter concerns. Generates Risk Summary section with mitigation suggestions.</div>
+        <span class="feature-tag mvp">MVP</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🔍</span>
+        <div class="feature-name">Industry Intelligence Layer</div>
+        <div class="feature-desc">Pre-built sector knowledge base covering 25+ industries. Generates industry overview with growth trends, cyclicality, regulatory environment, and key risk factors specific to the borrower's sector.</div>
+        <span class="feature-tag mvp">MVP</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">📤</span>
+        <div class="feature-name">Export & Version Control</div>
+        <div class="feature-desc">Export to Word (.docx) and PDF in bank-specific templates. Full version history with diff view between drafts. Credit committee submission mode with change log.</div>
+        <span class="feature-tag mvp">MVP</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🔗</span>
+        <div class="feature-name">Peer Comparison Module</div>
+        <div class="feature-desc">Compare borrower's key financial ratios against industry peers using pre-loaded benchmark data from RBI, MCA, and sector reports. Visual quartile positioning.</div>
+        <span class="feature-tag v2">V2</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">📡</span>
+        <div class="feature-name">Live RBI/News Integration</div>
+        <div class="feature-desc">Real-time ingestion of RBI circulars, sector news, and regulatory changes relevant to the borrower. Flags material developments post-last-memo.</div>
+        <span class="feature-tag v2">V2</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🤖</span>
+        <div class="feature-name">Early Warning Signals</div>
+        <div class="feature-desc">Tracks existing borrower portfolio metrics over time. Flags SMA-0, stress in banking, GST mismatch, and other pre-NPA signals. Integrates with CBS data feeds.</div>
+        <span class="feature-tag v2">V2</span>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🏦</span>
+        <div class="feature-name">CBS / LOS Integration</div>
+        <div class="feature-desc">API integration with Core Banking Systems and Loan Origination Systems to pull live account data, existing exposure, and facility history without manual entry.</div>
+        <span class="feature-tag v2">V2</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 5. USER JOURNEY -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">05 //</span>
+      <h2 class="section-title">User Journey — MVP Flow</h2>
+    </div>
+
+    <div class="journey">
+      <div class="journey-step">
+        <div class="step-num accent">01</div>
+        <div class="step-content">
+          <div class="step-title">Case Initiation</div>
+          <div class="step-desc">RM creates a new case: enters borrower name, CIN/PAN, proposed facility type, and amount. System checks if existing memo history exists for this borrower.</div>
+        </div>
+      </div>
+      <div class="journey-step">
+        <div class="step-num">02</div>
+        <div class="step-content">
+          <div class="step-title">Document Upload</div>
+          <div class="step-desc">RM uploads audited financials (3 years), CMA data, bank statements (6–12 months), CA certificate, and any field visit notes. System accepts PDF, Excel, scanned images.</div>
+        </div>
+      </div>
+      <div class="journey-step">
+        <div class="step-num">03</div>
+        <div class="step-content">
+          <div class="step-title">Automated Extraction & Parsing</div>
+          <div class="step-desc">LLM + OCR pipeline extracts structured data: P&L, Balance Sheet, Cash Flow, banking details. System builds an internal JSON data model of the borrower. Takes ~2–3 minutes.</div>
+        </div>
+      </div>
+      <div class="journey-step">
+        <div class="step-num accent">04</div>
+        <div class="step-content">
+          <div class="step-title">Section-by-Section Generation</div>
+          <div class="step-desc">System generates all 12 CAM sections sequentially. Each section shows: AI-generated text, confidence level per paragraph, and source citations. RM reviews and edits each section inline.</div>
+        </div>
+      </div>
+      <div class="journey-step">
+        <div class="step-num">05</div>
+        <div class="step-content">
+          <div class="step-title">Risk Review & Validation</div>
+          <div class="step-desc">System presents auto-identified risk flags with severity (High/Medium/Low). RM confirms, adjusts, or adds risks. Low-confidence fields are called out explicitly for verification.</div>
+        </div>
+      </div>
+      <div class="journey-step">
+        <div class="step-num">06</div>
+        <div class="step-content">
+          <div class="step-title">Recommendation Drafting</div>
+          <div class="step-desc">System suggests a credit recommendation structure (approve / approve with conditions / decline) with rationale drawn from the memo. RM writes the final recommendation with AI-generated supporting text as scaffold.</div>
+        </div>
+      </div>
+      <div class="journey-step">
+        <div class="step-num accent">07</div>
+        <div class="step-content">
+          <div class="step-title">Export & Submission</div>
+          <div class="step-desc">Final memo exported to bank-formatted Word/PDF. System logs RM review confirmation for each section. Version is locked for credit committee. Edits tracked with timestamp and user ID.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. TECHNICAL ARCHITECTURE -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">06 //</span>
+      <h2 class="section-title">Technical Architecture</h2>
+    </div>
+
+    <div class="arch-block">
+      <div class="arch-label">Frontend</div>
+      <div class="arch-desc">React / Next.js with TailwindCSS. Section-by-section memo editor with inline confidence indicators, edit tracking, and collapsible views. Responsive for desktop (primary) and tablet.</div>
+    </div>
+    <div class="arch-block">
+      <div class="arch-label">Backend API</div>
+      <div class="arch-desc">Python / FastAPI. Handles document ingestion, LLM orchestration, ratio calculation, and export generation. RESTful endpoints. JWT-based auth. <code>async</code> task queue (Celery + Redis) for heavy extraction jobs.</div>
+    </div>
+    <div class="arch-block">
+      <div class="arch-label">Document Processing</div>
+      <div class="arch-desc">PDF parsing via <code>pdfplumber</code> + <code>pytesseract</code> for scanned docs. Excel via <code>openpyxl</code>. LLM-assisted extraction for ambiguous/semi-structured tables. Outputs normalized JSON financial model.</div>
+    </div>
+    <div class="arch-block">
+      <div class="arch-label">LLM Layer</div>
+      <div class="arch-desc">Primary: <code>claude-sonnet-4</code> or <code>gpt-4o</code>. Section generation via structured prompts with system context (bank, sector, facility type). Confidence scoring via self-evaluation prompting. Fallback to smaller model for ratio narration.</div>
+    </div>
+    <div class="arch-block">
+      <div class="arch-label">Data & Storage</div>
+      <div class="arch-desc">PostgreSQL for structured borrower data and memo versions. S3-compatible object storage (AWS S3 / Cloudflare R2) for uploaded documents. Redis for session state and task queue.</div>
+    </div>
+    <div class="arch-block">
+      <div class="arch-label">Security & Compliance</div>
+      <div class="arch-desc">All financial data encrypted at rest (AES-256) and in transit (TLS 1.3). No customer PII sent to third-party LLM APIs unless explicit consent given. Audit log for every AI generation and human edit. Role-based access (RM, Credit Manager, Admin).</div>
+    </div>
+    <div class="arch-block">
+      <div class="arch-label">Export Engine</div>
+      <div class="arch-desc">Word export via <code>python-docx</code> using bank-specific DOCX templates. PDF via <code>WeasyPrint</code> or headless Chrome. Supports table formatting, headers, footers, and watermarking (DRAFT / CONFIDENTIAL).</div>
+    </div>
+    <div class="arch-block">
+      <div class="arch-label">Industry KB</div>
+      <div class="arch-desc">Pre-built knowledge base of 25+ sectors in vector store (<code>Chroma</code> / <code>pgvector</code>). Retrieved via semantic search at generation time to inject sector-specific context into industry section prompts.</div>
+    </div>
+  </div>
+
+  <!-- 7. MEMO SECTIONS -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">07 //</span>
+      <h2 class="section-title">CAM Section Specifications</h2>
+    </div>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Section</th>
+          <th>Primary Input</th>
+          <th>AI Task</th>
+          <th>Risk Level</th>
+          <th>Release</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><strong>Executive Summary</strong></td>
+          <td>All sections (auto-generated last)</td>
+          <td>Synthesize entire memo into 1-page summary</td>
+          <td><span class="pill pill-med">Medium</span></td>
+          <td><span class="pill pill-mvp">MVP</span></td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td><strong>Group Organogram</strong></td>
+          <td>MCA data, promoter input form</td>
+          <td>Generate group structure narrative + flag related parties</td>
+          <td><span class="pill pill-high">High</span></td>
+          <td><span class="pill pill-mvp">MVP</span></td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td><strong>Promoter Background</strong></td>
+          <td>KYC docs, RM input form</td>
+          <td>Draft promoter profile with experience, track record, past stress</td>
+          <td><span class="pill pill-high">High</span></td>
+          <td><span class="pill pill-mvp">MVP</span></td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td><strong>Business Profile</strong></td>
+          <td>Financials, field visit notes</td>
+          <td>Describe business model, revenue drivers, customer/supplier concentration</td>
+          <td><span class="pill pill-med">Medium</span></td>
+          <td><span class="pill pill-mvp">MVP</span></td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td><strong>Industry Analysis</strong></td>
+          <td>Sector KB + web search</td>
+          <td>Generate sector overview, growth outlook, regulatory environment</td>
+          <td><span class="pill pill-med">Medium</span></td>
+          <td><span class="pill pill-mvp">MVP</span></td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td><strong>Financial Analysis</strong></td>
+          <td>Audited financials, CMA data</td>
+          <td>Compute ratios, generate trend narrative, flag anomalies</td>
+          <td><span class="pill pill-high">High</span></td>
+          <td><span class="pill pill-mvp">MVP</span></td>
+        </tr>
+        <tr>
+          <td>7</td>
+          <td><strong>Working Capital Analysis</strong></td>
+          <td>Balance sheet, bank statements</td>
+          <td>Assess WC cycle, utilisation patterns, drawing power calculation</td>
+          <td><span class="pill pill-high">High</span></td>
+          <td><span class="pill pill-mvp">MVP</span></td>
+        </tr>
+        <tr>
+          <td>8</td>
+          <td><strong>Banking Arrangement</strong></td>
+          <td>SOA, credit bureau, RM input</td>
+          <td>Summarize existing facilities across all banks, flag overleverage</td>
+          <td><span class="pill pill-high">High</span></td>
+          <td><span class="pill pill-mvp">MVP</span></td>
+        </tr>
+        <tr>
+          <td>9</td>
+          <td><strong>Proposed Structure</strong></td>
+          <td>RM inputs (facility type, amount, tenor)</td>
+          <td>Draft facility structure with pricing, security, covenants</td>
+          <td><span class="pill pill-high">High</span></td>
+          <td><span class="pill pill-mvp">MVP</span></td>
+        </tr>
+        <tr>
+          <td>10</td>
+          <td><strong>Peer Comparison</strong></td>
+          <td>Benchmark KB, sector data</td>
+          <td>Position borrower ratios vs. industry quartiles with visual table</td>
+          <td><span class="pill pill-med">Medium</span></td>
+          <td><span class="pill pill-mvp">MVP</span></td>
+        </tr>
+        <tr>
+          <td>11</td>
+          <td><strong>Key Issues & Mitigants</strong></td>
+          <td>All sections, risk engine output</td>
+          <td>Identify top 5–7 credit concerns with proposed mitigants</td>
+          <td><span class="pill pill-high">High</span></td>
+          <td><span class="pill pill-mvp">MVP</span></td>
+        </tr>
+        <tr>
+          <td>12</td>
+          <td><strong>Recommendation</strong></td>
+          <td>RM input + AI scaffold</td>
+          <td>Draft recommendation structure; final text must be RM-written</td>
+          <td><span class="pill pill-high">High</span></td>
+          <td><span class="pill pill-mvp">MVP</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 8. CONFIDENCE & HITL -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">08 //</span>
+      <h2 class="section-title">Human-in-the-Loop & Confidence Design</h2>
+    </div>
+
+    <p>The most important design principle of CreditGuard AI is that <strong>the banker never loses control</strong>. Credit decisions carry regulatory, legal, and reputational consequences. The AI is a drafting engine, not a decision engine.</p>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Confidence Level</th>
+          <th>Criteria</th>
+          <th>UI Treatment</th>
+          <th>Required Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="pill pill-mvp">High</span></td>
+          <td>Extracted directly from structured data (ratio from P&L, bank name from SOA). Deterministic.</td>
+          <td>Green indicator. No warning.</td>
+          <td>Review recommended but not blocked.</td>
+        </tr>
+        <tr>
+          <td><span class="pill pill-med">Medium</span></td>
+          <td>Inferred from semi-structured data or interpolated from context. Some judgment applied.</td>
+          <td>Yellow indicator + source citation shown.</td>
+          <td>RM must click "Reviewed" on paragraph before section lock.</td>
+        </tr>
+        <tr>
+          <td><span class="pill pill-high">Low</span></td>
+          <td>Generated from weak evidence, assumption-based, or sector KB without specific borrower data.</td>
+          <td>Red indicator + "AI Inference — Verify" badge. Field highlighted.</td>
+          <td>RM must either edit the content or explicitly mark it as verified. Cannot export until resolved.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="insight">
+      <div class="insight-label">Design Rationale</div>
+      Regulatory frameworks (RBI, SEBI) require credit decisions to be made by authorized human officers. The HITL design also protects the bank from model hallucination risk — particularly in sections like Promoter Background and Key Issues where factual accuracy is critical. Every exported memo carries a footer: "AI-assisted draft. Reviewed and approved by: [RM Name, ID, Date]."
+    </div>
+  </div>
+
+  <!-- 9. NFRs -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">09 //</span>
+      <h2 class="section-title">Non-Functional Requirements</h2>
+    </div>
+
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-val">&lt;3m</div>
+        <div class="metric-label">Document Processing Time</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val">99.5%</div>
+        <div class="metric-label">Uptime SLA (Business Hours)</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val">&lt;2s</div>
+        <div class="metric-label">Section Generation Latency</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val">AES-256</div>
+        <div class="metric-label">Encryption at Rest</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val">RBAC</div>
+        <div class="metric-label">Access Control Model</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val">100%</div>
+        <div class="metric-label">Audit Trail Coverage</div>
+      </div>
+    </div>
+
+    <ul class="doc-list">
+      <li><strong>Data Residency:</strong> All borrower financial data stored in India (AWS ap-south-1 or equivalent). No customer data leaves Indian jurisdiction without explicit consent.</li>
+      <li><strong>LLM Data Privacy:</strong> Financial data sent to LLM APIs only after PII stripping. Option to use self-hosted models (LLaMA / Mistral) for airgapped bank deployments.</li>
+      <li><strong>Concurrent Users:</strong> System supports 50 concurrent RM sessions without degradation in MVP; scales to 500 in V2.</li>
+      <li><strong>File Handling:</strong> Supports PDF up to 50MB, Excel up to 20MB. Scanned PDFs processed via OCR with accuracy ≥92% for typed text.</li>
+      <li><strong>Browser Support:</strong> Chrome, Edge (latest 2 versions). No IE. Mobile read-only; full functionality on desktop/tablet.</li>
+    </ul>
+  </div>
+
+  <!-- 10. RISKS -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">10 //</span>
+      <h2 class="section-title">Risks & Mitigations</h2>
+    </div>
+
+    <div class="risk-row header">
+      <div>Risk</div>
+      <div>Probability</div>
+      <div>Impact</div>
+      <div>Mitigation</div>
+    </div>
+
+    <div class="risk-row">
+      <div><strong>LLM Hallucination</strong> — AI generates plausible but factually incorrect financial figures or promoter information</div>
+      <div><span class="pill pill-med">Medium</span></div>
+      <div><span class="pill pill-high">High</span></div>
+      <div>Confidence scoring, mandatory RM review, source citation on every factual claim, blocking export until Low-confidence items resolved</div>
+    </div>
+
+    <div class="risk-row">
+      <div><strong>OCR Extraction Errors</strong> — Scanned financials parsed incorrectly, leading to wrong ratio calculations</div>
+      <div><span class="pill pill-med">Medium</span></div>
+      <div><span class="pill pill-high">High</span></div>
+      <div>Side-by-side extracted data vs. source view; RM can correct extracted tables before generation; flag low OCR-confidence tables</div>
+    </div>
+
+    <div class="risk-row">
+      <div><strong>Regulatory Compliance</strong> — RBI or bank internal policy prohibits use of AI in credit decisions</div>
+      <div><span class="pill pill-low">Low</span></div>
+      <div><span class="pill pill-high">High</span></div>
+      <div>Position as "drafting assistance" not "decisioning." Maintain full human accountability chain. Seek internal legal/compliance sign-off before deployment.</div>
+    </div>
+
+    <div class="risk-row">
+      <div><strong>Data Security Breach</strong> — Sensitive borrower financials exposed via API or storage vulnerability</div>
+      <div><span class="pill pill-low">Low</span></div>
+      <div><span class="pill pill-high">High</span></div>
+      <div>Penetration testing pre-launch, AES-256 encryption, strict IAM policies, no PII in LLM API calls, annual security audit</div>
+    </div>
+
+    <div class="risk-row">
+      <div><strong>RM Over-Reliance</strong> — Bankers stop verifying AI output, treat generated memos as correct</div>
+      <div><span class="pill pill-med">Medium</span></div>
+      <div><span class="pill pill-med">Medium</span></div>
+      <div>UX design enforces review clicks; regular calibration sessions; random audit of submitted memos by Credit Manager; training program</div>
+    </div>
+
+    <div class="risk-row">
+      <div><strong>Adoption Resistance</strong> — Senior RMs reluctant to change established workflows</div>
+      <div><span class="pill pill-med">Medium</span></div>
+      <div><span class="pill pill-med">Medium</span></div>
+      <div>Pilot with 3–5 enthusiastic early adopters; build visible time savings dashboard; champion program with top RM as internal advocate</div>
+    </div>
+  </div>
+
+  <!-- 11. SUCCESS METRICS -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">11 //</span>
+      <h2 class="section-title">Success Metrics & Analytics</h2>
+    </div>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Metric</th>
+          <th>How Measured</th>
+          <th>MVP Target</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Efficiency</strong></td>
+          <td>Time from case creation to first export</td>
+          <td>System timestamp delta</td>
+          <td>&lt; 3 hours</td>
+        </tr>
+        <tr>
+          <td><strong>Quality</strong></td>
+          <td>Credit committee revision requests per memo</td>
+          <td>CC feedback form integration</td>
+          <td>≤ 1.5 major revisions (vs. baseline 3+)</td>
+        </tr>
+        <tr>
+          <td><strong>Completeness</strong></td>
+          <td>Sections populated vs. sections required</td>
+          <td>Section completion tracker</td>
+          <td>12/12 sections in 95% of memos</td>
+        </tr>
+        <tr>
+          <td><strong>Trust</strong></td>
+          <td>% of AI-generated paragraphs edited by RM</td>
+          <td>Edit tracking system</td>
+          <td>30–50% (healthy editing = trust calibration)</td>
+        </tr>
+        <tr>
+          <td><strong>Adoption</strong></td>
+          <td>DAU / MAU ratio</td>
+          <td>Product analytics</td>
+          <td>&gt; 0.4 (sticky weekly usage)</td>
+        </tr>
+        <tr>
+          <td><strong>Accuracy</strong></td>
+          <td>Financial ratio calculation error rate</td>
+          <td>QA comparison vs. manual calculation sample</td>
+          <td>&lt; 0.5% error rate</td>
+        </tr>
+        <tr>
+          <td><strong>NPS</strong></td>
+          <td>RM satisfaction score</td>
+          <td>In-app survey post-export</td>
+          <td>NPS ≥ 40</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 12. ROADMAP -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">12 //</span>
+      <h2 class="section-title">Product Roadmap</h2>
+    </div>
+
+    <div class="roadmap">
+      <div class="roadmap-phase">
+        <div class="phase-label">Phase 1</div>
+        <div class="phase-name">MVP — Core Engine</div>
+        <div class="phase-period">Weeks 1–12</div>
+        <ul class="phase-items">
+          <li>Document ingestion (PDF + Excel)</li>
+          <li>Financial data extraction & ratio engine</li>
+          <li>12-section CAM generation</li>
+          <li>Confidence scoring system</li>
+          <li>Inline HITL editor</li>
+          <li>Risk flag engine</li>
+          <li>Word / PDF export</li>
+          <li>Pilot with 5 Yes Bank RMs</li>
+        </ul>
+      </div>
+      <div class="roadmap-phase">
+        <div class="phase-label">Phase 2</div>
+        <div class="phase-name">Intelligence Layer</div>
+        <div class="phase-period">Weeks 13–26</div>
+        <ul class="phase-items">
+          <li>Peer comparison with live benchmarks</li>
+          <li>RBI circular ingestion + alerts</li>
+          <li>CBS / LOS API integration</li>
+          <li>Early warning signal engine</li>
+          <li>Multi-bank template support</li>
+          <li>Revision history + diff view</li>
+          <li>Expand to 50 users</li>
+        </ul>
+      </div>
+      <div class="roadmap-phase">
+        <div class="phase-label">Phase 3</div>
+        <div class="phase-name">Platform & Scale</div>
+        <div class="phase-period">Weeks 27–52</div>
+        <ul class="phase-items">
+          <li>Portfolio-level analytics dashboard</li>
+          <li>Multi-bank SaaS offering</li>
+          <li>Airgapped / on-prem deployment option</li>
+          <li>Credit committee workflow module</li>
+          <li>Custom model fine-tuning on bank data</li>
+          <li>RegTech compliance checks</li>
+          <li>Mobile read-only access</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 13. OUT OF SCOPE -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">13 //</span>
+      <h2 class="section-title">Out of Scope (MVP)</h2>
+    </div>
+    <ul class="doc-list">
+      <li>Automated credit decisioning or approval workflows — CreditGuard AI does not approve or reject loans</li>
+      <li>Retail / SME lending memos (microfinance, home loans, personal loans) — focus is mid-corporate and above</li>
+      <li>Real-time CBS data integration — manual data entry or file upload only in MVP</li>
+      <li>Mobile-native app — desktop web only for MVP</li>
+      <li>Multi-language support (Hindi, Marathi) — English only in MVP</li>
+      <li>Direct email or workflow integration with credit committee systems</li>
+      <li>Fine-tuning the LLM on proprietary bank data — standard model with system prompt engineering only</li>
+    </ul>
+  </div>
+
+  <!-- 14. OPEN QUESTIONS -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">14 //</span>
+      <h2 class="section-title">Open Questions & Assumptions</h2>
+    </div>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Question</th>
+          <th>Assumption for MVP</th>
+          <th>Owner</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Which LLM provider is approved by bank's infosec team?</td>
+          <td>Use Claude API (Anthropic) as primary; design LLM-agnostic layer for swap</td>
+          <td>PM + Infosec</td>
+        </tr>
+        <tr>
+          <td>Is self-hosted model deployment required for pilot bank?</td>
+          <td>Cloud API acceptable for pilot. Self-hosted option built in V2.</td>
+          <td>PM + Engineering</td>
+        </tr>
+        <tr>
+          <td>What is the bank's definition of "approved" for a CAM format?</td>
+          <td>Mapping 12 standard sections against Yes Bank's existing CAM template</td>
+          <td>PM + Credit Ops</td>
+        </tr>
+        <tr>
+          <td>How do we handle group companies with 10+ entities in organogram?</td>
+          <td>Support up to 20 entities in organogram module. Larger groups require manual input.</td>
+          <td>Engineering</td>
+        </tr>
+        <tr>
+          <td>What is the pricing model for a SaaS offering to other banks?</td>
+          <td>Per-memo pricing OR per-seat monthly. To be validated with pilot bank feedback.</td>
+          <td>PM + Business</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <div>CreditGuard AI · PRD v1.0 · Confidential</div>
+  <div><span>Built for:</span> Corporate & Mid-Corporate Lending, Indian BFSI</div>
+  <div><span>Status:</span> Draft — Pending Stakeholder Review</div>
+</div>
+
+</body>
+</html>

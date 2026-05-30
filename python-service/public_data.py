@@ -430,10 +430,10 @@ def fetch_screener_financials(symbol: str, company_name: str = "") -> dict:
             "eps":          eps,
             "rev_cagr_3y":  rev_cagr_3y,
             "pat_cagr_3y":  pat_cagr_3y,
-            # Backward-compat scalar aliases
-            "revenue_from_operations": {"current": last(revenue), "previous": revenue[-2] if len(revenue) > 1 else None},
-            "ebitda":                  {"current": last(ebitda),  "previous": ebitda[-2]  if len(ebitda)  > 1 else None},
-            "profit_before_tax":       {"current": last(pbt),     "previous": pbt[-2]     if len(pbt)     > 1 else None},
+            # Backward-compat scalar aliases (latest + prior, distinct from array fields above)
+            "revenue_from_operations":   {"current": last(revenue),  "previous": revenue[-2] if len(revenue) > 1 else None},
+            "ebitda_summary":            {"current": last(ebitda),   "previous": ebitda[-2]  if len(ebitda)  > 1 else None},
+            "profit_before_tax":         {"current": last(pbt),      "previous": pbt[-2]     if len(pbt)     > 1 else None},
             "profit_after_tax":        {"current": last(pat),     "previous": pat[-2]     if len(pat)     > 1 else None},
             "finance_costs":           {"current": last(interest),"previous": interest[-2] if len(interest)> 1 else None},
             "depreciation_amortization": {"current": last(depreciation), "previous": None},

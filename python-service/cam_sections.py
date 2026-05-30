@@ -227,31 +227,33 @@ def _groq_call(prompt: str) -> str:
 def _ollama_call(prompt: str) -> str:
     url   = os.getenv("OLLAMA_URL", "http://localhost:11434")
     model = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+    system = (
+        "/no_think\n"
+        "You are a senior credit risk analyst at an Indian commercial bank. "
+        "Write formal, concise, banker-grade credit appraisal sections. "
+        "Use ONLY the data provided. Do NOT fabricate figures. "
+        "Output ONLY the requested section text in plain prose (no extra headings)."
+    )
     try:
+        body: dict = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.3,
+            "stream": False,
+            "think": False,          # disable extended thinking for qwen3 and similar models
+            "options": {"num_predict": 1024},  # cap output tokens to avoid runaway generation
+        }
         resp = httpx.post(
             f"{url}/v1/chat/completions",
-            json={
-                "model": model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a senior credit risk analyst at an Indian commercial bank. "
-                            "Write formal, concise, banker-grade credit appraisal sections. "
-                            "Use ONLY the data provided. Do NOT fabricate figures. "
-                            "Do NOT include any <think> tags or reasoning traces. "
-                            "Output ONLY the requested section text in plain prose (no extra headings)."
-                        ),
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                "temperature": 0.3,
-                "stream": False,
-            },
-            timeout=300.0,
+            json=body,
+            timeout=60.0,            # 60s per section; fall back to Gemini if Ollama is busy/slow
         )
         resp.raise_for_status()
         text = resp.json()["choices"][0]["message"]["content"].strip()
+        # Strip any residual think blocks the model may emit anyway
         return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     except Exception as e:
         logger.error(f"Ollama call error: {e}")
@@ -303,39 +305,39 @@ def _claude_call(prompt: str) -> str:
 
 def _llm(prompt: str) -> str:
     provider = os.getenv("MEMO_PROVIDER", "openrouter").lower()
-    if provider == "openrouter":
+    if provider == "ollama":
+        result = _ollama_call(prompt)
+        if result:
+            return result
+        logger.warning("Ollama failed, falling back to Gemini")
+        return _gemini_call(prompt)
+    elif provider == "openrouter":
         result = _openrouter_call(prompt)
         if result:
             return result
-        logger.warning("OpenRouter failed, falling back to Groq")
-        result = _groq_call(prompt)
-        if result:
-            return result
+        logger.warning("OpenRouter failed, falling back to Ollama")
+        return _ollama_call(prompt)
     elif provider == "groq":
         result = _groq_call(prompt)
         if result:
             return result
-        logger.warning("Groq failed, falling back to Gemini")
+        logger.warning("Groq failed, falling back to Ollama")
+        return _ollama_call(prompt)
     elif provider == "claude":
         result = _claude_call(prompt)
         if result:
             return result
-        logger.warning("Claude CLI unavailable, falling back to Groq")
-        result = _groq_call(prompt)
-        if result:
-            return result
+        logger.warning("Claude CLI unavailable, falling back to Ollama")
+        return _ollama_call(prompt)
     elif provider == "gemini":
         result = _gemini_call(prompt)
         if result:
             return result
-        logger.warning("Gemini failed, falling back to Groq")
-        result = _groq_call(prompt)
-        if result:
-            return result
+        logger.warning("Gemini failed, falling back to Ollama")
+        return _ollama_call(prompt)
+    # Unknown provider — try Ollama then Gemini
     result = _ollama_call(prompt)
-    if result:
-        return result
-    return _groq_call(prompt)
+    return result if result else _gemini_call(prompt)
 
 
 # ── Context builder ───────────────────────────────────────────────────────────
@@ -350,7 +352,7 @@ def _fmt(v, decimals=2):
         return str(v)
 
 
-def _build_context_text(financials: Dict, ratios: Dict, company_name: str, research_brief: str) -> str:
+def _build_context_text(financials: Dict, ratios: Dict, company_name: str, research_brief: str, max_chars: int = 0) -> str:
     lines = [f"COMPANY: {company_name}"]
 
     ci = financials.get("company_info", {})
@@ -650,7 +652,10 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
     if research_brief:
         lines.append(f"\nWEB RESEARCH BRIEF:\n{research_brief[:4000]}")
 
-    return "\n".join(lines)
+    text = "\n".join(lines)
+    if max_chars and len(text) > max_chars:
+        text = text[:max_chars] + "\n[Context truncated for local model]"
+    return text
 
 
 # ── Per-section generation ────────────────────────────────────────────────────
@@ -777,10 +782,12 @@ def generate_cam_sections(
     Returns:
         Dict with section keys → {"content": str, "user_edited": False, "ai_generated": True}
     """
-    context_text = _build_context_text(financials, ratios, company_name, research_brief)
+    # For local Ollama, cap context to avoid timeouts
+    provider = os.getenv("MEMO_PROVIDER", "openrouter").lower()
+    text_limit = int(os.getenv("OLLAMA_TEXT_LIMIT", "8000")) if provider == "ollama" else 0
+    context_text = _build_context_text(financials, ratios, company_name, research_brief, max_chars=text_limit)
 
     if regenerate and regenerate in AI_SECTIONS:
-        # Single section regeneration
         content = _draft_section(regenerate, context_text, company_name)
         conf, reason = _resolve_confidence(regenerate, financials)
         return {
@@ -796,18 +803,23 @@ def generate_cam_sections(
             }
         }
 
-    # Try batch generation first
-    batch_sections = [k for k in AI_SECTIONS if k != "executive_summary"]
-    logger.info(f"[CAM] Batch-generating {len(batch_sections)} sections for {company_name}")
-    batch = _draft_all_sections_batch(context_text, company_name, batch_sections)
-
     sections: Dict[str, Any] = {}
+    # Sections to generate (exclude executive_summary — generated last)
+    gen_sections = [k for k in AI_SECTIONS if k != "executive_summary"]
 
-    for key in batch_sections:
+    # Batch generation works well for cloud LLMs; for local Ollama generate individually
+    # to avoid context overflow and timeouts.
+    use_batch = provider not in ("ollama",)
+    if use_batch:
+        logger.info(f"[CAM] Batch-generating {len(gen_sections)} sections for {company_name}")
+        batch = _draft_all_sections_batch(context_text, company_name, gen_sections)
+    else:
+        batch = {}
+
+    for key in gen_sections:
         content = batch.get(key, "")
         if not content:
-            # Fallback: generate individually
-            logger.info(f"[CAM] Batch missed section '{key}', generating individually")
+            logger.info(f"[CAM] Generating section '{key}' individually for {company_name}")
             content = _draft_section(key, context_text, company_name)
         conf, reason = _resolve_confidence(key, financials)
         sections[key] = {
@@ -821,17 +833,20 @@ def generate_cam_sections(
             "locked":            False,
         }
 
-    # Generate executive_summary last — it synthesises the other sections
+    # Generate executive_summary last — synthesises the other sections
     summary_snippets = []
     for key in ["company_background", "business_model", "financial_analysis", "key_issues", "recommendation"]:
         sec = sections.get(key, {})
-        content = sec.get("content", "")
-        if content:
-            summary_snippets.append(f"[{key.upper()}]\n{content[:600]}")
-    exec_context = context_text + (
-        "\n\n--- SECTION SUMMARIES ---\n" + "\n\n".join(summary_snippets)
-        if summary_snippets else ""
-    )
+        snippet = sec.get("content", "")
+        if snippet:
+            summary_snippets.append(f"[{key.upper()}]\n{snippet[:400]}")
+    exec_extra = ("\n\n--- SECTION SUMMARIES ---\n" + "\n\n".join(summary_snippets)) if summary_snippets else ""
+    # Keep exec summary context shorter for Ollama
+    exec_context_limit = text_limit if text_limit else 0
+    exec_base = _build_context_text(financials, ratios, company_name, research_brief, max_chars=4000 if text_limit else 0)
+    exec_context = exec_base + exec_extra
+    if exec_context_limit and len(exec_context) > exec_context_limit:
+        exec_context = exec_context[:exec_context_limit]
     exec_content = _draft_section("executive_summary", exec_context, company_name)
     conf, reason = _resolve_confidence("executive_summary", financials)
     sections["executive_summary"] = {
@@ -843,20 +858,6 @@ def generate_cam_sections(
         "reviewed":          False,
         "low_verified":      False,
         "locked":            False,
-    }
-
-    # Scaffold manual sections (empty, RM fills these)
-    sections["banking_arrangement"] = {
-        "arrangement_type": "sole",   # sole | multiple | consortium
-        "banks": [],                  # [{name, limit_cr, outstanding_cr, type}]
-        "remarks": "",
-        "user_edited": False,
-        "ai_generated": False,
-    }
-    sections["account_conduct"] = {
-        "content": "",
-        "user_edited": False,
-        "ai_generated": False,
     }
 
     # Management PEP fields supplement
