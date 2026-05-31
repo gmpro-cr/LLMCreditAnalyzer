@@ -267,8 +267,8 @@ def fetch_screener_financials(symbol: str, company_name: str = "") -> dict:
             (r'ROE\s+([\d.]+)',                       "roe"),
             (r'Dividend Yield\s+([\d.]+)',             "dividend_yield"),
         ]
-        for pat, key in patterns:
-            m = re.search(pat, text, re.IGNORECASE)
+        for pattern, key in patterns:
+            m = re.search(pattern, text, re.IGNORECASE)
             if m:
                 top_metrics[key] = float(m.group(1).replace(",", ""))
         # Current price
@@ -559,10 +559,10 @@ def fetch_screener_data(symbol: str, company_name: str = "") -> dict:
     top = soup.find(id="top-ratios")
     if top:
         text = top.get_text(separator=" ", strip=True)
-        for pat, key in [(r'Market Cap.*?₹\s*([\d,]+)', "market_cap_cr"),
+        for pattern, key in [(r'Market Cap.*?₹\s*([\d,]+)', "market_cap_cr"),
                          (r'Stock P/E\s+([\d.]+)', "pe_ratio"),
                          (r'ROCE\s+([\d.]+)', "roce")]:
-            m = re.search(pat, text, re.IGNORECASE)
+            m = re.search(pattern, text, re.IGNORECASE)
             if m: data[key] = float(m.group(1).replace(",", ""))
     peers = []
     peers_section = soup.find("section", id="peers")
