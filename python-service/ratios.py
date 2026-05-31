@@ -217,11 +217,18 @@ def _compute(f: Dict[str, Any]) -> Dict[str, float]:
     if interest > 0 and ebitda:
         ratios["interest_coverage_ebitda"] = round(_div(ebitda, interest), 2)
 
-    # DSCR — use cpltd if available, else estimate from total_debt/5
-    principal = cpltd if cpltd > 0 else (total_debt / 5.0 if total_debt > 0 else 0)
+    # DSCR — prefer banking numerator (PAT + Dep + Interest); disclose basis + estimates.
+    principal = cpltd
+    estimated = False
+    if principal <= 0 and total_debt > 0:
+        principal = total_debt / 5.0          # fallback: assume 5-yr amortisation
+        estimated = True
     debt_service = interest + principal
-    if debt_service > 0 and ocf:
-        ratios["dscr"] = round(_div(ocf, debt_service), 2)
+    numerator = (pat + depreciation + interest) if pat > 0 else ocf   # cash-accrual basis
+    if debt_service > 0 and numerator:
+        ratios["dscr"] = round(_div(numerator, debt_service), 2)
+        ratios["dscr_estimated"] = estimated
+        ratios["dscr_basis"] = "PAT+Dep+Int" if pat > 0 else "OCF"
 
     # ── EFFICIENCY ──
     if revenue > 0 and total_assets > 0:
