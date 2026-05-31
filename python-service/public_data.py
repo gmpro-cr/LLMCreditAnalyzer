@@ -11,6 +11,8 @@ import tempfile
 import httpx
 from typing import Optional, Dict, Any, List
 
+from finance_utils import derive_pat
+
 logger = logging.getLogger(__name__)
 
 SCREENER_BASE = "https://www.screener.in"
@@ -204,6 +206,15 @@ def fetch_screener_financials(symbol: str, company_name: str = "") -> dict:
     pat          = _ys("Net Profit")
     eps          = _ys("EPS in Rs")
 
+    # Safety net: if Net Profit is still missing/non-numeric, derive it from PBT.
+    derived_fields: Dict[str, str] = {}
+    if (not pat) or (not isinstance(pat[-1], (int, float))):
+        _latest_pbt = pbt[-1] if (pbt and isinstance(pbt[-1], (int, float))) else None
+        _derived = derive_pat(pbt=_latest_pbt)
+        if _derived is not None:
+            pat = (pat if isinstance(pat, list) else []) + [round(_derived)]
+            derived_fields["pat"] = "derived from PBT x (1 - 25% tax)"
+
     # ── Balance sheet multi-year ───────────────────────────────────────────
     equity_cap   = _ys_bs("Equity Capital")
     reserves     = _ys_bs("Reserves")
@@ -391,6 +402,7 @@ def fetch_screener_financials(symbol: str, company_name: str = "") -> dict:
     return {
         "source": "screener",
         "screener_url": url,
+        "derived_fields": derived_fields,   # provenance: which figures were derived, not scraped
 
         # ── Company profile ────────────────────────────────────────────────
         "company_info": {
