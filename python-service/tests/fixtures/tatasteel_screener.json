@@ -1,0 +1,427 @@
+{
+ "source": "screener",
+ "screener_url": "https://www.screener.in/company/TATASTEEL/",
+ "company_info": {
+  "name": "Tata Steel Ltd",
+  "symbol": "TATASTEEL",
+  "financial_year": "Mar 2026",
+  "previous_year": "Mar 2025",
+  "about": "",
+  "key_points": [
+   "\u2713 Company has been maintaining a healthy dividend payout of 30.7%",
+   "\u2717 The company has delivered a poor sales growth of 10.7% over past five years.",
+   "\u2717 Company has a low return on equity of 12.1% over last 3 years."
+  ],
+  "recent_announcements": [],
+  "promoter_holding": 33.19,
+  "promoter_trend": [
+   {
+    "period": "Mar 2026",
+    "pct": 33.19
+   },
+   {
+    "period": "Sep 2023",
+    "pct": 33.9
+   },
+   {
+    "period": "Sep 2024",
+    "pct": 33.19
+   },
+   {
+    "period": "Sep 2025",
+    "pct": 33.19
+   }
+  ],
+  "fiis_holding": 17.29,
+  "market_cap_cr": 259682.0,
+  "current_price": 208.0,
+  "week_52_high": 224.0,
+  "week_52_low": 150.0,
+  "book_value": 109.0,
+  "pe_ratio": 15.4,
+  "dividend_yield": 1.92,
+  "credit_ratings": [
+   "Announcements | Recent | Important | Search | All | Announcement under Regulation 30 (LODR)-Credit Rating | 1d - Moody\u2019s upgraded Tata Steel\u2019s issuer ",
+   "Announcements | Recent | Important | Search | All | Announcement under Regulation 30 (LODR)-Credit Rating | 1d - Moody\u2019s upgraded Tata Steel\u2019s issuer ",
+   "Recent | Important | Search | All | Announcement under Regulation 30 (LODR)-Credit Rating | 1d - Moody\u2019s upgraded Tata Steel\u2019s issuer rating to Baa2 f",
+   "Recent | Important | Search | All | Announcement under Regulation 30 (LODR)-Credit Rating | 1d - Moody\u2019s upgraded Tata Steel\u2019s issuer rating to Baa2 f"
+  ],
+  "annual_report_links": [
+   {
+    "text": "All",
+    "url": "https://www.bseindia.com/stock-share-price/tata-steel-ltd/TATASTEEL/500470/corp-announcements/"
+   },
+   {
+    "text": "Announcement under Regulation 30 (LODR)-Credit Rating1d - Moody\u2019s upgraded Tata Steel\u2019s issuer rating to Baa2 from Baa3 on May 29, 2026.",
+    "url": "https://www.bseindia.com/stockinfo/AnnPdfOpen.aspx?Pname=05519c47-bfd1-44bf-ad6d-4a24163df9e2.pdf"
+   },
+   {
+    "text": "Announcement under Regulation 30 (LODR)-Newspaper Publication2d",
+    "url": "https://www.bseindia.com/stockinfo/AnnPdfOpen.aspx?Pname=fb693a85-8733-49ac-9ee5-e390f8ea9137.pdf"
+   },
+   {
+    "text": "Announcement under Regulation 30 (LODR)-Analyst / Investor Meet - Intimation27 May - Intimation of Schedule of Analyst / Institutional Investor Meeting under the SEBI (LODR) Regulations, 2015, as amended",
+    "url": "https://www.bseindia.com/stockinfo/AnnPdfOpen.aspx?Pname=96105683-abb8-4ad9-abe6-4de68416e4f4.pdf"
+   },
+   {
+    "text": "Announcement under Regulation 30 (LODR)-Analyst / Investor Meet - Intimation27 May - Tata Steel to meet investors at Bank of America's India Conference 2026 in Mumbai on June 2.",
+    "url": "https://www.bseindia.com/stockinfo/AnnPdfOpen.aspx?Pname=9336b6bb-57c3-4fc2-9160-143d0a771e5d.pdf"
+   }
+  ]
+ },
+ "profit_loss": {
+  "years": [
+   "Mar 2024",
+   "Mar 2025",
+   "Mar 2026"
+  ],
+  "revenue": [
+   140933.0,
+   132517.0,
+   139720.0
+  ],
+  "expenses": [
+   110944.0,
+   104651.0,
+   107248.0
+  ],
+  "ebitda": [
+   29989.0,
+   27865.0,
+   32472.0
+  ],
+  "opm_pct": [
+   21.0,
+   21.0,
+   23.0
+  ],
+  "other_income": [
+   -375.0,
+   1345.0,
+   1067.0
+  ],
+  "interest": [
+   4101.0,
+   4238.0,
+   5117.0
+  ],
+  "depreciation": [
+   6009.0,
+   6253.0,
+   7069.0
+  ],
+  "pbt": [
+   19505.0,
+   18719.0,
+   21353.0
+  ],
+  "pat": "Dividend Yield\\s+([\\d.]+)",
+  "eps": [
+   12.55,
+   11.19,
+   12.87
+  ],
+  "rev_cagr_3y": -0.4,
+  "pat_cagr_3y": 1.3,
+  "revenue_from_operations": {
+   "current": 139720.0,
+   "previous": 132517.0
+  },
+  "ebitda_summary": {
+   "current": 32472.0,
+   "previous": 27865.0
+  },
+  "profit_before_tax": {
+   "current": 21353.0,
+   "previous": 18719.0
+  },
+  "profit_after_tax": {
+   "current": ")",
+   "previous": "+"
+  },
+  "finance_costs": {
+   "current": 5117.0,
+   "previous": 4238.0
+  },
+  "depreciation_amortization": {
+   "current": 7069.0,
+   "previous": null
+  }
+ },
+ "balance_sheet": {
+  "years": [
+   "Mar 2024",
+   "Mar 2025",
+   "Mar 2026"
+  ],
+  "equity_capital": [
+   1249.0,
+   1249.0,
+   1249.0
+  ],
+  "reserves": [
+   139981.0,
+   125483.0,
+   134285.0
+  ],
+  "total_equity": [
+   141230.0,
+   126732.0,
+   135534.0
+  ],
+  "borrowings": [
+   43837.0,
+   63223.0,
+   69049.0
+  ],
+  "other_liabilities": [
+   62860.0,
+   64177.0,
+   68165.0
+  ],
+  "total_liabilities": [
+   247926.0,
+   254133.0,
+   272747.0
+  ],
+  "fixed_assets": [
+   98406.0,
+   99479.0,
+   116687.0
+  ],
+  "cwip": [
+   28095.0,
+   34860.0,
+   19220.0
+  ],
+  "investments": [
+   66826.0,
+   72699.0,
+   94529.0
+  ],
+  "other_assets": [
+   54600.0,
+   47094.0,
+   42312.0
+  ],
+  "total_assets": [
+   247926.0,
+   254133.0,
+   272747.0
+  ],
+  "current_year": "Mar 2026",
+  "assets": {
+   "total_assets": 272747.0,
+   "current_assets": {
+    "total_current_assets": 42311.0,
+    "inventories": {
+     "total": null
+    },
+    "trade_receivables": {
+     "total": null
+    },
+    "cash_and_bank": null
+   },
+   "non_current_assets": {
+    "property_plant_equipment": 116687.0,
+    "capital_wip": 19220.0,
+    "investments": 94529.0,
+    "total_non_current_assets": 230436.0
+   }
+  },
+  "liabilities": {
+   "current_liabilities": {
+    "short_term_borrowings": null,
+    "trade_payables": {
+     "total": null
+    },
+    "total_current_liabilities": null
+   },
+   "non_current_liabilities": {
+    "long_term_borrowings": 69049.0,
+    "total_non_current_liabilities": 69049.0
+   },
+   "total_liabilities": 272747.0
+  },
+  "equity": {
+   "share_capital": 1249.0,
+   "reserves_surplus": 134285.0,
+   "total_equity": 135534.0
+  }
+ },
+ "cash_flow": {
+  "years": [
+   "Mar 2024",
+   "Mar 2025",
+   "Mar 2026"
+  ],
+  "operating": [
+   27325.0,
+   23880.0,
+   31961.0
+  ],
+  "investing": [
+   -15702.0,
+   -34606.0,
+   -25663.0
+  ],
+  "financing": [
+   -8277.0,
+   9281.0,
+   -6497.0
+  ],
+  "free_cash_flow": [
+   16670.0,
+   13549.0,
+   31966.0
+  ],
+  "cfo_op_ratio": [
+   null,
+   null,
+   null
+  ],
+  "operating_activities": 31961.0,
+  "investing_activities": -25663.0,
+  "financing_activities": -6497.0,
+  "net_change_in_cash": -199.0
+ },
+ "key_ratios_from_screener": {
+  "roce_pct": 14.0,
+  "roce_series": [
+   {
+    "year": "Mar 2024",
+    "roce": 14.0
+   },
+   {
+    "year": "Mar 2025",
+    "roce": 13.0
+   },
+   {
+    "year": "Mar 2026",
+    "roce": 14.0
+   }
+  ],
+  "roe_pct": 12.9,
+  "debtor_days": 4.0,
+  "inventory_days": 160.0,
+  "payable_days": 174.0,
+  "working_capital_days": -87.0,
+  "total_debt": 69049.0,
+  "total_equity": 135534.0,
+  "debt_equity_ratio": 0.51,
+  "interest_coverage": 6.35
+ },
+ "historical_trends": {
+  "revenue": [
+   {
+    "year": "Mar 2022",
+    "value": 129021.0
+   },
+   {
+    "year": "Mar 2023",
+    "value": 142913.0
+   },
+   {
+    "year": "Mar 2024",
+    "value": 140933.0
+   },
+   {
+    "year": "Mar 2025",
+    "value": 132517.0
+   },
+   {
+    "year": "Mar 2026",
+    "value": 139720.0
+   }
+  ],
+  "pat": [
+   {
+    "year": "Mar 2022",
+    "value": 33011.0
+   },
+   {
+    "year": "Mar 2023",
+    "value": 14685.0
+   },
+   {
+    "year": "Mar 2024",
+    "value": 15662.0
+   },
+   {
+    "year": "Mar 2025",
+    "value": 13970.0
+   },
+   {
+    "year": "Mar 2026",
+    "value": 16065.0
+   }
+  ],
+  "debt": [
+   {
+    "year": "Mar 2022",
+    "value": 36525.0
+   },
+   {
+    "year": "Mar 2023",
+    "value": 43304.0
+   },
+   {
+    "year": "Mar 2024",
+    "value": 43837.0
+   },
+   {
+    "year": "Mar 2025",
+    "value": 63223.0
+   },
+   {
+    "year": "Mar 2026",
+    "value": 69049.0
+   }
+  ],
+  "roce": [
+   {
+    "year": "Mar 2022",
+    "value": 32.0
+   },
+   {
+    "year": "Mar 2023",
+    "value": 14.0
+   },
+   {
+    "year": "Mar 2024",
+    "value": 14.0
+   },
+   {
+    "year": "Mar 2025",
+    "value": 13.0
+   },
+   {
+    "year": "Mar 2026",
+    "value": 14.0
+   }
+  ]
+ },
+ "shareholding": {
+  "promoter_holding_pct": 33.19,
+  "promoter_trend": [
+   {
+    "period": "Mar 2026",
+    "pct": 33.19
+   },
+   {
+    "period": "Sep 2023",
+    "pct": 33.9
+   },
+   {
+    "period": "Sep 2024",
+    "pct": 33.19
+   },
+   {
+    "period": "Sep 2025",
+    "pct": 33.19
+   }
+  ],
+  "fiis_holding_pct": 17.29
+ },
+ "peers": []
+}
