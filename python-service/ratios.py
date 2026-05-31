@@ -191,7 +191,11 @@ def _compute(f: Dict[str, Any]) -> Dict[str, float]:
     # ── LEVERAGE ──
     if equity > 0:
         ratios["debt_equity"] = round(_div(total_debt, equity), 2)
-        ratios["tol_tnw"] = round(_div(total_liab, equity), 2)
+        # Total Outside Liabilities = Total Assets - Net Worth (excludes equity).
+        # Robust regardless of whether `total_liab` was scraped as the full BS size
+        # (incl. equity) or as outside-liabilities only.
+        tol = (total_assets - equity) if total_assets > equity else max(total_liab - equity, 0)
+        ratios["tol_tnw"] = round(_div(tol, equity), 2)
     if total_assets > 0:
         ratios["debt_to_assets"] = round(_div(total_debt, total_assets), 2)
 
