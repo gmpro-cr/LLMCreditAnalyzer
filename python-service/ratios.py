@@ -4,6 +4,8 @@ All ratios computed from structured extracted data — no LLM involved.
 """
 from typing import Dict, Any
 
+from finance_utils import free_cash_flow
+
 
 def _n(val, default=0.0) -> float:
     """Safely extract a numeric value."""
@@ -177,6 +179,8 @@ def _compute(f: Dict[str, Any]) -> Dict[str, float]:
     # Cash flow
     ocf = _n(oa.get("net_cash_from_operating") or oa.get("cash_from_operations"))
     capex = abs(_n(ia.get("purchase_of_assets")))
+    net_investing = abs(_n(ia.get("net_cash_from_investing") or ia.get("cash_from_investing")))
+    capex_for_fcf = capex if capex > 0 else net_investing   # proxy when capex line is absent
 
     capital_employed = total_assets - current_liab
 
@@ -258,6 +262,9 @@ def _compute(f: Dict[str, Any]) -> Dict[str, float]:
         ratios["ocf_to_sales"] = round(_div(ocf, revenue) * 100, 2)
     if ocf and total_debt > 0:
         ratios["ocf_to_debt"] = round(_div(ocf, total_debt), 2)
+    if ocf:
+        # FCF = OCF - capex (net-investing used as capex proxy when no capex line)
+        ratios["free_cash_flow"] = free_cash_flow(ocf, capex_for_fcf)
 
     return ratios
 

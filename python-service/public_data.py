@@ -241,7 +241,12 @@ def fetch_screener_financials(symbol: str, company_name: str = "") -> dict:
     cfo  = _ys_cf("Cash from Operating Activity")
     cfi  = _ys_cf("Cash from Investing Activity")
     cff  = _ys_cf("Cash from Financing Activity")
-    fcf  = _ys_cf("Free Cash Flow")
+    # Screener has no real "Free Cash Flow" row; derive FCF = OCF + net investing
+    # (investing is negative). Per-year, sign-preserving.
+    if cfo and cfi and len(cfo) == len(cfi):
+        fcf = [round(o + i) for o, i in zip(cfo, cfi)]
+    else:
+        fcf = _ys_cf("Free Cash Flow")
 
     # ── Ratios multi-year ──────────────────────────────────────────────────
     roce_series     = _ys_rat("ROCE %")

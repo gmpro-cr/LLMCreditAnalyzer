@@ -17,3 +17,9 @@ def test_dscr_discloses_estimate_and_basis(tatasteel_financials):
     assert r.get("dscr_estimated") is True
     assert r.get("dscr_basis") in ("PAT+Dep+Int", "OCF")
 
+
+def test_free_cash_flow_not_just_ocf(tatasteel_financials):
+    """FCF must be OCF - capex, not ~OCF. OCF 31961, net investing 25663 -> 6298."""
+    r = calculate_ratios(tatasteel_financials)
+    assert r["free_cash_flow"] == 6298
+

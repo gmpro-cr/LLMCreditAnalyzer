@@ -16,3 +16,8 @@ def derive_pat(eps: Optional[float] = None, share_capital_cr: Optional[float] = 
     if pbt:
         return pbt * (1 - effective_tax)
     return None
+
+
+def free_cash_flow(ocf: float, capex: float) -> float:
+    """FCF = Operating Cash Flow - Capex (capex given as a positive magnitude)."""
+    return round(ocf - abs(capex))
