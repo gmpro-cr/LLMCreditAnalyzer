@@ -367,9 +367,12 @@ export default function CaseDetail() {
                     caseId={id}
                     onSave={handleUpdateSection}
                     dpProps={
+                      // Drawing Power (Tandon Method II) applies only to working-capital
+                      // style limits — never to term loans / LC / BG.
+                      (caseData.facilityType === "working_capital" || caseData.facilityType === "overdraft") &&
                       (section.sectionKey === "proposed_structure" || section.sectionKey === "working_capital_analysis")
                         ? {
-                            proposedLimit: Math.round((caseData.facilityAmount ?? 0) / 100), // lakhs → crore
+                            proposedLimit: Math.round((caseData.facilityAmount ?? 0) / 1e7), // rupees → crore
                           }
                         : undefined
                     }

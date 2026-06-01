@@ -160,12 +160,17 @@ export default function Dashboard() {
                     <div className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5 flex-wrap">
                       <span className="font-medium text-foreground/80">{item.actor}</span>
                       <span>{item.action.toLowerCase()}</span>
-                      <Link
-                        href={`/cases/${item.caseId}`}
-                        className="inline-flex items-center gap-1 text-primary hover:underline underline-offset-2 ml-1 text-xs"
-                      >
-                        View case <PiArrowRightLight className="h-3 w-3" />
-                      </Link>
+                      {(() => {
+                        const caseId = item.caseId ?? (item as any).case_id;
+                        return caseId ? (
+                          <Link
+                            href={`/cases/${caseId}`}
+                            className="inline-flex items-center gap-1 text-primary hover:underline underline-offset-2 ml-1 text-xs"
+                          >
+                            View case <PiArrowRightLight className="h-3 w-3" />
+                          </Link>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
                 </div>
