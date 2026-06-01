@@ -21,6 +21,7 @@ from public_data import fetch_all_public_data, fetch_stock_quote, fetch_screener
 from cam_sections import generate_cam_sections, _llm
 from risk_flags import generate_risk_flags
 from bank_statement import analyze_bank_statement, export_to_excel
+from validators import data_quality_report, apply_data_quality
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -472,6 +473,10 @@ async def generate_memo_from_public_data(data: dict):
             research_brief=research_brief,
         )
 
+        # Data-quality gate: clamp confidence to what the data supports + append limitations
+        dq = data_quality_report(screener_fin, ratios)
+        memo_content = apply_data_quality(memo_content, dq)
+
         # Embed research metadata into financials so it persists with the upload
         if research_brief:
             screener_fin["_research"] = {
@@ -498,6 +503,7 @@ async def generate_memo_from_public_data(data: dict):
             "research_used":    bool(research_brief),
             "research_brief":   research_brief,
             "research_sources": research_sources,
+            "data_quality":     dq,
         }
 
     except HTTPException:
@@ -559,7 +565,9 @@ async def generate_memo(data: dict):
 
     try:
         memo_content = generate_cam_memo(financials, ratios, company_name, covenants, research_brief)
-        return {"memo_content": memo_content, "company_name": company_name}
+        dq = data_quality_report(financials, ratios)
+        memo_content = apply_data_quality(memo_content, dq)
+        return {"memo_content": memo_content, "company_name": company_name, "data_quality": dq}
     except Exception as e:
         logger.error(f"Memo generation failed: {e}", exc_info=True)
         raise HTTPException(500, f"Memo generation failed: {str(e)}")

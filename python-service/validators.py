@@ -68,14 +68,17 @@ def apply_data_quality(memo: str, report: dict) -> str:
     max_conf = report.get("max_confidence", "HIGH")
     cap = _CONF_RANK.get(max_conf, 2)
 
-    def _cap(m):
-        stated = m.group(1).upper()
-        if _CONF_RANK.get(stated, 2) > cap:
-            return m.group(0).replace(m.group(1), max_conf)
-        return m.group(0)
+    def _over(stated):
+        return _CONF_RANK.get(stated.upper(), 2) > cap
 
-    # Only standalone bold confidence words (e.g. **HIGH**); never "**LOW RISK**".
-    memo = re.sub(r"\*\*(HIGH|MEDIUM|LOW)\*\*", _cap, memo, flags=re.IGNORECASE)
+    # Standalone bold confidence words (e.g. **HIGH**); never "**LOW RISK**".
+    memo = re.sub(r"\*\*(HIGH|MEDIUM|LOW)\*\*",
+                  lambda m: f"**{max_conf}**" if _over(m.group(1)) else m.group(0),
+                  memo, flags=re.IGNORECASE)
+    # Plaintext header form, e.g. "Confidence: HIGH".
+    memo = re.sub(r"(Confidence:\s*)(HIGH|MEDIUM|LOW)",
+                  lambda m: m.group(1) + max_conf if _over(m.group(2)) else m.group(0),
+                  memo, flags=re.IGNORECASE)
 
     issues = report.get("issues", [])
     if issues:
