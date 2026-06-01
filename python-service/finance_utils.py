@@ -1,5 +1,22 @@
 """Pure helpers for deriving / sanitising credit figures. No I/O, no LLM."""
+import re as _re
 from typing import Optional
+
+
+def as_number(v) -> Optional[float]:
+    """Return a float if `v` is a number or a clean numeric string, else None.
+
+    Guards numeric fields against scrape garbage (regex strings, stray punctuation).
+    """
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        s = v.replace(",", "").strip()
+        if _re.fullmatch(r"-?\d+(\.\d+)?", s):
+            return float(s)
+    return None
 
 
 def derive_pat(eps: Optional[float] = None, share_capital_cr: Optional[float] = None,
