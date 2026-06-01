@@ -313,3 +313,82 @@
     inset: -1px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Editorial polish — leverage the loaded Fraunces serif + tabular data
+   ═══════════════════════════════════════════════════════════════════ */
+@layer base {
+  /* Display headings use the serif for an editorial, banker-grade feel.
+     Section labels (h3/h4) stay in the sans for clarity in dense UI. */
+  h1, h2 {
+    font-family: var(--app-font-serif);
+    font-weight: 500;
+  }
+
+  /* Financial figures line up and compare cleanly */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--app-font-serif);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
+/* ─── Premium financial tables (CAM spread, ratios) — the hero content ─── */
+.prose table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.25rem 0;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs);
+}
+.prose thead th {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-family: var(--app-font-sans);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.6rem 0.85rem;
+  text-align: right;
+  border: none;
+}
+.prose thead th:first-child {
+  text-align: left;
+}
+.prose tbody td {
+  padding: 0.5rem 0.85rem;
+  border: none;
+  border-top: 1px solid hsl(var(--border));
+  text-align: right;
+  font-family: var(--app-font-mono);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.prose tbody td:first-child {
+  text-align: left;
+  font-family: var(--app-font-sans);
+  font-weight: 500;
+  white-space: normal;
+}
+.prose tbody tr:nth-child(even) td {
+  background: hsl(var(--muted) / 0.45);
+}
+.prose tbody tr:hover td {
+  background: hsl(var(--accent) / 0.7);
+}
