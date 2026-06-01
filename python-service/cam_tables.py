@@ -2,6 +2,8 @@
 
 Figures are formatted in Indian (lakh-crore) digit grouping, whole rupees-crore.
 """
+import re
+
 from finance_utils import as_number
 
 # (ratio_key, label, operator, threshold, unit) — default mid-corporate covenants.
@@ -75,3 +77,29 @@ def ratio_covenant_table(ratios: dict) -> str:
     head = "| Ratio | Actual | Covenant | Status |"
     sep = "|---|---|---|---|"
     return "\n".join([head, sep, *rows])
+
+
+def inject_into_memo(memo: str, fin: dict, ratios: dict) -> str:
+    """Insert the spread + ratio tables under the Financial Analysis heading.
+
+    Falls back to appending an annexure if that heading is not found.
+    """
+    spread = financial_spread(fin)
+    rtable = ratio_covenant_table(ratios)
+    if not spread and not rtable:
+        return memo
+
+    parts = []
+    if spread:
+        parts.append("**Financial Spread (₹ Cr)**\n\n" + spread)
+    if rtable:
+        parts.append("**Key Ratios vs Covenants**\n\n" + rtable)
+    parts.append("_Source: Screener.in / company filings — figures to be verified "
+                 "against audited financial statements._")
+    block = "\n\n".join(parts)
+
+    m = re.search(r"(?im)^#{1,3}\s*\d*\.?\s*Financial Analysis.*$", memo)
+    if m:
+        idx = m.end()
+        return memo[:idx] + "\n\n" + block + "\n" + memo[idx:]
+    return memo.rstrip() + "\n\n## Annexure — Financial Spread & Ratios\n\n" + block + "\n"

@@ -274,11 +274,14 @@ def generate_cam_memo(
     research_brief: str = "",
 ) -> str:
     """
-    Backward-compatible entry point — redirects to generate_credit_risk_summary.
+    Backward-compatible entry point — redirects to generate_credit_risk_summary,
+    then injects the deterministic financial spread + ratio-covenant tables.
     """
-    return generate_credit_risk_summary(
+    from cam_tables import inject_into_memo
+    memo = generate_credit_risk_summary(
         financials, ratios, company_name, covenants, research_brief
     )
+    return inject_into_memo(memo, financials, ratios)
 
 
 def _fallback_summary(ctx: Dict, company_name: str) -> str:
