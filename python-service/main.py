@@ -897,6 +897,11 @@ async def draft_cam_sections_endpoint(data: dict):
     if not financials:
         raise HTTPException(400, "financials is required")
 
+    # Callers (e.g. the api-server) may not pre-compute ratios; do it here so the
+    # ratio-covenant table and ratio-aware narrative are populated.
+    if not ratios:
+        ratios = calculate_ratios(financials)
+
     try:
         logger.info(f"[CAM] Drafting sections for {company_name}, regenerate={regenerate!r}")
         sections = generate_cam_sections(financials, ratios, company_name, research_brief, regenerate)
