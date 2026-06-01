@@ -130,13 +130,20 @@ def _ollama_call(prompt: str) -> str:
 
 # ── 8-Section Credit Risk Summary Prompt ──────────────────────────────────────
 
-def _build_credit_risk_prompt(context_text: str, company_name: str) -> str:
+def _build_credit_risk_prompt(context_text: str, company_name: str,
+                              max_confidence: str = None) -> str:
     """
     Build the LLM prompt for the 8-section credit risk summary.
     Optimized for smaller models (qwen3:8b): very explicit structure,
     pre-computed data injected, and tight format constraints.
     """
-    return f"""You are a senior credit risk analyst at a commercial bank.
+    conf_cap = ""
+    if max_confidence:
+        conf_cap = (f"\nIMPORTANT: An automated data-quality gate caps the maximum "
+                    f"confidence at {max_confidence}. Your Section 8 rating MUST NOT "
+                    f"exceed {max_confidence}, and your justification must be consistent "
+                    f"with a {max_confidence} (not higher) confidence.\n")
+    return f"""You are a senior credit risk analyst at a commercial bank.{conf_cap}
 Generate a detailed, decision-grade credit risk summary using ONLY the pre-computed data below.
 
 STRICT RULES:
@@ -235,6 +242,7 @@ def generate_credit_risk_summary(
     company_name: str,
     covenants: list = None,
     research_brief: str = "",
+    max_confidence: str = None,
 ) -> str:
     """
     Generate full 8-section credit risk summary.
@@ -249,7 +257,7 @@ def generate_credit_risk_summary(
                "\n".join(f"- {w}" for w in ctx["validation"].get("warnings", []))
 
     # Step 2: Build LLM prompt with pre-computed context
-    prompt = _build_credit_risk_prompt(ctx["context_text"], company_name)
+    prompt = _build_credit_risk_prompt(ctx["context_text"], company_name, max_confidence)
 
     # Step 3: Call LLM for analytical interpretation
     logger.info(f"[CreditRisk] Generating 8-section summary for {company_name}")
@@ -266,22 +274,30 @@ def generate_credit_risk_summary(
     return header + summary
 
 
+def _clean_money(text: str) -> str:
+    """Drop trailing .00/.0 on crore figures (banks don't show paise on crores)."""
+    return re.sub(r"(\d)\.0{1,2}(\s*Cr)\b", r"\1\2", text)
+
+
 def generate_cam_memo(
     financials: Dict,
     ratios: Dict,
     company_name: str,
     covenants: list = None,
     research_brief: str = "",
+    max_confidence: str = None,
 ) -> str:
     """
     Backward-compatible entry point — redirects to generate_credit_risk_summary,
-    then injects the deterministic financial spread + ratio-covenant tables.
+    then injects the deterministic financial spread + ratio-covenant tables and
+    normalises crore figures.
     """
     from cam_tables import inject_into_memo
     memo = generate_credit_risk_summary(
-        financials, ratios, company_name, covenants, research_brief
+        financials, ratios, company_name, covenants, research_brief, max_confidence
     )
-    return inject_into_memo(memo, financials, ratios)
+    memo = inject_into_memo(memo, financials, ratios)
+    return _clean_money(memo)
 
 
 def _fallback_summary(ctx: Dict, company_name: str) -> str:

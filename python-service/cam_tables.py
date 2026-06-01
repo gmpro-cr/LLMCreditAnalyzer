@@ -94,8 +94,9 @@ def inject_into_memo(memo: str, fin: dict, ratios: dict) -> str:
         parts.append("**Financial Spread (₹ Cr)**\n\n" + spread)
     if rtable:
         parts.append("**Key Ratios vs Covenants**\n\n" + rtable)
-    parts.append("_Source: Screener.in / company filings — figures to be verified "
-                 "against audited financial statements._")
+    parts.append("_Source: Screener.in / company filings — confirm basis "
+                 "(standalone vs consolidated) and verify all figures against "
+                 "audited financial statements._")
     block = "\n\n".join(parts)
 
     m = re.search(r"(?im)^#{1,3}\s*\d*\.?\s*Financial Analysis.*$", memo)

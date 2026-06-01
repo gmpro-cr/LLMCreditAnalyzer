@@ -468,13 +468,14 @@ async def generate_memo_from_public_data(data: dict):
         # Step 4: Generate CAM memo
         logger.info(f"[PublicMemo] Step 4: Generating credit memo")
         cname = company_name or screener_fin.get("company_info", {}).get("name", symbol)
+        # Data-quality gate first, so the LLM writes a confidence consistent with the cap
+        dq = data_quality_report(screener_fin, ratios)
         memo_content = generate_cam_memo(
             screener_fin, ratios, cname,
             research_brief=research_brief,
+            max_confidence=dq["max_confidence"],
         )
-
-        # Data-quality gate: clamp confidence to what the data supports + append limitations
-        dq = data_quality_report(screener_fin, ratios)
+        # Clamp any residual + append the limitations section
         memo_content = apply_data_quality(memo_content, dq)
 
         # Embed research metadata into financials so it persists with the upload
@@ -564,8 +565,9 @@ async def generate_memo(data: dict):
         raise HTTPException(400, "financials is required")
 
     try:
-        memo_content = generate_cam_memo(financials, ratios, company_name, covenants, research_brief)
         dq = data_quality_report(financials, ratios)
+        memo_content = generate_cam_memo(financials, ratios, company_name, covenants,
+                                         research_brief, max_confidence=dq["max_confidence"])
         memo_content = apply_data_quality(memo_content, dq)
         return {"memo_content": memo_content, "company_name": company_name, "data_quality": dq}
     except Exception as e:
