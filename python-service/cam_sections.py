@@ -762,6 +762,22 @@ def _resolve_confidence(section_key: str, financials: Dict) -> tuple:
 
 # ── Public entry point ────────────────────────────────────────────────────────
 
+def _with_tables(content: str, financials: Dict, ratios: Dict) -> str:
+    """Append the deterministic spread + ratio-covenant tables to a section's prose."""
+    from cam_tables import financial_spread, ratio_covenant_table
+    spread = financial_spread(financials)
+    rtable = ratio_covenant_table(ratios)
+    extra = []
+    if spread:
+        extra.append("\n\n**Financial Spread (₹ Cr)**\n\n" + spread)
+    if rtable:
+        extra.append("\n\n**Key Ratios vs Covenants**\n\n" + rtable)
+    if extra:
+        extra.append("\n\n_Source: Screener.in / company filings — confirm basis "
+                     "(standalone vs consolidated) and verify against audited statements._")
+    return content + "".join(extra)
+
+
 def generate_cam_sections(
     financials: Dict,
     ratios: Dict,
@@ -789,6 +805,8 @@ def generate_cam_sections(
 
     if regenerate and regenerate in AI_SECTIONS:
         content = _draft_section(regenerate, context_text, company_name)
+        if regenerate == "financial_analysis":
+            content = _with_tables(content, financials, ratios)
         conf, reason = _resolve_confidence(regenerate, financials)
         return {
             regenerate: {
@@ -832,6 +850,12 @@ def generate_cam_sections(
             "low_verified":      False,
             "locked":            False,
         }
+
+    # Append computed tables to Financial Analysis (math owned by Python, not the LLM)
+    if "financial_analysis" in sections:
+        sections["financial_analysis"]["content"] = _with_tables(
+            sections["financial_analysis"]["content"], financials, ratios
+        )
 
     # Generate executive_summary last — synthesises the other sections
     summary_snippets = []
