@@ -281,7 +281,7 @@ export default function NewCase() {
           <span className="sr-only">Back</span>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">New CAM Request</h1>
+          <h1 className="text-3xl font-medium tracking-tight">New CAM Request</h1>
           <p className="text-muted-foreground mt-1">
             Provide initial parameters to generate the draft memo.
           </p>
@@ -515,7 +515,7 @@ export default function NewCase() {
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
+              <CardTitle className="flex items-center gap-2 text-xl font-display tracking-tight">
                 <Building2 className="h-5 w-5 text-primary" />
                 Borrower Details
                 {selectedCompany && (
@@ -603,7 +603,7 @@ export default function NewCase() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
+              <CardTitle className="flex items-center gap-2 text-xl font-display tracking-tight">
                 <Briefcase className="h-5 w-5 text-primary" />
                 Facility Request
               </CardTitle>
@@ -663,7 +663,7 @@ export default function NewCase() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
+              <CardTitle className="flex items-center gap-2 text-xl font-display tracking-tight">
                 <UserCircle className="h-5 w-5 text-primary" />
                 Internal Details
               </CardTitle>
