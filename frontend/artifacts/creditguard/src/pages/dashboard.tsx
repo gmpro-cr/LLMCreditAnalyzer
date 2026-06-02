@@ -20,7 +20,7 @@ export default function Dashboard() {
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold">Dashboard</h1>
           <p className="text-muted-foreground mt-1.5 text-sm font-light">Overview of your credit appraisal pipeline.</p>
@@ -55,7 +55,7 @@ export default function Dashboard() {
                 </div>
                 <PiArrowRightLight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
               </div>
-              <div className="text-[2.25rem] font-semibold tabular-nums leading-none tracking-tight">
+              <div className="text-[2.75rem] font-display leading-none tracking-tight tabular">
                 {stats?.totalCases ?? 0}
               </div>
               <div className="mt-2 text-sm font-medium text-foreground/80">Total active cases</div>
@@ -74,7 +74,7 @@ export default function Dashboard() {
                 </div>
                 <PiArrowRightLight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
               </div>
-              <div className="text-[2.25rem] font-semibold tabular-nums leading-none tracking-tight text-blue-600">
+              <div className="text-[2.75rem] font-display leading-none tracking-tight tabular text-blue-600">
                 {stats?.draftsInProgress ?? 0}
               </div>
               <div className="mt-2 text-sm font-medium text-foreground/80">Drafts in progress</div>
