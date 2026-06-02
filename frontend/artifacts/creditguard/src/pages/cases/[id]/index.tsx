@@ -100,10 +100,10 @@ function EditorSection({
       <CardHeader className="bg-muted/40 pb-4 border-b">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h3 className="font-semibold text-lg">{section.sectionTitle}</h3>
+            <h3 className="font-display text-xl tracking-tight">{section.sectionTitle}</h3>
             {section.confidence !== 'pending' && (
-              <Badge variant="outline" className={`${CONFIDENCE_COLORS[section.confidence]}`}>
-                AI Confidence: {section.confidence}
+              <Badge variant="outline" className={`${CONFIDENCE_COLORS[section.confidence]} font-medium uppercase text-[10px] tracking-wider`}>
+                {section.confidence} confidence
               </Badge>
             )}
             {section.isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
