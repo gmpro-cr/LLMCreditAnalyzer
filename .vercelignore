@@ -1,8 +1,17 @@
 # NOTE: do NOT ignore frontend/ — it is the app Vercel builds (Root Directory = frontend).
+# Everything below is local cruft / not needed for the build.
 python-service/
-.next/
-node_modules/
-dist/
+node_modules
+**/node_modules
+.next
+**/dist
+**/.vite
+.local
+.cache
+**/.local
+**/.cache
+.replit
+**/.replit
 *.db
 *.db-shm
 *.db-wal
