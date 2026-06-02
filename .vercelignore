@@ -1,9 +1,11 @@
-frontend/
+# NOTE: do NOT ignore frontend/ — it is the app Vercel builds (Root Directory = frontend).
 python-service/
 .next/
 node_modules/
+dist/
 *.db
 *.db-shm
 *.db-wal
 *.docx
 *.pdf
+frontend-repo-history.bundle
