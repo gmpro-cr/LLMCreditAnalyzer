@@ -1,1 +1,7 @@
-{}
+{
+  "installCommand": "cd frontend && pnpm install --no-frozen-lockfile",
+  "buildCommand": "cd frontend && pnpm --filter @workspace/creditguard build",
+  "outputDirectory": "frontend/artifacts/creditguard/dist/public",
+  "framework": null,
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
