@@ -1,5 +1,5 @@
 {
-  "installCommand": "cd frontend && pnpm install --no-frozen-lockfile",
+  "installCommand": "corepack enable && cd frontend && pnpm install --no-frozen-lockfile",
   "buildCommand": "cd frontend && pnpm --filter @workspace/creditguard build",
   "outputDirectory": "frontend/artifacts/creditguard/dist/public",
   "framework": null,

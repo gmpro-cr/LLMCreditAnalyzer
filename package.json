@@ -2,6 +2,7 @@
   "name": "creditguardai",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@9.15.4",
   "description": "CreditGuard AI — LLM credit-appraisal platform. Vite SPA + Express api-server live in frontend/ (pnpm monorepo); the heavy analysis engine lives in python-service/ (FastAPI).",
   "scripts": {
     "dev": "cd frontend/artifacts/creditguard && node_modules/.bin/vite --config vite.config.ts --host 0.0.0.0 --port 5173",
