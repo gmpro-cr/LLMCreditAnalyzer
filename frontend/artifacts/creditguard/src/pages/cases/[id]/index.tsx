@@ -210,7 +210,9 @@ export default function CaseDetail() {
       await queryClient.invalidateQueries({ queryKey: getGetCaseQueryKey(id) });
       toast({ title: "Memo generated", description: "All sections have been drafted by AI." });
     } catch (e) {
-      toast({ title: "Generation failed", description: "Could not reach the AI service. Try again.", variant: "destructive" });
+      const msg = (e && typeof e === "object" && "data" in e && (e as {data?: {error?: string}}).data?.error)
+        || (e instanceof Error ? e.message : "Could not reach the AI service. Try again.");
+      toast({ title: "Generation failed", description: msg, variant: "destructive" });
     } finally {
       setGenerating(false);
     }

@@ -103,6 +103,21 @@ router.post("/:id/generate", async (req, res) => {
     executive_summary:   "executive_summary",
   };
 
+  // Wake-up ping: Render free tier sleeps after 15 min idle.
+  // Poll /health until the service responds 200 (up to 90s), then make the real call.
+  const wakeDeadline = Date.now() + 90_000;
+  let awake = false;
+  while (Date.now() < wakeDeadline) {
+    try {
+      const ping = await fetch(`${pythonUrl}/health`, { signal: AbortSignal.timeout(5_000) });
+      if (ping.ok) { awake = true; break; }
+    } catch { /* still waking */ }
+    await new Promise((r) => setTimeout(r, 3_000));
+  }
+  if (!awake) {
+    return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds." });
+  }
+
   try {
     const pyRes = await fetch(`${pythonUrl}/cam/draft-sections`, {
       method: "POST",
@@ -117,49 +132,52 @@ router.post("/:id/generate", async (req, res) => {
       signal: AbortSignal.timeout(900_000),
     });
 
-    if (pyRes.ok) {
-      const pyData = await pyRes.json() as Record<string, unknown>;
-      const camSections = (pyData.cam_sections || pyData.sections || pyData || {}) as Record<string, unknown>;
-      const updates: { sectionKey: string; values: Record<string, unknown> }[] = [];
-
-      // Collect content for each UI section key (handle merges)
-      const uiContent: Record<string, { content: string; confidence: string }> = {};
-
-      const sectionRecord = (s: unknown): { content?: string; confidence?: string } =>
-        (s && typeof s === "object" ? (s as { content?: string; confidence?: string }) : {});
-
-      for (const [pyKey, uiKey] of Object.entries(KEY_MAP)) {
-        const sec = camSections[pyKey];
-        if (!sec) continue;
-        // Python may return content as sec.content (string) or directly as a string
-        const rawContent: string = typeof sec === "string" ? sec : (sectionRecord(sec).content || "");
-        if (!rawContent.trim()) continue;
-        if (uiContent[uiKey]) {
-          // Merge: append to existing content (e.g. multiple python keys → same ui section)
-          uiContent[uiKey].content += "\n\n" + rawContent;
-        } else {
-          uiContent[uiKey] = { content: rawContent, confidence: sectionRecord(sec).confidence || "medium" };
-        }
-      }
-
-      // Also merge business_model into business_profile if both present
-      const bizModel = camSections["business_model"];
-      const bizModelContent: string = typeof bizModel === "string" ? bizModel : (sectionRecord(bizModel).content || "");
-      if (bizModelContent.trim()) {
-        if (uiContent["business_profile"]) {
-          uiContent["business_profile"].content += "\n\n**Business Model**\n\n" + bizModelContent;
-        } else {
-          uiContent["business_profile"] = { content: bizModelContent, confidence: sectionRecord(bizModel).confidence || "medium" };
-        }
-      }
-
-      for (const [uiKey, { content, confidence }] of Object.entries(uiContent)) {
-        updates.push({ sectionKey: uiKey, values: { content, confidence } });
-      }
-      if (updates.length) await bulkUpdateSections(id, updates);
+    if (!pyRes.ok) {
+      const errText = await pyRes.text().catch(() => "");
+      console.error("[generate] Python service returned", pyRes.status, errText.slice(0, 200));
+      return res.status(502).json({ error: `AI engine error (${pyRes.status}). Please try again.` });
     }
+
+    const pyData = await pyRes.json() as Record<string, unknown>;
+    const camSections = (pyData.cam_sections || pyData.sections || pyData || {}) as Record<string, unknown>;
+    const updates: { sectionKey: string; values: Record<string, unknown> }[] = [];
+
+    // Collect content for each UI section key (handle merges)
+    const uiContent: Record<string, { content: string; confidence: string }> = {};
+
+    const sectionRecord = (s: unknown): { content?: string; confidence?: string } =>
+      (s && typeof s === "object" ? (s as { content?: string; confidence?: string }) : {});
+
+    for (const [pyKey, uiKey] of Object.entries(KEY_MAP)) {
+      const sec = camSections[pyKey];
+      if (!sec) continue;
+      const rawContent: string = typeof sec === "string" ? sec : (sectionRecord(sec).content || "");
+      if (!rawContent.trim()) continue;
+      if (uiContent[uiKey]) {
+        uiContent[uiKey].content += "\n\n" + rawContent;
+      } else {
+        uiContent[uiKey] = { content: rawContent, confidence: sectionRecord(sec).confidence || "medium" };
+      }
+    }
+
+    // Merge business_model into business_profile if both present
+    const bizModel = camSections["business_model"];
+    const bizModelContent: string = typeof bizModel === "string" ? bizModel : (sectionRecord(bizModel).content || "");
+    if (bizModelContent.trim()) {
+      if (uiContent["business_profile"]) {
+        uiContent["business_profile"].content += "\n\n**Business Model**\n\n" + bizModelContent;
+      } else {
+        uiContent["business_profile"] = { content: bizModelContent, confidence: sectionRecord(bizModel).confidence || "medium" };
+      }
+    }
+
+    for (const [uiKey, { content, confidence }] of Object.entries(uiContent)) {
+      updates.push({ sectionKey: uiKey, values: { content, confidence } });
+    }
+    if (updates.length) await bulkUpdateSections(id, updates);
   } catch (e) {
     console.error("[generate] Python service error:", e);
+    return res.status(502).json({ error: "AI engine request failed. Please try again." });
   }
 
   // Recompute progress from actual reviewed sections (don't regress existing progress)
