@@ -26,7 +26,7 @@ services:
     runtime: node
     plan: free
     rootDir: frontend
-    buildCommand: npx -y pnpm@9 install --ignore-scripts && npx -y pnpm@9 --filter @workspace/api-server build
+    buildCommand: npx -y pnpm@9 install --ignore-scripts --no-frozen-lockfile && npx -y pnpm@9 --filter @workspace/api-server build
     startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
     envVars:
       - key: NODE_ENV
