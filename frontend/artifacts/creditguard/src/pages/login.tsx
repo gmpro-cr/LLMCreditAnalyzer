@@ -4,12 +4,9 @@ import {
   PiShieldCheckLight,
   PiSparkleLight,
   PiEnvelopeSimpleLight,
-  PiLockSimpleLight,
   PiSpinnerLight,
 } from "react-icons/pi";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { isAuthenticated, signInDemo } from "@/lib/auth";
 
@@ -38,32 +35,18 @@ function CreditGuardMark({ className }: { className?: string }) {
 export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated()) setLocation("/", { replace: true });
   }, [setLocation]);
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim()) {
-      toast({ title: "Enter your email", variant: "destructive" });
-      return;
-    }
+  const onEnterDemo = async () => {
     setSubmitting(true);
     await new Promise((r) => setTimeout(r, 350));
-    const user = signInDemo(email);
-    toast({ title: `Welcome, ${user.name.split(" ")[0]}`, description: "Signed in to CreditGuard AI." });
+    signInDemo("demo@creditguard.ai");
+    toast({ title: "Welcome to CreditGuard AI", description: "You're in the demo workspace." });
     setLocation("/", { replace: true });
-  };
-
-  const onGoogle = () => {
-    toast({
-      title: "Google sign-in coming soon",
-      description: "OAuth wiring is planned — use email for now.",
-    });
   };
 
   return (
@@ -124,89 +107,27 @@ export default function Login() {
           </div>
 
           <div className="space-y-1.5">
-            <h2 className="text-2xl font-semibold tracking-tight">Sign in</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">Demo workspace</h2>
             <p className="text-sm text-muted-foreground font-light">
-              Use any email to enter the demo workspace.
+              No sign-up required. Explore a fully functional demo.
             </p>
           </div>
 
           <Button
             type="button"
-            variant="outline"
-            className="w-full h-10 transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]"
-            onClick={onGoogle}
+            className="w-full h-11 transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]"
+            onClick={onEnterDemo}
+            disabled={submitting}
           >
-            <GoogleIcon className="mr-2 h-4 w-4" />
-            Continue with Google
-            <span className="ml-auto text-[10px] font-medium text-muted-foreground rounded border px-1.5 py-0.5 tracking-wide">
-              Soon
-            </span>
+            {submitting ? (
+              <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" /> Entering workspace…</>
+            ) : (
+              "Enter demo workspace"
+            )}
           </Button>
 
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[11px] uppercase tracking-widest text-muted-foreground/60">or</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-sm font-medium">Work email</Label>
-              <div className="relative">
-                <PiEnvelopeSimpleLight className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@bank.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-9 h-10 transition-shadow duration-200 focus:ring-2 focus:ring-ring/30"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-sm font-medium">Password</Label>
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground/70 hover:text-foreground transition-colors"
-                  onClick={() => toast({ title: "Demo mode", description: "Password is not validated." })}
-                >
-                  Forgot?
-                </button>
-              </div>
-              <div className="relative">
-                <PiLockSimpleLight className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-9 h-10 transition-shadow duration-200 focus:ring-2 focus:ring-ring/30"
-                />
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full h-10 transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]"
-              disabled={submitting}
-            >
-              {submitting ? (
-                <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" /> Signing in…</>
-              ) : (
-                "Sign in"
-              )}
-            </Button>
-          </form>
-
           <p className="text-[11px] text-muted-foreground/60 text-center leading-relaxed">
-            By continuing you agree to the demo terms of use. No real bank data is processed.
+            No real bank data is processed. Demo resets on sign-out.
           </p>
         </div>
       </div>
@@ -214,13 +135,3 @@ export default function Login() {
   );
 }
 
-function GoogleIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <path
-        fill="#EA4335"
-        d="M12 10.2v3.83h5.36c-.23 1.4-1.66 4.1-5.36 4.1-3.22 0-5.85-2.67-5.85-5.96 0-3.3 2.63-5.97 5.85-5.97 1.84 0 3.07.79 3.78 1.46l2.57-2.49C16.7 3.74 14.6 2.7 12 2.7 6.95 2.7 2.85 6.8 2.85 12s4.1 9.3 9.15 9.3c5.28 0 8.78-3.71 8.78-8.94 0-.6-.07-1.06-.16-1.52H12z"
-      />
-    </svg>
-  );
-}
