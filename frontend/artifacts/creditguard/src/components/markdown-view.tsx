@@ -2,11 +2,12 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 
-// Ensure GFM tables are block-level by guaranteeing a blank line before any
-// line that starts with `|`. Without this, tables embedded inside numbered
-// list items render as raw pipe-separated text instead of HTML tables.
+// Ensure GFM tables are block-level by guaranteeing a blank line before the
+// FIRST row of a table. The regex only matches when a non-pipe character
+// precedes the newline, so it inserts a blank line before a table starts
+// but NOT between consecutive table rows (which would break the table).
 function fixTableBlankLines(text: string): string {
-  return text.replace(/([^\n])\n(\|)/g, "$1\n\n$2");
+  return text.replace(/([^\n|])\n(\|)/g, "$1\n\n$2");
 }
 
 export function MarkdownView({ content, className = "" }: { content: string; className?: string }) {
