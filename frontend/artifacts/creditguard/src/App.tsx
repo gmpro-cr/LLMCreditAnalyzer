@@ -6,7 +6,6 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
-import Login from "@/pages/login";
 import Landing from "@/pages/landing";
 
 import Dashboard from "@/pages/dashboard";
@@ -31,9 +30,8 @@ function Router() {
   if (!isAuthenticated) {
     return (
       <Switch>
-        <Route path="/login" component={Login} />
         <Route path="/" component={Landing} />
-        <Route><Redirect to="/login" /></Route>
+        <Route><Redirect to="/" /></Route>
       </Switch>
     );
   }
