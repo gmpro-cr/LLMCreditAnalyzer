@@ -42,7 +42,7 @@ interface Props {
   onDPChange?: (dp: number, table: Record<string, number>) => void;
 }
 
-export default function DrawingPowerPiCalculatorLight({ proposedLimit, balanceSheetData, onDPChange }: Props) {
+export default function DrawingPowerCalculator({ proposedLimit, balanceSheetData, onDPChange }: Props) {
   const [values, setValues] = useState<Record<string, string>>({
     inventory:     balanceSheetData?.inventory     ? String(balanceSheetData.inventory)     : "",
     debtors:       balanceSheetData?.debtors       ? String(balanceSheetData.debtors)       : "",
@@ -87,7 +87,7 @@ export default function DrawingPowerPiCalculatorLight({ proposedLimit, balanceSh
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <PiCalculatorLight className="h-4 w-4 text-blue-500" />
-            Drawing Power PiCalculatorLight
+            Drawing Power Calculator
             <Badge variant="outline" className="text-[10px] font-normal">Tandon Method II</Badge>
           </CardTitle>
           {dp > 0 && (

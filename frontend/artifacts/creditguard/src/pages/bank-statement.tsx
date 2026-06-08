@@ -109,14 +109,14 @@ export default function BankStatement() {
   const handleFile = (f: File) => {
     const ok = /\.(pdf|csv|xlsx|xls)$/i.test(f.name);
     if (!ok) {
-      toast({ title: "Unsupported file", description: "PiUploadSimpleLight PDF, CSV, or Excel.", variant: "destructive" });
+      toast({ title: "Unsupported file", description: "Upload PDF, CSV, or Excel.", variant: "destructive" });
       return;
     }
     setFile(f);
   };
 
   const onAnalyze = async () => {
-    if (!file) { toast({ title: "PiUploadSimpleLight a statement first", variant: "destructive" }); return; }
+    if (!file) { toast({ title: "Upload a statement first", variant: "destructive" }); return; }
     setAnalyzing(true);
     setResult(null);
     try {
@@ -190,7 +190,7 @@ export default function BankStatement() {
         <div>
           <h1 className="text-3xl tracking-[-0.02em]">Bank statement analysis</h1>
           <p className="text-muted-foreground mt-1">
-            PiUploadSimpleLight a bank statement and get a banker-grade analysis: cash flow, AMB, recurring income, EMI obligations, bounces, and a creditworthiness score.
+            Upload a bank statement and get a banker-grade analysis: cash flow, AMB, recurring income, EMI obligations, bounces, and a creditworthiness score.
           </p>
         </div>
         {result && (
@@ -211,7 +211,7 @@ export default function BankStatement() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <PiUploadSimpleLight className="h-5 w-5 text-primary" /> PiUploadSimpleLight statement
+              <PiUploadSimpleLight className="h-5 w-5 text-primary" /> Upload statement
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -407,7 +407,7 @@ function AnalysisReport({ data }: { data: AnalysisResult }) {
       {/* Cash activity & bounces */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Cash PiPulseLight</CardTitle></CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Cash Activity</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
               <CashStat label="Cash Deposits" count={cash_activity.cash_deposits.count} total={cash_activity.cash_deposits.total} max={cash_activity.cash_deposits.max_single} accent="emerald" />

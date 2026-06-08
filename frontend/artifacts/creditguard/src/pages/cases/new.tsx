@@ -133,11 +133,11 @@ export default function NewCase() {
     },
   });
 
-  const [searchQuery, setPiMagnifyingGlassLightQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [suggestions, setSuggestions] = useState<CompanySuggestion[]>([]);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
-  const [isPiMagnifyingGlassLighting, setIsPiMagnifyingGlassLighting] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [isFetchingData, setIsFetchingData] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<CompanyPublicData | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -153,14 +153,14 @@ export default function NewCase() {
       setIsSuggestionsOpen(false);
       return;
     }
-    setIsPiMagnifyingGlassLighting(true);
+    setIsSearching(true);
     searchCompanies({ q: debouncedQuery })
       .then((data) => {
         setSuggestions(data ?? []);
         setIsSuggestionsOpen(true);
       })
       .catch(() => setSuggestions([]))
-      .finally(() => setIsPiMagnifyingGlassLighting(false));
+      .finally(() => setIsSearching(false));
   }, [debouncedQuery]);
 
   useEffect(() => {
@@ -175,7 +175,7 @@ export default function NewCase() {
 
   async function handleSelectCompany(suggestion: CompanySuggestion) {
     setIsSuggestionsOpen(false);
-    setPiMagnifyingGlassLightQuery(suggestion.name);
+    setSearchQuery(suggestion.name);
     setIsFetchingData(true);
     setSelectedCompany(null);
 
@@ -212,7 +212,7 @@ export default function NewCase() {
 
   function clearCompany() {
     setSelectedCompany(null);
-    setPiMagnifyingGlassLightQuery("");
+    setSearchQuery("");
     setSuggestions([]);
     form.setValue("borrowerName", "");
     form.setValue("sector", "");
@@ -296,7 +296,7 @@ export default function NewCase() {
             <Badge variant="outline" className="ml-2 text-[10px] py-0">NSE / BSE</Badge>
           </CardTitle>
           <CardDescription>
-            PiMagnifyingGlassLight for any publicly listed Indian company to auto-extract financial data from
+            Search for any publicly listed Indian company to auto-extract financial data from
             stock exchange disclosures.
           </CardDescription>
         </CardHeader>
@@ -304,7 +304,7 @@ export default function NewCase() {
           <div ref={searchRef} className="relative">
             <div className="relative">
               <PiMagnifyingGlassLight className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              {isPiMagnifyingGlassLighting || isFetchingData ? (
+              {isSearching || isFetchingData ? (
                 <PiSpinnerLight className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
               ) : searchQuery ? (
                 <button
@@ -317,9 +317,9 @@ export default function NewCase() {
               ) : null}
               <Input
                 value={searchQuery}
-                onChange={(e) => setPiMagnifyingGlassLightQuery(e.target.value)}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => suggestions.length > 0 && setIsSuggestionsOpen(true)}
-                placeholder="PiMagnifyingGlassLight company name or NSE/BSE ticker (e.g. Reliance, INFY.NS)..."
+                placeholder="Search company name or NSE/BSE ticker (e.g. Reliance, INFY.NS)..."
                 className="pl-9 pr-9 bg-background"
               />
             </div>
@@ -357,7 +357,7 @@ export default function NewCase() {
               </div>
             )}
 
-            {isSuggestionsOpen && debouncedQuery.length >= 2 && suggestions.length === 0 && !isPiMagnifyingGlassLighting && (
+            {isSuggestionsOpen && debouncedQuery.length >= 2 && suggestions.length === 0 && !isSearching && (
               <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-lg shadow-md px-4 py-3 text-sm text-muted-foreground">
                 No listed companies found for &ldquo;{debouncedQuery}&rdquo;. Try with ticker like RELIANCE.NS or INFY.BO.
               </div>
