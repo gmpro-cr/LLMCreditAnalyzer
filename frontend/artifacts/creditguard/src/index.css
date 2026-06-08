@@ -76,52 +76,52 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  /* Deep Oxford Blue for a commanding, professional feel */
-  --primary: 222 47% 11%;
-  --primary-foreground: 210 40% 98%;
+  /* Modern slate-blue — clean, professional, trustworthy */
+  --primary: 213 94% 48%;
+  --primary-foreground: 0 0% 100%;
 
-  /* Very subtle, cool grey background */
-  --background: 210 40% 98%;
-  --foreground: 222 47% 11%;
+  /* Light cool-gray background */
+  --background: 220 20% 97%;
+  --foreground: 222 39% 14%;
 
-  /* Crisp borders */
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 222 47% 11%;
+  /* Clean borders */
+  --border: 220 14% 90%;
+  --input: 220 14% 90%;
+  --ring: 213 94% 48%;
 
-  /* White cards with subtle border */
+  /* Pure white cards */
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
+  --card-foreground: 222 39% 14%;
+  --card-border: 220 14% 90%;
 
-  /* Deep sidebar to contrast with the light workspace */
-  --sidebar: 222 47% 11%;
+  /* Dark slate sidebar — grounds the app shell */
+  --sidebar: 215 33% 11%;
   --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 222 47% 11%;
+  --sidebar-border: 215 33% 11%;
   --sidebar-primary: 210 40% 98%;
-  --sidebar-primary-foreground: 222 47% 11%;
-  --sidebar-accent: 217 32% 17%;
+  --sidebar-primary-foreground: 222 39% 14%;
+  --sidebar-accent: 215 28% 17%;
   --sidebar-accent-foreground: 210 40% 98%;
   --sidebar-ring: 210 40% 98%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
+  --popover-foreground: 222 39% 14%;
+  --popover-border: 220 14% 90%;
 
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222 47% 11%;
+  --secondary: 220 16% 94%;
+  --secondary-foreground: 222 39% 14%;
 
-  --muted: 210 40% 96%;
-  --muted-foreground: 215.4 16.3% 46.9%;
+  --muted: 220 16% 94%;
+  --muted-foreground: 220 9% 46%;
 
-  --accent: 210 40% 96%;
-  --accent-foreground: 222 47% 11%;
+  --accent: 220 16% 94%;
+  --accent-foreground: 222 39% 14%;
 
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 40% 98%;
 
   --chart-1: 160 84% 39%; /* Emerald */
-  --chart-2: 222 47% 11%; /* Navy */
+  --chart-2: 213 94% 48%; /* Modern Blue */
   --chart-3: 43 74% 66%; /* Gold */
   --chart-4: 199 89% 48%; /* Sky */
   --chart-5: 280 65% 60%; /* Purple */

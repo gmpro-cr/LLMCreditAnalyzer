@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
+import Landing from "@/pages/landing";
 
 import Dashboard from "@/pages/dashboard";
 import CasesList from "@/pages/cases/index";
@@ -27,27 +28,31 @@ const queryClient = new QueryClient({
 function Router() {
   const { isAuthenticated } = useAuth();
 
+  if (!isAuthenticated) {
+    return (
+      <Switch>
+        <Route path="/login" component={Login} />
+        <Route path="/" component={Landing} />
+        <Route><Redirect to="/login" /></Route>
+      </Switch>
+    );
+  }
+
   return (
     <Switch>
-      <Route path="/login">
-        {isAuthenticated ? <Redirect to="/" /> : <Login />}
-      </Route>
+      <Route path="/login"><Redirect to="/" /></Route>
       <Route>
-        {isAuthenticated ? (
-          <AppLayout>
-            <Switch>
-              <Route path="/" component={Dashboard} />
-              <Route path="/cases" component={CasesList} />
-              <Route path="/cases/new" component={NewCase} />
-              <Route path="/cases/:id" component={CaseDetail} />
-              <Route path="/cases/:id/risks" component={CaseRisks} />
-              <Route path="/bank-statement" component={BankStatement} />
-              <Route component={NotFound} />
-            </Switch>
-          </AppLayout>
-        ) : (
-          <Redirect to="/login" />
-        )}
+        <AppLayout>
+          <Switch>
+            <Route path="/" component={Dashboard} />
+            <Route path="/cases" component={CasesList} />
+            <Route path="/cases/new" component={NewCase} />
+            <Route path="/cases/:id" component={CaseDetail} />
+            <Route path="/cases/:id/risks" component={CaseRisks} />
+            <Route path="/bank-statement" component={BankStatement} />
+            <Route component={NotFound} />
+          </Switch>
+        </AppLayout>
       </Route>
     </Switch>
   );
