@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { PiPiCalculatorLightLight, PiWarningLight, PiCheckCircleLight } from "react-icons/pi";
+import { PiCalculatorLight, PiWarningLight, PiCheckCircleLight } from "react-icons/pi";
 
 interface DPRow {
   label: string;

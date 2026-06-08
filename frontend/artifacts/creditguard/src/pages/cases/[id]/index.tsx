@@ -16,20 +16,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import DataRoomTab from "./DataRoomTab";
 import DrawingPowerCalculator from "./DrawingPowerCalculator";
 import {
-  PiPiArrowLeftLightLight,
+  PiArrowLeftLight,
   PiCheckCircleLight,
   PiWarningLight,
-  PiPiClockLightLight,
-  PiPiFileTextLightLight,
+  PiClockLight,
+  PiFileTextLight,
   PiLockLight,
   PiLockOpenLight,
   PiShieldWarningLight,
   PiCaretRightLight,
   PiEyeLight,
   PiDotsThreeVerticalLight,
-  PiPiDownloadSimpleLightSimpleLight,
+  PiDownloadSimpleLight,
   PiSparkleLight,
-  PiArrowPiClockLightwiseLight,
+  PiArrowClockwiseLight,
   PiSpinnerLight,
 } from "react-icons/pi";
 import { Button } from "@/components/ui/button";
@@ -210,8 +210,10 @@ export default function CaseDetail() {
       await queryClient.invalidateQueries({ queryKey: getGetCaseQueryKey(id) });
       toast({ title: "Memo generated", description: "All sections have been drafted by AI." });
     } catch (e) {
-      const msg = (e && typeof e === "object" && "data" in e && (e as {data?: {error?: string}}).data?.error)
-        || (e instanceof Error ? e.message : "Could not reach the AI service. Try again.");
+      const msg: string = String(
+        (e && typeof e === "object" && "data" in e && (e as {data?: {error?: string}}).data?.error)
+        || (e instanceof Error ? e.message : "Could not reach the AI service. Try again.")
+      );
       toast({ title: "Generation failed", description: msg, variant: "destructive" });
     } finally {
       setGenerating(false);

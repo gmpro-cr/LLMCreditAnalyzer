@@ -7,12 +7,12 @@ import {
   RiskFlag
 } from "@workspace/api-client-react";
 import {
-  PiPiArrowLeftLightLight,
+  PiArrowLeftLight,
   PiWarningLight,
   PiShieldWarningLight,
-  PiPiShieldCheckLightLight,
+  PiShieldCheckLight,
   PiCaretRightLight,
-  PiPiInfoLightLight,
+  PiInfoLight,
 } from "react-icons/pi";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

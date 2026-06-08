@@ -5,20 +5,20 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   PiSparkleLight,
-  PiPiArrowLeftLightLight,
+  PiArrowLeftLight,
   PiBuildingsLight,
-  PiPiUserCircleLightLight,
-  PiPiBriefcaseLightLight,
+  PiUserCircleLight,
+  PiBriefcaseLight,
   PiFileTextLight,
   PiMagnifyingGlassLight,
-  PiPiGlobeLightLight,
+  PiGlobeLight,
   PiTrendUpLight,
   PiChartBarLight,
   PiCheckCircleLight,
   PiSpinnerLight,
   PiXLight,
   PiCaretRightLight,
-  PiPiDatabaseLightLight,
+  PiDatabaseLight,
 } from "react-icons/pi";
 import {
   useCreateCase,

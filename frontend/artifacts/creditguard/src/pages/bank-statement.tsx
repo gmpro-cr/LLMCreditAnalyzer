@@ -1,15 +1,15 @@
 import { useState } from "react";
 import {
-  PiPiUploadSimpleLightSimpleLight,
+  PiUploadSimpleLight,
   PiFileLight,
   PiSpinnerLight,
   PiWarningLight,
   PiTrendUpLight,
   PiTrendDownLight,
-  PiPiWalletLightLight,
+  PiWalletLight,
   PiPulseLight,
   PiShieldWarningLight,
-  PiPiShieldCheckLightLight,
+  PiShieldCheckLight,
   PiCheckCircleLight,
   PiCalendarBlankLight,
   PiFileArrowDownLight,
