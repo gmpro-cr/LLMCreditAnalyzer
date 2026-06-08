@@ -16,6 +16,18 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 
 const PYTHON_URL = () => process.env.PYTHON_SERVICE_URL || "http://localhost:8001";
 
+async function awaitPython(url: string, maxMs = 30_000): Promise<boolean> {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    try {
+      const ping = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3_000) });
+      if (ping.ok) return true;
+    } catch { /* still waking */ }
+    await new Promise(r => setTimeout(r, 2_000));
+  }
+  return false;
+}
+
 // ── GET /api/cases/:id/data-room ───────────────────────────────────────────
 router.get("/:id/data-room", async (req, res) => {
   const id = Number(req.params.id);
@@ -50,6 +62,10 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
   if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
   const { symbol, companyName } = req.body;
   if (!symbol) return res.status(400).json({ error: "symbol is required" });
+
+  if (!await awaitPython(PYTHON_URL())) {
+    return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds." });
+  }
 
   let pyRes: Response;
   try {
@@ -99,6 +115,10 @@ router.post("/:id/data-room/run-research", async (req, res) => {
   if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
   const c = await getCase(id).catch(() => null);
   if (!c) return res.status(404).json({ error: "Case not found" });
+
+  if (!await awaitPython(PYTHON_URL())) {
+    return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds." });
+  }
 
   let pyRes: Response;
   try {

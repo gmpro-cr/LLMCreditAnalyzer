@@ -54,6 +54,16 @@ function StatusBadge({ status }: { status: "ok" | "missing" | "optional" }) {
   return <Badge variant="outline" className="text-muted-foreground">Optional</Badge>;
 }
 
+function extractApiError(e: unknown, fallback: string): string {
+  if (e && typeof e === "object") {
+    const d = (e as { data?: { error?: string } }).data;
+    if (d?.error) return d.error;
+    const m = (e as { message?: string }).message;
+    if (m) return m;
+  }
+  return fallback;
+}
+
 // ── FileUploadZone ─────────────────────────────────────────────────────────
 
 function FileUploadZone({
@@ -134,8 +144,8 @@ function FinancialsPanel({ caseId, companyName, documents, onRefresh }: {
       toast({ title: `${res.reportsFound} report(s) fetched`, description: "Financials extracted and saved." });
       setSuggestedTicker("");
       onRefresh();
-    } catch {
-      toast({ title: "Fetch failed", description: "Could not find annual reports. Try uploading manually.", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Fetch failed", description: extractApiError(e, "Could not find annual reports. Try uploading manually."), variant: "destructive" });
     }
   };
 
@@ -238,8 +248,8 @@ function ResearchPanel({ caseId, extractedData, onRefresh }: {
       const res = await runResearch.mutateAsync({ caseId });
       toast({ title: "Research complete", description: `${res.newItems} new findings added.` });
       onRefresh();
-    } catch {
-      toast({ title: "Research failed", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Research failed", description: extractApiError(e, "Research service unavailable. Try again in 30 seconds."), variant: "destructive" });
     }
   };
 
