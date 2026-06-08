@@ -30,8 +30,11 @@ router.get("/:id/data-room", async (req, res) => {
       docs.some((d: Record<string, unknown>) => d.doc_type === "annual_report"),
       !!(extracted?.research && (extracted.research as unknown[]).length > 0),
       !!(extracted?.peers && (extracted.peers as unknown[]).length > 0),
+      docs.some((d: Record<string, unknown>) => d.doc_type === "shareholding"),
+      docs.some((d: Record<string, unknown>) => d.doc_type === "rating_report"),
       docs.some((d: Record<string, unknown>) => d.doc_type === "organogram"),
       docs.some((d: Record<string, unknown>) => d.doc_type === "security"),
+      docs.some((d: Record<string, unknown>) => d.doc_type === "industry_report"),
     ];
     const completeness = Math.round((checks.filter(Boolean).length / checks.length) * 100);
 

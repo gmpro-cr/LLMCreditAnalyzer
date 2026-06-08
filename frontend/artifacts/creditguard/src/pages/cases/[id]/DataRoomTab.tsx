@@ -5,7 +5,7 @@ import {
   useGetPeers,
   useFetchAnnualReports,
   useRunResearch,
-  usePiUploadSimpleLightDocument,
+  useUploadDocument,
   useDeleteDocument,
   useUpdatePeers,
   useSaveOrganogramTree,
@@ -25,9 +25,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import {
-  PiPiFileTextLightLight, PiTrashLight, PiPiUploadSimpleLightSimpleLight, PiMagnifyingGlassLight, PiArrowClockwiseLight,
-  PiSpinnerLight, PiBuildingsLight, PiPiNewspaperLightLight, PiPiFolderOpenLightLight, PiCheckCircleLight,
-  PiWarningCircleLight, PiPlusLight, PiXLight,
+  PiFileTextLight,
+  PiTrashLight,
+  PiUploadSimpleLight,
+  PiMagnifyingGlassLight,
+  PiArrowClockwiseLight,
+  PiSpinnerLight,
+  PiBuildingsLight,
+  PiNewspaperLight,
+  PiFolderOpenLight,
+  PiCheckCircleLight,
+  PiWarningCircleLight,
+  PiPlusLight,
+  PiXLight,
+  PiChartPieLight,
+  PiStarLight,
+  PiGlobeLight,
+  PiReceiptLight,
+  PiScrollLight,
+  PiShieldCheckLight,
 } from "react-icons/pi";
 
 // ── StatusBadge ────────────────────────────────────────────────────────────
@@ -38,26 +54,26 @@ function StatusBadge({ status }: { status: "ok" | "missing" | "optional" }) {
   return <Badge variant="outline" className="text-muted-foreground">Optional</Badge>;
 }
 
-// ── FilePiUploadSimpleLightZone ─────────────────────────────────────────────────────────
+// ── FileUploadZone ─────────────────────────────────────────────────────────
 
-function FilePiUploadSimpleLightZone({
-  caseId, docType, label, accept, companyName, onPiUploadSimpleLighted,
+function FileUploadZone({
+  caseId, docType, label, accept, companyName, onUploaded,
 }: {
   caseId: number; docType: string; label: string; accept?: string;
-  companyName?: string; onPiUploadSimpleLighted: () => void;
+  companyName?: string; onUploaded: () => void;
 }) {
   const [dragging, setDragging] = useState(false);
   const [fiscalYear, setFiscalYear] = useState("");
-  const uploadDoc = usePiUploadSimpleLightDocument();
+  const uploadDoc = useUploadDocument();
   const { toast } = useToast();
 
   const handleFile = async (file: File) => {
     try {
       await uploadDoc.mutateAsync({ caseId, file, docType, fiscalYear: fiscalYear || undefined, companyName });
-      toast({ title: "PiUploadSimpleLighted", description: `${file.name} uploaded and extracted.` });
-      onPiUploadSimpleLighted();
+      toast({ title: "Uploaded", description: `${file.name} uploaded and extracted.` });
+      onUploaded();
     } catch {
-      toast({ title: "PiUploadSimpleLight failed", variant: "destructive" });
+      toast({ title: "Upload failed", variant: "destructive" });
     }
   };
 
@@ -68,7 +84,7 @@ function FilePiUploadSimpleLightZone({
           onChange={e => setFiscalYear(e.target.value)} className="h-8 text-sm w-40" />
       )}
       <label
-        className={`flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 cursor-pointer transition-colors ${dragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted/30"}`}
+        className={`flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-4 cursor-pointer transition-colors ${dragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted/30"}`}
         onDragOver={e => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
@@ -76,9 +92,9 @@ function FilePiUploadSimpleLightZone({
         <input type="file" className="hidden" accept={accept || ".pdf,.xlsx,.xls,.png,.jpg,.jpeg"}
           onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
         {uploadDoc.isPending ? (
-          <><PiSpinnerLight className="h-6 w-6 animate-spin text-primary mb-2" /><span className="text-sm text-muted-foreground">PiUploadSimpleLighting & extracting…</span></>
+          <><PiSpinnerLight className="h-5 w-5 animate-spin text-primary mb-1.5" /><span className="text-sm text-muted-foreground">Uploading & extracting…</span></>
         ) : (
-          <><PiUploadSimpleLight className="h-6 w-6 text-muted-foreground mb-2" /><span className="text-sm font-medium">{label}</span><span className="text-xs text-muted-foreground mt-1">Drop file here or click to browse</span></>
+          <><PiUploadSimpleLight className="h-5 w-5 text-muted-foreground mb-1.5" /><span className="text-sm font-medium">{label}</span><span className="text-xs text-muted-foreground mt-0.5">Drop file here or click to browse</span></>
         )}
       </label>
     </div>
@@ -98,7 +114,6 @@ function FinancialsPanel({ caseId, companyName, documents, onRefresh }: {
 
   const annualReports = documents.filter(d => d.doc_type === "annual_report");
 
-  // Auto-search for BSE/NSE ticker on mount when no reports exist
   useEffect(() => {
     if (annualReports.length > 0 || !companyName) return;
     searchCompanies({ q: companyName })
@@ -126,7 +141,6 @@ function FinancialsPanel({ caseId, companyName, documents, onRefresh }: {
 
   return (
     <div className="space-y-4">
-      {/* Auto-fetch banner when no reports and ticker detected */}
       {annualReports.length === 0 && suggestedTicker && !fetchReports.isPending && (
         <div className="flex items-start gap-3 p-4 bg-primary/5 border border-primary/20 rounded-lg">
           <PiBuildingsLight className="h-5 w-5 text-primary shrink-0 mt-0.5" />
@@ -196,8 +210,8 @@ function FinancialsPanel({ caseId, companyName, documents, onRefresh }: {
 
       <div className="pt-2 border-t space-y-3">
         <p className="text-sm text-muted-foreground">Or upload PDFs/Excel manually:</p>
-        <FilePiUploadSimpleLightZone caseId={caseId} docType="annual_report" label="PiUploadSimpleLight Annual Report PDF" accept=".pdf" companyName={companyName} onPiUploadSimpleLighted={onRefresh} />
-        <FilePiUploadSimpleLightZone caseId={caseId} docType="cma" label="PiUploadSimpleLight CMA Data (Excel)" accept=".xlsx,.xls" companyName={companyName} onPiUploadSimpleLighted={onRefresh} />
+        <FileUploadZone caseId={caseId} docType="annual_report" label="Upload Annual Report PDF" accept=".pdf" companyName={companyName} onUploaded={onRefresh} />
+        <FileUploadZone caseId={caseId} docType="cma" label="Upload CMA Data (Excel)" accept=".xlsx,.xls" companyName={companyName} onUploaded={onRefresh} />
       </div>
     </div>
   );
@@ -269,7 +283,7 @@ function ResearchPanel({ caseId, extractedData, onRefresh }: {
             ? <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" /> Running research…</>
             : <><PiArrowClockwiseLight className="mr-2 h-4 w-4" /> Run Research</>}
         </Button>
-        <p className="text-xs text-muted-foreground mt-2">PiMagnifyingGlassLightes news, credit ratings, regulatory filings, and promoter records. Re-running appends new findings — old ones are never deleted.</p>
+        <p className="text-xs text-muted-foreground mt-2">Searches news, credit ratings, regulatory filings, and promoter records. Re-running appends new findings — old ones are never deleted.</p>
       </div>
 
       {research.length > 0 && (
@@ -318,18 +332,22 @@ function ResearchPanel({ caseId, extractedData, onRefresh }: {
   );
 }
 
-// ── DocumentsPanel ─────────────────────────────────────────────────────────
+// ── DocList ─────────────────────────────────────────────────────────────────
 
 function DocList({ docs, caseId, onRefresh }: { docs: CaseDocument[]; caseId: number; onRefresh: () => void }) {
   const deleteDoc = useDeleteDocument();
   const { toast } = useToast();
   if (docs.length === 0) return null;
   return (
-    <div className="space-y-2 mt-2">
+    <div className="space-y-1.5 mt-2">
       {docs.map(doc => (
-        <div key={doc.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border text-sm">
-          <span className="truncate">{doc.filename}</span>
-          <Button size="sm" variant="ghost" className="text-destructive shrink-0"
+        <div key={doc.id} className="flex items-center justify-between p-2.5 bg-muted/30 rounded-md border text-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            <PiFileTextLight className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="truncate">{doc.filename}</span>
+            {doc.extracted_data && <span className="text-xs text-emerald-600 shrink-0">✓ Extracted</span>}
+          </div>
+          <Button size="sm" variant="ghost" className="text-destructive shrink-0 h-7 w-7 p-0"
             disabled={deleteDoc.isPending}
             onClick={async () => {
               try {
@@ -339,13 +357,25 @@ function DocList({ docs, caseId, onRefresh }: { docs: CaseDocument[]; caseId: nu
                 toast({ title: "Delete failed", variant: "destructive" });
               }
             }}>
-            <PiTrashLight className="h-4 w-4" />
+            <PiTrashLight className="h-3.5 w-3.5" />
           </Button>
         </div>
       ))}
     </div>
   );
 }
+
+// ── Section divider ────────────────────────────────────────────────────────
+
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground border-b pb-1.5 mb-4 mt-2">
+      {label}
+    </p>
+  );
+}
+
+// ── DocumentsPanel ─────────────────────────────────────────────────────────
 
 function DocumentsPanel({ caseId, companyName, documents, onRefresh }: {
   caseId: number; companyName: string; documents: CaseDocument[]; onRefresh: () => void;
@@ -354,9 +384,7 @@ function DocumentsPanel({ caseId, companyName, documents, onRefresh }: {
   const saveTree = useSaveOrganogramTree();
   const { toast } = useToast();
 
-  const organogramDocs = documents.filter(d => d.doc_type === "organogram");
-  const securityDocs = documents.filter(d => d.doc_type === "security");
-  const kycDocs = documents.filter(d => d.doc_type === "kyc");
+  const byType = (type: string) => documents.filter(d => d.doc_type === type);
 
   const handleSaveTree = async () => {
     try {
@@ -369,15 +397,69 @@ function DocumentsPanel({ caseId, companyName, documents, onRefresh }: {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+
+      {/* ── Corporate & Compliance ─────────────────────────────────────── */}
+      <SectionLabel label="Corporate & Compliance" />
+
       <div>
-        <h4 className="text-sm font-semibold mb-3">Group Organogram</h4>
-        <FilePiUploadSimpleLightZone caseId={caseId} docType="organogram" label="PiUploadSimpleLight Organogram (PDF or Image)" accept=".pdf,.png,.jpg,.jpeg" companyName={companyName} onPiUploadSimpleLighted={onRefresh} />
-        <DocList docs={organogramDocs} caseId={caseId} onRefresh={onRefresh} />
-        <div className="mt-3">
-          <p className="text-xs text-muted-foreground mb-1">Or describe the group structure manually:</p>
-          <Textarea placeholder="Parent: ABC Holdings (100%) → Subsidiary: XYZ Ltd (51%), Associate: PQR Co (26%)…"
-            value={manualTree} onChange={e => setManualTree(e.target.value)} className="min-h-[100px] text-sm" />
+        <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+          <PiChartPieLight className="h-4 w-4 text-primary" /> Shareholding Pattern
+        </h4>
+        <FileUploadZone caseId={caseId} docType="shareholding" label="Upload Shareholding Pattern (PDF or Excel)" accept=".pdf,.xlsx,.xls" companyName={companyName} onUploaded={onRefresh} />
+        <DocList docs={byType("shareholding")} caseId={caseId} onRefresh={onRefresh} />
+      </div>
+
+      <div>
+        <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+          <PiStarLight className="h-4 w-4 text-amber-500" /> Credit Rating Reports
+          <span className="text-xs text-muted-foreground font-normal">(CRISIL / ICRA / CARE / India Ratings)</span>
+        </h4>
+        <FileUploadZone caseId={caseId} docType="rating_report" label="Upload Rating Report (PDF)" accept=".pdf" companyName={companyName} onUploaded={onRefresh} />
+        <DocList docs={byType("rating_report")} caseId={caseId} onRefresh={onRefresh} />
+      </div>
+
+      <div>
+        <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+          <PiScrollLight className="h-4 w-4 text-muted-foreground" /> MOA / AOA
+        </h4>
+        <FileUploadZone caseId={caseId} docType="moa_aoa" label="Upload MOA / AOA (PDF)" accept=".pdf" companyName={companyName} onUploaded={onRefresh} />
+        <DocList docs={byType("moa_aoa")} caseId={caseId} onRefresh={onRefresh} />
+      </div>
+
+      {/* ── Industry & Market ──────────────────────────────────────────── */}
+      <SectionLabel label="Industry & Market" />
+
+      <div>
+        <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+          <PiGlobeLight className="h-4 w-4 text-blue-500" /> Industry Analysis Report
+        </h4>
+        <FileUploadZone caseId={caseId} docType="industry_report" label="Upload Industry / Sector Report (PDF)" accept=".pdf" companyName={companyName} onUploaded={onRefresh} />
+        <DocList docs={byType("industry_report")} caseId={caseId} onRefresh={onRefresh} />
+      </div>
+
+      {/* ── Financials & Tax ───────────────────────────────────────────── */}
+      <SectionLabel label="Financials & Tax" />
+
+      <div>
+        <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+          <PiReceiptLight className="h-4 w-4 text-muted-foreground" /> GST Returns / ITR
+        </h4>
+        <FileUploadZone caseId={caseId} docType="gst_itr" label="Upload GST Returns or ITR (PDF / Excel)" accept=".pdf,.xlsx,.xls" companyName={companyName} onUploaded={onRefresh} />
+        <DocList docs={byType("gst_itr")} caseId={caseId} onRefresh={onRefresh} />
+      </div>
+
+      {/* ── Legal & Security ───────────────────────────────────────────── */}
+      <SectionLabel label="Legal & Security" />
+
+      <div>
+        <h4 className="text-sm font-semibold mb-2">Group Organogram</h4>
+        <FileUploadZone caseId={caseId} docType="organogram" label="Upload Organogram (PDF or Image)" accept=".pdf,.png,.jpg,.jpeg" companyName={companyName} onUploaded={onRefresh} />
+        <DocList docs={byType("organogram")} caseId={caseId} onRefresh={onRefresh} />
+        <div className="mt-2">
+          <p className="text-xs text-muted-foreground mb-1">Or describe group structure manually:</p>
+          <Textarea placeholder="Parent: ABC Holdings (100%) → Subsidiary: XYZ Ltd (51%)…"
+            value={manualTree} onChange={e => setManualTree(e.target.value)} className="min-h-[80px] text-sm" />
           <Button size="sm" className="mt-2" onClick={handleSaveTree} disabled={!manualTree.trim() || saveTree.isPending}>
             {saveTree.isPending ? <PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" /> : null}Save Structure
           </Button>
@@ -385,15 +467,36 @@ function DocumentsPanel({ caseId, companyName, documents, onRefresh }: {
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold mb-3">Security Documents</h4>
-        <FilePiUploadSimpleLightZone caseId={caseId} docType="security" label="PiUploadSimpleLight Valuation Report / Charge Document" accept=".pdf" companyName={companyName} onPiUploadSimpleLighted={onRefresh} />
-        <DocList docs={securityDocs} caseId={caseId} onRefresh={onRefresh} />
+        <h4 className="text-sm font-semibold mb-2">Security Documents</h4>
+        <FileUploadZone caseId={caseId} docType="security" label="Upload Valuation Report / Charge Document (PDF)" accept=".pdf" companyName={companyName} onUploaded={onRefresh} />
+        <DocList docs={byType("security")} caseId={caseId} onRefresh={onRefresh} />
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold mb-1">KYC / Promoter Docs <span className="text-xs text-muted-foreground font-normal">(optional)</span></h4>
-        <FilePiUploadSimpleLightZone caseId={caseId} docType="kyc" label="PiUploadSimpleLight PAN / Promoter CV (optional)" accept=".pdf,.png,.jpg" companyName={companyName} onPiUploadSimpleLighted={onRefresh} />
-        <DocList docs={kycDocs} caseId={caseId} onRefresh={onRefresh} />
+        <h4 className="text-sm font-semibold mb-2">
+          Previous Sanction Letters
+          <span className="text-xs text-muted-foreground font-normal ml-1.5">(from other banks)</span>
+        </h4>
+        <FileUploadZone caseId={caseId} docType="sanction_letter" label="Upload Previous Sanction Letter (PDF)" accept=".pdf" companyName={companyName} onUploaded={onRefresh} />
+        <DocList docs={byType("sanction_letter")} caseId={caseId} onRefresh={onRefresh} />
+      </div>
+
+      <div>
+        <h4 className="text-sm font-semibold mb-2">CA Certificate / Stock Audit</h4>
+        <FileUploadZone caseId={caseId} docType="ca_certificate" label="Upload CA Certificate or Stock Audit Report (PDF)" accept=".pdf" companyName={companyName} onUploaded={onRefresh} />
+        <DocList docs={byType("ca_certificate")} caseId={caseId} onRefresh={onRefresh} />
+      </div>
+
+      {/* ── KYC ───────────────────────────────────────────────────────── */}
+      <SectionLabel label="KYC" />
+
+      <div>
+        <h4 className="text-sm font-semibold mb-1">
+          KYC / Promoter Docs
+          <span className="text-xs text-muted-foreground font-normal ml-1.5">(optional)</span>
+        </h4>
+        <FileUploadZone caseId={caseId} docType="kyc" label="Upload PAN / Promoter CV (optional)" accept=".pdf,.png,.jpg" companyName={companyName} onUploaded={onRefresh} />
+        <DocList docs={byType("kyc")} caseId={caseId} onRefresh={onRefresh} />
       </div>
     </div>
   );
@@ -411,21 +514,25 @@ function SummaryPanel({ completeness, documents, extractedData }: {
     { label: "Annual Reports", status: documents.some(d => d.doc_type === "annual_report") ? "ok" : "missing", detail: documents.filter(d => d.doc_type === "annual_report").map(d => d.fiscal_year || d.filename).join(", ") || "Not fetched" },
     { label: "Research & News", status: (extractedData?.research?.length || 0) > 0 ? "ok" : "missing", detail: `${extractedData?.research?.length || 0} finding(s)` },
     { label: "Peer Companies", status: confirmedPeers.length > 0 ? "ok" : "missing", detail: confirmedPeers.map(p => p.name).join(", ") || "None confirmed" },
-    { label: "Group Organogram", status: documents.some(d => d.doc_type === "organogram") || extractedData?.organogram ? "ok" : "missing", detail: documents.some(d => d.doc_type === "organogram") ? "PiUploadSimpleLighted" : extractedData?.organogram ? "Manual entry" : "Not provided" },
+    { label: "Shareholding Pattern", status: documents.some(d => d.doc_type === "shareholding") ? "ok" : "missing", detail: documents.some(d => d.doc_type === "shareholding") ? "Uploaded" : "Not provided" },
+    { label: "Credit Rating Report", status: documents.some(d => d.doc_type === "rating_report") ? "ok" : "optional", detail: documents.some(d => d.doc_type === "rating_report") ? `${documents.filter(d => d.doc_type === "rating_report").length} report(s)` : "Not uploaded" },
+    { label: "Industry Analysis", status: documents.some(d => d.doc_type === "industry_report") ? "ok" : "optional", detail: documents.some(d => d.doc_type === "industry_report") ? "Uploaded" : "Not uploaded" },
+    { label: "GST Returns / ITR", status: documents.some(d => d.doc_type === "gst_itr") ? "ok" : "optional", detail: documents.some(d => d.doc_type === "gst_itr") ? "Uploaded" : "Not uploaded" },
+    { label: "Group Organogram", status: documents.some(d => d.doc_type === "organogram") || extractedData?.organogram ? "ok" : "missing", detail: documents.some(d => d.doc_type === "organogram") ? "Uploaded" : extractedData?.organogram ? "Manual entry" : "Not provided" },
     { label: "Security Documents", status: documents.some(d => d.doc_type === "security") ? "ok" : "optional", detail: `${documents.filter(d => d.doc_type === "security").length} doc(s)` },
-    { label: "KYC / Promoter Docs", status: "optional" as const, detail: documents.some(d => d.doc_type === "kyc") ? "PiUploadSimpleLighted" : "Not uploaded" },
+    { label: "KYC / Promoter Docs", status: "optional" as const, detail: documents.some(d => d.doc_type === "kyc") ? "Uploaded" : "Not uploaded" },
   ];
 
   return (
     <div className="space-y-4">
       <div>
-        <div className="flex justify-between text-sm font-medium mb-2"><span>Data Completeness</span><span>{completeness}%</span></div>
-        <Progress value={completeness} className="h-3" />
+        <div className="flex justify-between text-sm font-medium mb-2"><span>Data completeness</span><span>{completeness}%</span></div>
+        <Progress value={completeness} className="h-2.5" />
         <p className="text-xs text-muted-foreground mt-1">Higher completeness = richer AI-generated CAM sections</p>
       </div>
       <div className="divide-y">
         {rows.map(row => (
-          <div key={row.label} className="py-3 flex items-center justify-between">
+          <div key={row.label} className="py-2.5 flex items-center justify-between">
             <div><p className="text-sm font-medium">{row.label}</p><p className="text-xs text-muted-foreground">{row.detail}</p></div>
             <StatusBadge status={row.status as "ok" | "missing" | "optional"} />
           </div>
@@ -467,13 +574,18 @@ export default function DataRoomTab({ caseId, companyName }: { caseId: number; c
 
   return (
     <div className="flex h-full">
-      <div className="w-48 shrink-0 border-r bg-muted/10 p-3 space-y-1">
+      <div className="w-52 shrink-0 border-r bg-muted/10 p-3 space-y-1">
         {panels.map(p => (
           <button key={p.key} onClick={() => setActivePanel(p.key)}
             className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors text-left ${activePanel === p.key ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}>
             <p.icon className="h-4 w-4 shrink-0" />{p.label}
           </button>
         ))}
+        {documents.length > 0 && (
+          <div className="pt-3 px-3 border-t mt-3">
+            <p className="text-xs text-muted-foreground">{documents.length} document{documents.length !== 1 ? "s" : ""} in room</p>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
