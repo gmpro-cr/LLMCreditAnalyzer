@@ -8,16 +8,16 @@ import {
   CaseStatus
 } from "@workspace/api-client-react";
 import {
-  Search,
-  Filter,
-  MoreHorizontal,
-  FileText,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  Trash2,
-} from "lucide-react";
+  PiMagnifyingGlassLight,
+  PiFunnelLight,
+  PiDotsThreeLight,
+  PiFileTextLight,
+  PiClockLight,
+  PiCheckCircleLight,
+  PiXCircleLight,
+  PiWarningCircleLight,
+  PiTrashLight,
+} from "react-icons/pi";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -94,14 +94,14 @@ export default function CasesList() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'approved':
-        return <Badge className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/20"><CheckCircle2 className="mr-1 h-3 w-3" /> Approved</Badge>;
+        return <Badge className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/20"><PiCheckCircleLight className="mr-1 h-3 w-3" /> Approved</Badge>;
       case 'rejected':
-        return <Badge className="bg-red-500/10 text-red-600 hover:bg-red-500/20 border-red-500/20"><XCircle className="mr-1 h-3 w-3" /> Rejected</Badge>;
+        return <Badge className="bg-red-500/10 text-red-600 hover:bg-red-500/20 border-red-500/20"><PiXCircleLight className="mr-1 h-3 w-3" /> Rejected</Badge>;
       case 'in_review':
-        return <Badge className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 border-amber-500/20"><AlertCircle className="mr-1 h-3 w-3" /> In Review</Badge>;
+        return <Badge className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 border-amber-500/20"><PiWarningCircleLight className="mr-1 h-3 w-3" /> In Review</Badge>;
       case 'draft':
       default:
-        return <Badge className="bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-500/20"><Clock className="mr-1 h-3 w-3" /> Draft</Badge>;
+        return <Badge className="bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-500/20"><PiClockLight className="mr-1 h-3 w-3" /> Draft</Badge>;
     }
   };
 
@@ -114,18 +114,18 @@ export default function CasesList() {
       <div className="p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 h-full flex flex-col">
         <div className="flex items-center justify-between shrink-0">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Cases</h1>
+            <h1 className="text-3xl tracking-[-0.02em]">Cases</h1>
             <p className="text-muted-foreground mt-1">Manage and track credit appraisal memorandums.</p>
           </div>
           <Button onClick={() => setLocation("/cases/new")}>
-            <FileText className="mr-2 h-4 w-4" />
+            <PiFileTextLight className="mr-2 h-4 w-4" />
             New CAM Request
           </Button>
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-4 shrink-0">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <PiMagnifyingGlassLight className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search by borrower, RM name or PAN..."
               className="pl-9"
@@ -136,7 +136,7 @@ export default function CasesList() {
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <Select value={statusFilter} onValueChange={handleStatusChange}>
               <SelectTrigger className="w-[180px]">
-                <Filter className="mr-2 h-4 w-4" />
+                <PiFunnelLight className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
               <SelectContent>
@@ -221,7 +221,7 @@ export default function CasesList() {
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
                               <span className="sr-only">Open menu</span>
-                              <MoreHorizontal className="h-4 w-4" />
+                              <PiDotsThreeLight className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-[160px]">
@@ -241,7 +241,7 @@ export default function CasesList() {
                               className="text-destructive focus:text-destructive"
                               onClick={() => { setDeleteConfirmId(c.id); setDeleteConfirmName(c.borrowerName); }}
                             >
-                              <Trash2 className="mr-2 h-4 w-4" /> Delete
+                              <PiTrashLight className="mr-2 h-4 w-4" /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -252,7 +252,7 @@ export default function CasesList() {
                   <tr>
                     <td colSpan={8} className="h-48 text-center text-muted-foreground">
                       <div className="flex flex-col items-center justify-center gap-3">
-                        <FileText className="h-10 w-10 opacity-20" />
+                        <PiFileTextLight className="h-10 w-10 opacity-20" />
                         {(debouncedSearch || statusFilter !== "all") ? (
                           <>
                             <p className="text-sm">No cases match your filters.</p>
@@ -267,7 +267,7 @@ export default function CasesList() {
                               <p className="text-xs mt-1">Create your first credit appraisal memorandum to get started.</p>
                             </div>
                             <Button size="sm" onClick={() => setLocation("/cases/new")}>
-                              <FileText className="mr-2 h-4 w-4" /> New CAM Request
+                              <PiFileTextLight className="mr-2 h-4 w-4" /> New CAM Request
                             </Button>
                           </>
                         )}

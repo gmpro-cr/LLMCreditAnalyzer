@@ -6,14 +6,14 @@ import {
   getListRiskFlagsQueryKey,
   RiskFlag
 } from "@workspace/api-client-react";
-import { 
-  ArrowLeft, 
-  AlertTriangle,
-  ShieldAlert,
-  ShieldCheck,
-  ChevronRight,
-  Info
-} from "lucide-react";
+import {
+  PiPiArrowLeftLightLight,
+  PiWarningLight,
+  PiShieldWarningLight,
+  PiPiShieldCheckLightLight,
+  PiCaretRightLight,
+  PiPiInfoLightLight,
+} from "react-icons/pi";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -55,7 +55,7 @@ export default function CaseRisks() {
   const getSeverityBadge = (severity: string) => {
     switch (severity) {
       case 'high':
-        return <Badge className="bg-red-500 text-white hover:bg-red-600"><AlertTriangle className="mr-1 h-3 w-3" /> High Risk</Badge>;
+        return <Badge className="bg-red-500 text-white hover:bg-red-600"><PiWarningLight className="mr-1 h-3 w-3" /> High Risk</Badge>;
       case 'medium':
         return <Badge className="bg-amber-500 text-white hover:bg-amber-600">Medium Risk</Badge>;
       case 'low':
@@ -71,20 +71,20 @@ export default function CaseRisks() {
       <div className="bg-background border-b px-8 py-5 shrink-0 sticky top-0 z-20">
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
           <Link href="/cases" className="hover:text-foreground transition-colors flex items-center gap-1">
-            <ArrowLeft className="h-3 w-3" /> Cases
+            <PiArrowLeftLight className="h-3 w-3" /> Cases
           </Link>
-          <ChevronRight className="h-3 w-3" />
+          <PiCaretRightLight className="h-3 w-3" />
           <Link href={`/cases/${id}`} className="hover:text-foreground transition-colors">
             {caseData?.borrowerName || "Loading..."}
           </Link>
-          <ChevronRight className="h-3 w-3" />
+          <PiCaretRightLight className="h-3 w-3" />
           <span className="text-foreground font-medium">Risk Review</span>
         </div>
 
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-3">
-              <ShieldAlert className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl tracking-[-0.02em] text-foreground flex items-center gap-3">
+              <PiShieldWarningLight className="h-6 w-6 text-primary" />
               Risk Review Board
             </h1>
             <p className="text-muted-foreground mt-1">
@@ -171,7 +171,7 @@ export default function CaseRisks() {
                           </div>
                           {isAcknowledged && (
                             <Badge variant="outline" className="bg-emerald-100 text-emerald-700 border-emerald-200">
-                              <ShieldCheck className="h-3 w-3 mr-1" /> Mitigated
+                              <PiShieldCheckLight className="h-3 w-3 mr-1" /> Mitigated
                             </Badge>
                           )}
                         </div>
@@ -179,7 +179,7 @@ export default function CaseRisks() {
                       <CardContent className="pt-4 grid md:grid-cols-2 gap-6">
                         <div>
                           <h4 className="text-sm font-semibold mb-2 text-muted-foreground flex items-center gap-1.5">
-                            <Info className="h-4 w-4" /> Risk Description
+                            <PiInfoLight className="h-4 w-4" /> Risk Description
                           </h4>
                           <MarkdownView content={risk.description} className="text-sm" />
                         </div>
@@ -187,7 +187,7 @@ export default function CaseRisks() {
                         {risk.mitigation && (
                           <div className="bg-background rounded-md border p-4 shadow-sm">
                             <h4 className="text-sm font-semibold mb-2 text-primary flex items-center gap-1.5">
-                              <ShieldCheck className="h-4 w-4" /> AI Suggested Mitigation
+                              <PiShieldCheckLight className="h-4 w-4" /> AI Suggested Mitigation
                             </h4>
                             <MarkdownView content={risk.mitigation} className="text-sm text-muted-foreground" />
                           </div>
@@ -208,7 +208,7 @@ export default function CaseRisks() {
             </div>
           ) : (
             <div className="text-center py-20 text-muted-foreground bg-background rounded-lg border border-dashed">
-              <ShieldCheck className="mx-auto h-12 w-12 text-emerald-500 mb-4 opacity-50" />
+              <PiShieldCheckLight className="mx-auto h-12 w-12 text-emerald-500 mb-4 opacity-50" />
               <h3 className="text-lg font-medium text-foreground mb-1">No Risks Detected</h3>
               <p>The AI co-pilot did not flag any significant risks for this case.</p>
             </div>

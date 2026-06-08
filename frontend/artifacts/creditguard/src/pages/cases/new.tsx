@@ -4,22 +4,22 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  Sparkles,
-  ArrowLeft,
-  Building2,
-  UserCircle,
-  Briefcase,
-  FileSignature,
-  Search,
-  Globe,
-  TrendingUp,
-  BarChart3,
-  CheckCircle2,
-  Loader2,
-  X,
-  ChevronRight,
-  Database,
-} from "lucide-react";
+  PiSparkleLight,
+  PiPiArrowLeftLightLight,
+  PiBuildingsLight,
+  PiPiUserCircleLightLight,
+  PiPiBriefcaseLightLight,
+  PiFileTextLight,
+  PiMagnifyingGlassLight,
+  PiPiGlobeLightLight,
+  PiTrendUpLight,
+  PiChartBarLight,
+  PiCheckCircleLight,
+  PiSpinnerLight,
+  PiXLight,
+  PiCaretRightLight,
+  PiPiDatabaseLightLight,
+} from "react-icons/pi";
 import {
   useCreateCase,
   useGenerateMemo,
@@ -133,11 +133,11 @@ export default function NewCase() {
     },
   });
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setPiMagnifyingGlassLightQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [suggestions, setSuggestions] = useState<CompanySuggestion[]>([]);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
+  const [isPiMagnifyingGlassLighting, setIsPiMagnifyingGlassLighting] = useState(false);
   const [isFetchingData, setIsFetchingData] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<CompanyPublicData | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -153,14 +153,14 @@ export default function NewCase() {
       setIsSuggestionsOpen(false);
       return;
     }
-    setIsSearching(true);
+    setIsPiMagnifyingGlassLighting(true);
     searchCompanies({ q: debouncedQuery })
       .then((data) => {
         setSuggestions(data ?? []);
         setIsSuggestionsOpen(true);
       })
       .catch(() => setSuggestions([]))
-      .finally(() => setIsSearching(false));
+      .finally(() => setIsPiMagnifyingGlassLighting(false));
   }, [debouncedQuery]);
 
   useEffect(() => {
@@ -175,7 +175,7 @@ export default function NewCase() {
 
   async function handleSelectCompany(suggestion: CompanySuggestion) {
     setIsSuggestionsOpen(false);
-    setSearchQuery(suggestion.name);
+    setPiMagnifyingGlassLightQuery(suggestion.name);
     setIsFetchingData(true);
     setSelectedCompany(null);
 
@@ -212,7 +212,7 @@ export default function NewCase() {
 
   function clearCompany() {
     setSelectedCompany(null);
-    setSearchQuery("");
+    setPiMagnifyingGlassLightQuery("");
     setSuggestions([]);
     form.setValue("borrowerName", "");
     form.setValue("sector", "");
@@ -277,11 +277,11 @@ export default function NewCase() {
           href="/cases"
           className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted h-10 w-10"
         >
-          <ArrowLeft className="h-5 w-5 text-muted-foreground" />
+          <PiArrowLeftLight className="h-5 w-5 text-muted-foreground" />
           <span className="sr-only">Back</span>
         </Link>
         <div>
-          <h1 className="text-3xl font-medium tracking-tight">New CAM Request</h1>
+          <h1 className="text-3xl tracking-[-0.02em]">New CAM Request</h1>
           <p className="text-muted-foreground mt-1">
             Provide initial parameters to generate the draft memo.
           </p>
@@ -291,35 +291,35 @@ export default function NewCase() {
       <Card className="border-primary/30 bg-primary/5">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Globe className="h-4 w-4 text-primary" />
+            <PiGlobeLight className="h-4 w-4 text-primary" />
             Lookup from Public Sources
             <Badge variant="outline" className="ml-2 text-[10px] py-0">NSE / BSE</Badge>
           </CardTitle>
           <CardDescription>
-            Search for any publicly listed Indian company to auto-extract financial data from
+            PiMagnifyingGlassLight for any publicly listed Indian company to auto-extract financial data from
             stock exchange disclosures.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div ref={searchRef} className="relative">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              {isSearching || isFetchingData ? (
-                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
+              <PiMagnifyingGlassLight className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              {isPiMagnifyingGlassLighting || isFetchingData ? (
+                <PiSpinnerLight className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
               ) : searchQuery ? (
                 <button
                   type="button"
                   onClick={clearCompany}
                   className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground hover:text-foreground"
                 >
-                  <X className="h-4 w-4" />
+                  <PiXLight className="h-4 w-4" />
                 </button>
               ) : null}
               <Input
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => setPiMagnifyingGlassLightQuery(e.target.value)}
                 onFocus={() => suggestions.length > 0 && setIsSuggestionsOpen(true)}
-                placeholder="Search company name or NSE/BSE ticker (e.g. Reliance, INFY.NS)..."
+                placeholder="PiMagnifyingGlassLight company name or NSE/BSE ticker (e.g. Reliance, INFY.NS)..."
                 className="pl-9 pr-9 bg-background"
               />
             </div>
@@ -334,7 +334,7 @@ export default function NewCase() {
                     className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted transition-colors border-b last:border-b-0"
                   >
                     <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <Building2 className="h-4 w-4 text-primary" />
+                      <PiBuildingsLight className="h-4 w-4 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm truncate">{s.name}</div>
@@ -351,13 +351,13 @@ export default function NewCase() {
                     >
                       {s.exchange}
                     </Badge>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <PiCaretRightLight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   </button>
                 ))}
               </div>
             )}
 
-            {isSuggestionsOpen && debouncedQuery.length >= 2 && suggestions.length === 0 && !isSearching && (
+            {isSuggestionsOpen && debouncedQuery.length >= 2 && suggestions.length === 0 && !isPiMagnifyingGlassLighting && (
               <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-lg shadow-md px-4 py-3 text-sm text-muted-foreground">
                 No listed companies found for &ldquo;{debouncedQuery}&rdquo;. Try with ticker like RELIANCE.NS or INFY.BO.
               </div>
@@ -366,7 +366,7 @@ export default function NewCase() {
 
           {isFetchingData && (
             <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <PiSpinnerLight className="h-4 w-4 animate-spin text-primary" />
               Fetching public financials from stock exchange data…
             </div>
           )}
@@ -378,11 +378,11 @@ export default function NewCase() {
                   <div className="flex items-center gap-2">
                     <h3 className="font-semibold">{selectedCompany.name}</h3>
                     <Badge className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
-                      <CheckCircle2 className="h-3 w-3 mr-1" /> Data Loaded
+                      <PiCheckCircleLight className="h-3 w-3 mr-1" /> Data Loaded
                     </Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                    <Database className="h-3 w-3" />
+                    <PiDatabaseLight className="h-3 w-3" />
                     {selectedCompany.dataSource} · as of{" "}
                     {new Date(selectedCompany.fetchedAt).toLocaleString("en-IN", {
                       day: "numeric",
@@ -419,7 +419,7 @@ export default function NewCase() {
               {history.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                    <PiChartBarLight className="h-4 w-4 text-muted-foreground" />
                     <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       Financial History (₹ Crores)
                     </span>
@@ -516,7 +516,7 @@ export default function NewCase() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl font-display tracking-tight">
-                <Building2 className="h-5 w-5 text-primary" />
+                <PiBuildingsLight className="h-5 w-5 text-primary" />
                 Borrower Details
                 {selectedCompany && (
                   <Badge
@@ -604,7 +604,7 @@ export default function NewCase() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl font-display tracking-tight">
-                <Briefcase className="h-5 w-5 text-primary" />
+                <PiBriefcaseLight className="h-5 w-5 text-primary" />
                 Facility Request
               </CardTitle>
               <CardDescription>
@@ -664,7 +664,7 @@ export default function NewCase() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl font-display tracking-tight">
-                <UserCircle className="h-5 w-5 text-primary" />
+                <PiUserCircleLight className="h-5 w-5 text-primary" />
                 Internal Details
               </CardTitle>
             </CardHeader>
@@ -696,12 +696,12 @@ export default function NewCase() {
             >
               {isGenerating ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" />
                   {setupStep || "Working…"}
                 </>
               ) : (
                 <>
-                  <FileSignature className="mr-2 h-4 w-4" />
+                  <PiFileTextLight className="mr-2 h-4 w-4" />
                   Create & Generate Memo
                 </>
               )}

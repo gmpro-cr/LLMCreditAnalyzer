@@ -22,7 +22,7 @@ export default function Dashboard() {
     <div className="p-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold">Dashboard</h1>
+          <h1 className="text-3xl tracking-[-0.02em]">Dashboard</h1>
           <p className="text-muted-foreground mt-1.5 text-sm font-light">Overview of your credit appraisal pipeline.</p>
         </div>
         <Button

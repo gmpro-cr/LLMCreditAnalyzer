@@ -1,19 +1,19 @@
 import { useState } from "react";
 import {
-  Upload,
-  FileSpreadsheet,
-  Loader2,
-  AlertTriangle,
-  TrendingUp,
-  TrendingDown,
-  Wallet,
-  Activity,
-  ShieldAlert,
-  ShieldCheck,
-  CheckCircle2,
-  CalendarRange,
-  FileDown,
-} from "lucide-react";
+  PiPiUploadSimpleLightSimpleLight,
+  PiFileLight,
+  PiSpinnerLight,
+  PiWarningLight,
+  PiTrendUpLight,
+  PiTrendDownLight,
+  PiPiWalletLightLight,
+  PiPulseLight,
+  PiShieldWarningLight,
+  PiPiShieldCheckLightLight,
+  PiCheckCircleLight,
+  PiCalendarBlankLight,
+  PiFileArrowDownLight,
+} from "react-icons/pi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,14 +109,14 @@ export default function BankStatement() {
   const handleFile = (f: File) => {
     const ok = /\.(pdf|csv|xlsx|xls)$/i.test(f.name);
     if (!ok) {
-      toast({ title: "Unsupported file", description: "Upload PDF, CSV, or Excel.", variant: "destructive" });
+      toast({ title: "Unsupported file", description: "PiUploadSimpleLight PDF, CSV, or Excel.", variant: "destructive" });
       return;
     }
     setFile(f);
   };
 
   const onAnalyze = async () => {
-    if (!file) { toast({ title: "Upload a statement first", variant: "destructive" }); return; }
+    if (!file) { toast({ title: "PiUploadSimpleLight a statement first", variant: "destructive" }); return; }
     setAnalyzing(true);
     setResult(null);
     try {
@@ -188,18 +188,18 @@ export default function BankStatement() {
     <div className="p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Bank Statement Analysis</h1>
+          <h1 className="text-3xl tracking-[-0.02em]">Bank statement analysis</h1>
           <p className="text-muted-foreground mt-1">
-            Upload a bank statement and get a banker-grade analysis: cash flow, AMB, recurring income, EMI obligations, bounces, and a creditworthiness score.
+            PiUploadSimpleLight a bank statement and get a banker-grade analysis: cash flow, AMB, recurring income, EMI obligations, bounces, and a creditworthiness score.
           </p>
         </div>
         {result && (
           <div className="flex items-center gap-2">
             <Button onClick={onDownloadExcel} disabled={downloading}>
               {downloading ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Building workbook…</>
+                <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" /> Building workbook…</>
               ) : (
-                <><FileDown className="mr-2 h-4 w-4" /> Download Excel Report</>
+                <><PiFileArrowDownLight className="mr-2 h-4 w-4" /> Download Excel Report</>
               )}
             </Button>
             <Button variant="outline" onClick={reset}>Analyze another statement</Button>
@@ -211,7 +211,7 @@ export default function BankStatement() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <Upload className="h-5 w-5 text-primary" /> Upload statement
+              <PiUploadSimpleLight className="h-5 w-5 text-primary" /> PiUploadSimpleLight statement
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -224,13 +224,13 @@ export default function BankStatement() {
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
               {file ? (
                 <>
-                  <FileSpreadsheet className="h-8 w-8 text-primary mb-2" />
+                  <PiFileLight className="h-8 w-8 text-primary mb-2" />
                   <span className="text-sm font-medium">{file.name}</span>
                   <span className="text-xs text-muted-foreground mt-1">{(file.size / 1024).toFixed(1)} KB · click to change</span>
                 </>
               ) : (
                 <>
-                  <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                  <PiUploadSimpleLight className="h-8 w-8 text-muted-foreground mb-2" />
                   <span className="text-sm font-medium">Drop your bank statement here</span>
                   <span className="text-xs text-muted-foreground mt-1">PDF, CSV, or Excel · text-based PDFs only · up to 25 MB</span>
                 </>
@@ -239,11 +239,11 @@ export default function BankStatement() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="from"><CalendarRange className="inline h-3.5 w-3.5 mr-1" /> Period from</Label>
+                <Label htmlFor="from"><PiCalendarBlankLight className="inline h-3.5 w-3.5 mr-1" /> Period from</Label>
                 <Input id="from" type="date" value={periodFrom} onChange={e => setPeriodFrom(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="to"><CalendarRange className="inline h-3.5 w-3.5 mr-1" /> Period to</Label>
+                <Label htmlFor="to"><PiCalendarBlankLight className="inline h-3.5 w-3.5 mr-1" /> Period to</Label>
                 <Input id="to" type="date" value={periodTo} onChange={e => setPeriodTo(e.target.value)} />
               </div>
               <div className="space-y-1.5">
@@ -260,9 +260,9 @@ export default function BankStatement() {
             <div className="flex justify-end">
               <Button onClick={onAnalyze} disabled={!file || analyzing} className="min-w-[180px]">
                 {analyzing ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing…</>
+                  <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" /> Analyzing…</>
                 ) : (
-                  <><Activity className="mr-2 h-4 w-4" /> Run Analysis</>
+                  <><PiPulseLight className="mr-2 h-4 w-4" /> Run Analysis</>
                 )}
               </Button>
             </div>
@@ -313,7 +313,7 @@ function AnalysisReport({ data }: { data: AnalysisResult }) {
       {/* Underwriter observations */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Underwriter Observations</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2"><PiCheckCircleLight className="h-4 w-4 text-primary" /> Underwriter Observations</CardTitle>
         </CardHeader>
         <CardContent>
           <ul className="space-y-2 text-sm leading-relaxed">
@@ -326,10 +326,10 @@ function AnalysisReport({ data }: { data: AnalysisResult }) {
 
       {/* KPI grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Kpi icon={<TrendingUp className="h-4 w-4 text-emerald-500" />} label="Total Inflow" value={inr(totals.total_inflow)} sub={`${totals.credit_count} credits`} />
-        <Kpi icon={<TrendingDown className="h-4 w-4 text-red-500" />} label="Total Outflow" value={inr(totals.total_outflow)} sub={`${totals.debit_count} debits`} />
-        <Kpi icon={<Activity className="h-4 w-4 text-blue-500" />} label="Net Cash Flow" value={inr(totals.net_cash_flow)} sub="credits − debits" />
-        <Kpi icon={<Wallet className="h-4 w-4 text-violet-500" />} label="Avg Monthly Balance" value={inr(balance_metrics.amb)} sub={`min ${inr(balance_metrics.minimum)}`} />
+        <Kpi icon={<PiTrendUpLight className="h-4 w-4 text-emerald-500" />} label="Total Inflow" value={inr(totals.total_inflow)} sub={`${totals.credit_count} credits`} />
+        <Kpi icon={<PiTrendDownLight className="h-4 w-4 text-red-500" />} label="Total Outflow" value={inr(totals.total_outflow)} sub={`${totals.debit_count} debits`} />
+        <Kpi icon={<PiPulseLight className="h-4 w-4 text-blue-500" />} label="Net Cash Flow" value={inr(totals.net_cash_flow)} sub="credits − debits" />
+        <Kpi icon={<PiWalletLight className="h-4 w-4 text-violet-500" />} label="Avg Monthly Balance" value={inr(balance_metrics.amb)} sub={`min ${inr(balance_metrics.minimum)}`} />
       </div>
 
       {/* Risk flags */}
@@ -337,8 +337,8 @@ function AnalysisReport({ data }: { data: AnalysisResult }) {
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             {risk_flags.length === 0
-              ? <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              : <ShieldAlert className="h-4 w-4 text-amber-500" />}
+              ? <PiShieldCheckLight className="h-4 w-4 text-emerald-500" />
+              : <PiShieldWarningLight className="h-4 w-4 text-amber-500" />}
             Risk Flags
             <Badge variant="secondary" className="ml-1">{risk_flags.length}</Badge>
           </CardTitle>
@@ -351,7 +351,7 @@ function AnalysisReport({ data }: { data: AnalysisResult }) {
               {risk_flags.map(f => (
                 <div key={f.code} className={`p-3 rounded-md border ${severityClasses(f.severity)}`}>
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <PiWarningLight className="h-4 w-4 mt-0.5 shrink-0" />
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-medium">{f.title}</p>
@@ -407,7 +407,7 @@ function AnalysisReport({ data }: { data: AnalysisResult }) {
       {/* Cash activity & bounces */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Cash Activity</CardTitle></CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Cash PiPulseLight</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
               <CashStat label="Cash Deposits" count={cash_activity.cash_deposits.count} total={cash_activity.cash_deposits.total} max={cash_activity.cash_deposits.max_single} accent="emerald" />
@@ -459,7 +459,7 @@ function AnalysisReport({ data }: { data: AnalysisResult }) {
           </div>
           {balance_metrics.negative_days > 0 && (
             <p className="text-xs text-red-600 mt-3">
-              <AlertTriangle className="inline h-3.5 w-3.5 mr-1" />
+              <PiWarningLight className="inline h-3.5 w-3.5 mr-1" />
               Account spent {balance_metrics.negative_days} day(s) in negative balance.
             </p>
           )}

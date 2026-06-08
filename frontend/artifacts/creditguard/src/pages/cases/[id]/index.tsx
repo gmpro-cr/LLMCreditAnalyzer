@@ -16,22 +16,22 @@ import { useQueryClient } from "@tanstack/react-query";
 import DataRoomTab from "./DataRoomTab";
 import DrawingPowerCalculator from "./DrawingPowerCalculator";
 import {
-  ArrowLeft,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
-  FileText,
-  Lock,
-  Unlock,
-  ShieldAlert,
-  ChevronRight,
-  Eye,
-  MoreVertical,
-  Download,
-  Sparkles,
-  RefreshCw,
-  Loader2
-} from "lucide-react";
+  PiPiArrowLeftLightLight,
+  PiCheckCircleLight,
+  PiWarningLight,
+  PiPiClockLightLight,
+  PiPiFileTextLightLight,
+  PiLockLight,
+  PiLockOpenLight,
+  PiShieldWarningLight,
+  PiCaretRightLight,
+  PiEyeLight,
+  PiDotsThreeVerticalLight,
+  PiPiDownloadSimpleLightSimpleLight,
+  PiSparkleLight,
+  PiArrowPiClockLightwiseLight,
+  PiSpinnerLight,
+} from "react-icons/pi";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -106,7 +106,7 @@ function EditorSection({
                 {section.confidence} confidence
               </Badge>
             )}
-            {section.isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+            {section.isLocked && <PiLockLight className="h-3 w-3 text-muted-foreground" />}
           </div>
           <div className="flex items-center gap-2">
             <Button 
@@ -115,7 +115,7 @@ function EditorSection({
               className={section.isReviewed ? "text-emerald-600 border-emerald-200 hover:bg-emerald-50" : ""}
               onClick={toggleReview}
             >
-              <CheckCircle2 className={`mr-1.5 h-4 w-4 ${section.isReviewed ? "text-emerald-500" : "text-muted-foreground"}`} />
+              <PiCheckCircleLight className={`mr-1.5 h-4 w-4 ${section.isReviewed ? "text-emerald-500" : "text-muted-foreground"}`} />
               {section.isReviewed ? "Reviewed" : "Mark Reviewed"}
             </Button>
             <Button 
@@ -124,7 +124,7 @@ function EditorSection({
               onClick={toggleLock}
               className="px-2"
             >
-              {section.isLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4 text-muted-foreground" />}
+              {section.isLocked ? <PiLockLight className="h-4 w-4" /> : <PiLockOpenLight className="h-4 w-4 text-muted-foreground" />}
             </Button>
           </div>
         </div>
@@ -267,19 +267,19 @@ export default function CaseDetail() {
       <div className="bg-background border-b px-8 py-4 shrink-0 sticky top-0 z-20">
         <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
           <Link href="/cases" className="hover:text-foreground transition-colors flex items-center gap-1">
-            <ArrowLeft className="h-3 w-3" /> Cases
+            <PiArrowLeftLight className="h-3 w-3" /> Cases
           </Link>
-          <ChevronRight className="h-3 w-3" />
+          <PiCaretRightLight className="h-3 w-3" />
           <span className="text-foreground">{caseData.borrowerName}</span>
         </div>
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold tracking-tight text-foreground truncate">{caseData.borrowerName}</h1>
+            <h1 className="text-xl tracking-[-0.02em] text-foreground truncate">{caseData.borrowerName}</h1>
             <div className="flex items-center gap-x-4 gap-y-1 mt-1 text-xs text-muted-foreground flex-wrap">
-              <span className="flex items-center gap-1"><FileText className="h-3.5 w-3.5" /> {getFacilityTypeLabel(caseData.facilityType)}</span>
+              <span className="flex items-center gap-1"><PiFileTextLight className="h-3.5 w-3.5" /> {getFacilityTypeLabel(caseData.facilityType)}</span>
               <span>{formatCurrency(caseData.facilityAmount)}</span>
-              <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {formatDate(caseData.createdAt)}</span>
+              <span className="flex items-center gap-1"><PiClockLight className="h-3.5 w-3.5" /> {formatDate(caseData.createdAt)}</span>
               {caseData.cin && <span className="font-mono">CIN: {caseData.cin}</span>}
               <span className="flex items-center gap-2">
                 <span>Progress {caseData.memoProgress}%</span>
@@ -297,11 +297,11 @@ export default function CaseDetail() {
               title={hasContent ? "Re-generate all sections with AI" : "Generate all sections with AI"}
             >
               {generating ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…</>
+                <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" /> Generating…</>
               ) : hasContent ? (
-                <><RefreshCw className="mr-2 h-4 w-4" /> Re-generate</>
+                <><PiArrowClockwiseLight className="mr-2 h-4 w-4" /> Re-generate</>
               ) : (
-                <><Sparkles className="mr-2 h-4 w-4" /> Generate AI Draft</>
+                <><PiSparkleLight className="mr-2 h-4 w-4" /> Generate AI Draft</>
               )}
             </Button>
 
@@ -310,7 +310,7 @@ export default function CaseDetail() {
                 href={`${import.meta.env.VITE_API_URL || ""}/api/cases/${id}/export-pdf`}
                 download={`CAM_${caseData.borrowerName}.pdf`}
               >
-                <Download className="mr-2 h-4 w-4" /> Export PDF
+                <PiDownloadSimpleLight className="mr-2 h-4 w-4" /> Export PDF
               </a>
             </Button>
 
@@ -330,7 +330,7 @@ export default function CaseDetail() {
               </>
             )}
             {caseData.status === 'approved' && (
-              <Badge className="bg-emerald-500 text-white px-3 py-1.5 text-sm"><CheckCircle2 className="mr-1.5 h-4 w-4" /> Approved</Badge>
+              <Badge className="bg-emerald-500 text-white px-3 py-1.5 text-sm"><PiCheckCircleLight className="mr-1.5 h-4 w-4" /> Approved</Badge>
             )}
           </div>
         </div>
@@ -397,7 +397,7 @@ export default function CaseDetail() {
                   <CardHeader className={`p-4 pb-2 ${highSeverityRisksCount > 0 ? 'bg-red-50' : ''}`}>
                     <CardTitle className="text-base flex items-center justify-between">
                       <span className="flex items-center gap-2">
-                        <ShieldAlert className={`h-4 w-4 ${highSeverityRisksCount > 0 ? 'text-red-500' : 'text-amber-500'}`} />
+                        <PiShieldWarningLight className={`h-4 w-4 ${highSeverityRisksCount > 0 ? 'text-red-500' : 'text-amber-500'}`} />
                         Summary
                       </span>
                       {riskLoading ? (
@@ -469,7 +469,7 @@ export default function CaseDetail() {
                         section.isReviewed ? 'bg-emerald-500' : 
                         section.confidence === 'pending' ? 'bg-muted-foreground' : 'bg-primary'
                       } opacity-0 group-hover:opacity-100`} />
-                      {section.isReviewed && <CheckCircle2 className="inline h-3 w-3 text-emerald-500 mr-1.5 -mt-0.5" />}
+                      {section.isReviewed && <PiCheckCircleLight className="inline h-3 w-3 text-emerald-500 mr-1.5 -mt-0.5" />}
                       {section.sectionTitle}
                     </a>
                   ))}

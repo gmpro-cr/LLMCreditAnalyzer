@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Calculator, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { PiPiCalculatorLightLight, PiWarningLight, PiCheckCircleLight } from "react-icons/pi";
 
 interface DPRow {
   label: string;
@@ -42,7 +42,7 @@ interface Props {
   onDPChange?: (dp: number, table: Record<string, number>) => void;
 }
 
-export default function DrawingPowerCalculator({ proposedLimit, balanceSheetData, onDPChange }: Props) {
+export default function DrawingPowerPiCalculatorLight({ proposedLimit, balanceSheetData, onDPChange }: Props) {
   const [values, setValues] = useState<Record<string, string>>({
     inventory:     balanceSheetData?.inventory     ? String(balanceSheetData.inventory)     : "",
     debtors:       balanceSheetData?.debtors       ? String(balanceSheetData.debtors)       : "",
@@ -74,9 +74,9 @@ export default function DrawingPowerCalculator({ proposedLimit, balanceSheetData
     dp >= limit * 0.8 ? "ok" : dp >= limit * 0.5 ? "warn" : "short";
 
   const statusConfig = {
-    ok:    { color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200", icon: <CheckCircle2 className="h-4 w-4 text-emerald-500" />, label: "Adequate" },
-    warn:  { color: "text-amber-600",   bg: "bg-amber-50 border-amber-200",     icon: <AlertTriangle className="h-4 w-4 text-amber-500" />,   label: "Borderline" },
-    short: { color: "text-red-600",     bg: "bg-red-50 border-red-200",         icon: <AlertTriangle className="h-4 w-4 text-red-500" />,     label: "Insufficient" },
+    ok:    { color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200", icon: <PiCheckCircleLight className="h-4 w-4 text-emerald-500" />, label: "Adequate" },
+    warn:  { color: "text-amber-600",   bg: "bg-amber-50 border-amber-200",     icon: <PiWarningLight className="h-4 w-4 text-amber-500" />,   label: "Borderline" },
+    short: { color: "text-red-600",     bg: "bg-red-50 border-red-200",         icon: <PiWarningLight className="h-4 w-4 text-red-500" />,     label: "Insufficient" },
   };
 
   const fmtCr = (v: number) => v === 0 ? "—" : `₹ ${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr`;
@@ -86,8 +86,8 @@ export default function DrawingPowerCalculator({ proposedLimit, balanceSheetData
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Calculator className="h-4 w-4 text-blue-500" />
-            Drawing Power Calculator
+            <PiCalculatorLight className="h-4 w-4 text-blue-500" />
+            Drawing Power PiCalculatorLight
             <Badge variant="outline" className="text-[10px] font-normal">Tandon Method II</Badge>
           </CardTitle>
           {dp > 0 && (
@@ -157,7 +157,7 @@ export default function DrawingPowerCalculator({ proposedLimit, balanceSheetData
 
         {wcg <= 0 && total_ca > 0 && (
           <div className="mt-3 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            <PiWarningLight className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
             Working Capital Gap is zero or negative — current liabilities exceed current assets.
             Verify figures against stock statement; drawing power may not be supportable.
           </div>
