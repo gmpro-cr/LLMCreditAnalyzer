@@ -19,6 +19,12 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     return;
   }
 
-  logger.error({ err, url: req.url, method: req.method }, "Unhandled error");
-  res.status(500).json({ error: "Internal server error" });
+  // Body-parser and friends attach a 4xx status (e.g. malformed JSON) — honor it.
+  const status = typeof err?.status === "number" && err.status >= 400 && err.status < 500 ? err.status : 500;
+  if (status === 500) {
+    logger.error({ err, url: req.url, method: req.method }, "Unhandled error");
+    res.status(500).json({ error: "Internal server error" });
+    return;
+  }
+  res.status(status).json({ error: err.message ?? "Bad request" });
 };
