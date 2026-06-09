@@ -5,6 +5,7 @@ FastAPI backend: PDF extraction, ratio computation, CAM memo generation, Word ex
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 import tempfile
 import os
 import asyncio
@@ -29,13 +30,23 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="CreditGuard AI Analysis Service", version="1.0.0")
 
+# Note: allow_origins does not glob — "https://*.vercel.app" would never match.
+# Vercel preview/prod domains are matched via allow_origin_regex instead.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://*.vercel.app"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB cap — uploads are read fully into memory
+
+
+def _check_upload_size(content: bytes) -> None:
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"File too large — maximum size is {MAX_UPLOAD_BYTES // (1024 * 1024)} MB")
 
 
 @app.get("/health")
@@ -61,6 +72,7 @@ async def extract(
     content = await file.read()
     if len(content) < 100:
         raise HTTPException(400, "File too small — upload a valid financial document")
+    _check_upload_size(content)
 
     logger.info(f"Extracting: {file.filename} ({len(content)/1024/1024:.1f} MB) company={company_name!r}")
 
@@ -138,17 +150,23 @@ async def search_companies(q: str = "", limit: int = 8):
         return []
 
 
+class PublicDataRequest(BaseModel):
+    symbol: str = Field(default="", max_length=20)
+    company_name: str = Field(default="", max_length=200)
+    industry: str = Field(default="Manufacturing", max_length=100)
+    process_annual_report: bool = False
+
+
 @app.post("/public-data/fetch")
-async def fetch_public_data(data: dict):
+async def fetch_public_data(data: PublicDataRequest):
     """
     Fetch all public data for a listed company: stock quote, Screener financials,
     peer comparison, and optionally download + process the latest annual report.
-    Input: {symbol, company_name, industry, process_annual_report (bool)}
     """
-    symbol       = data.get("symbol", "").strip().upper()
-    company_name = data.get("company_name", "")
-    industry     = data.get("industry", "Manufacturing")
-    process_ar   = data.get("process_annual_report", False)
+    symbol       = data.symbol.strip().upper()
+    company_name = data.company_name
+    industry     = data.industry
+    process_ar   = data.process_annual_report
 
     if not symbol and not company_name:
         raise HTTPException(400, "symbol or company_name is required")
@@ -360,6 +378,7 @@ async def extract_organogram_endpoint(
     Returns {ocr_text, entities, summary}
     """
     content = await file.read()
+    _check_upload_size(content)
     fname = (file.filename or "").lower()
     suffix = ".pdf" if fname.endswith(".pdf") else ".png"
 
@@ -963,6 +982,7 @@ async def analyze_full(
     content = await file.read()
     if len(content) < 1000:
         raise HTTPException(400, "File too small")
+    _check_upload_size(content)
 
     logger.info(f"Full analysis: {file.filename} ({len(content)/1024/1024:.1f} MB)")
 
@@ -1009,6 +1029,7 @@ async def analyze_bank_statement_endpoint(
     content = await file.read()
     if len(content) < 200:
         raise HTTPException(400, "File too small to be a valid bank statement")
+    _check_upload_size(content)
 
     name = file.filename.lower()
     if not (name.endswith(".csv") or name.endswith(".xlsx") or name.endswith(".xls") or name.endswith(".pdf")):
@@ -1051,6 +1072,7 @@ async def export_bank_statement_excel(
     content = await file.read()
     if len(content) < 200:
         raise HTTPException(400, "File too small to be a valid bank statement")
+    _check_upload_size(content)
 
     name = file.filename.lower()
     if not (name.endswith(".csv") or name.endswith(".xlsx") or name.endswith(".xls") or name.endswith(".pdf")):
