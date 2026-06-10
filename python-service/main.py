@@ -924,10 +924,25 @@ async def draft_cam_sections_endpoint(data: dict):
     try:
         logger.info(f"[CAM] Drafting sections for {company_name}, regenerate={regenerate!r}")
         sections = generate_cam_sections(financials, ratios, company_name, research_brief, regenerate)
-        return {"sections": sections, "company_name": company_name}
     except Exception as e:
         logger.error(f"CAM section generation failed: {e}", exc_info=True)
         raise HTTPException(500, f"CAM section generation failed: {str(e)}")
+
+    # Honesty gate: a 200 with no drafted content reads as success in the UI.
+    drafted = sum(
+        1 for s in sections.values()
+        if isinstance(s, dict) and (s.get("content") or "").strip()
+    )
+    if drafted == 0:
+        provider = os.getenv("MEMO_PROVIDER", "openrouter")
+        logger.error(f"[CAM] All sections came back empty — provider '{provider}' produced no content")
+        raise HTTPException(
+            502,
+            f"AI drafting failed: the '{provider}' provider returned no content for any section. "
+            "Check the provider configuration (API key, model, service availability) and try again.",
+        )
+
+    return {"sections": sections, "company_name": company_name, "sections_drafted": drafted}
 
 
 @app.post("/evaluate-covenants")

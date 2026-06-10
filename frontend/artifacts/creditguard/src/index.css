@@ -246,9 +246,18 @@
   }
 }
 
+@keyframes indeterminate {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(420%); }
+}
+
 @layer utilities {
   input[type="search"]::-webkit-search-cancel-button {
     @apply hidden;
+  }
+
+  .animate-indeterminate {
+    animation: indeterminate 1.6s ease-in-out infinite;
   }
 
   [contenteditable][data-placeholder]:empty::before {

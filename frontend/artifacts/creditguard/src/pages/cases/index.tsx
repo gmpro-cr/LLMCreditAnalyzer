@@ -228,13 +228,10 @@ export default function CasesList() {
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => setLocation(`/cases/${c.id}`)}>
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setLocation(`/cases/${c.id}`)}>
-                              Edit Memo
+                              Open memo
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setLocation(`/cases/${c.id}/risks`)}>
-                              View Risks
+                              View risks
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem

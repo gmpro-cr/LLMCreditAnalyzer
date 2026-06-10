@@ -287,15 +287,23 @@ def _claude_call(prompt: str) -> str:
         "Output ONLY the requested section text in plain prose (no extra headings)."
     )
     full_prompt = f"{system}\n\n{prompt}"
+    # The CLI authenticates via the Claude subscription login. A stale
+    # ANTHROPIC_API_KEY in the service env overrides that and breaks the call,
+    # so drop it from the child environment.
+    env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
     try:
         result = subprocess.run(
             ["claude", "-p", full_prompt],
             capture_output=True,
             text=True,
             timeout=300,
+            env=env,
         )
         if result.returncode != 0:
-            logger.error(f"Claude CLI error: {result.stderr}")
+            logger.error(
+                f"Claude CLI error (exit {result.returncode}): "
+                f"stderr={result.stderr[:500]!r} stdout={result.stdout[:500]!r}"
+            )
             return ""
         return result.stdout.strip()
     except Exception as e:

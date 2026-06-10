@@ -349,7 +349,7 @@ export default function Landing() {
             <button
               onClick={handleDemo}
               disabled={loading}
-              className="group flex items-center gap-3 rounded-full bg-emerald-500 pl-6 pr-2 py-2.5 text-[15px] font-medium text-white shadow-[0_2px_16px_rgba(16,185,129,0.30)] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-emerald-600 hover:shadow-[0_4px_22px_rgba(16,185,129,0.40)] active:scale-[0.98] disabled:opacity-60"
+              className="group flex items-center gap-3 rounded-full bg-primary pl-6 pr-2 py-2.5 text-[15px] font-medium text-primary-foreground shadow-[0_2px_16px_rgba(4,112,255,0.30)] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-primary/90 hover:shadow-[0_4px_22px_rgba(4,112,255,0.40)] active:scale-[0.98] disabled:opacity-60"
             >
               {loading ? "Entering workspace…" : "Enter demo workspace"}
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5 group-hover:-translate-y-px">

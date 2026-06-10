@@ -64,17 +64,17 @@ export default function Dashboard() {
           </Card>
 
           <Card
-            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 group border-blue-500/20 bg-blue-500/[0.03]"
+            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 group"
             onClick={() => setLocation("/cases?status=draft")}
           >
             <CardContent className="p-6">
               <div className="flex items-start justify-between mb-4">
-                <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500">
+                <div className="p-2 rounded-lg bg-primary/8 text-primary">
                   <PiPulseLight className="h-5 w-5" />
                 </div>
                 <PiArrowRightLight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
               </div>
-              <div className="text-[2.75rem] font-display leading-none tracking-tight tabular text-blue-600">
+              <div className="text-[2.75rem] font-display leading-none tracking-tight tabular">
                 {stats?.draftsInProgress ?? 0}
               </div>
               <div className="mt-2 text-sm font-medium text-foreground/80">Drafts in progress</div>
@@ -84,17 +84,17 @@ export default function Dashboard() {
 
           {/* Supporting row: Approved + Time saved — smaller */}
           <Card
-            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 group border-emerald-500/20 bg-emerald-500/[0.03]"
+            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 group"
             onClick={() => setLocation("/cases?status=approved")}
           >
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <PiCheckCircleLight className="h-4 w-4 text-emerald-500" />
+                    <PiCheckCircleLight className="h-4 w-4 text-muted-foreground/60" />
                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Approved this month</span>
                   </div>
-                  <div className="text-2xl font-semibold tabular-nums text-emerald-600">
+                  <div className="text-2xl font-semibold tabular-nums">
                     {stats?.approvedThisMonth ?? 0}
                   </div>
                 </div>
@@ -104,19 +104,19 @@ export default function Dashboard() {
           </Card>
 
           <Card
-            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 group border-amber-500/20 bg-amber-500/[0.02]"
+            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 group"
             onClick={() => setLocation("/cases")}
           >
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <PiClockCountdownLight className="h-4 w-4 text-amber-500" />
+                    <PiClockCountdownLight className="h-4 w-4 text-muted-foreground/60" />
                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg time saved</span>
                   </div>
-                  <div className="text-2xl font-semibold tabular-nums text-amber-600">
+                  <div className="text-2xl font-semibold tabular-nums">
                     {stats?.timeSavedHours ?? 0}
-                    <span className="text-base font-medium ml-0.5">h</span>
+                    <span className="text-base font-medium ml-0.5 text-muted-foreground">h</span>
                   </div>
                 </div>
                 <span className="text-[11px] text-muted-foreground/50 text-right leading-snug max-w-[80px]">per memo vs manual</span>

@@ -176,6 +176,52 @@ function EditorSection({
 }
 
 
+const GENERATION_STAGES = [
+  { at: 0, label: "Validating financial data" },
+  { at: 15, label: "Computing ratios and risk flags" },
+  { at: 40, label: "Researching market and industry context" },
+  { at: 90, label: "Drafting the 12 memo sections" },
+  { at: 180, label: "Formatting tables and citations" },
+];
+
+function GenerationProgress() {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const stage = [...GENERATION_STAGES].reverse().find((s) => elapsed >= s.at) ?? GENERATION_STAGES[0];
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = String(elapsed % 60).padStart(2, "0");
+
+  return (
+    <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/40" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">{stage.label}…</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              A full draft usually takes 2–5 minutes. You can keep working in another tab.
+            </p>
+          </div>
+        </div>
+        <span className="font-mono text-xs text-muted-foreground tabular-nums shrink-0">
+          {minutes}:{seconds}
+        </span>
+      </div>
+      <div className="mt-4 h-1 w-full overflow-hidden rounded-full bg-primary/10">
+        <div className="h-full w-1/3 rounded-full bg-primary/60 animate-indeterminate" />
+      </div>
+    </div>
+  );
+}
+
 export default function CaseDetail() {
   const params = useParams();
   const id = parseInt(params.id || "0", 10);
@@ -295,7 +341,7 @@ export default function CaseDetail() {
               size="sm"
               onClick={handleGenerate}
               disabled={generating}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              variant={hasContent ? "outline" : "default"}
               title={hasContent ? "Re-generate all sections with AI" : "Generate all sections with AI"}
             >
               {generating ? (
@@ -359,12 +405,14 @@ export default function CaseDetail() {
           {/* Main Editor Area */}
           <div className="flex-1 overflow-y-auto p-8 lg:pr-4 relative scroll-smooth" id="editor-container">
             <div className="max-w-4xl mx-auto space-y-8 pb-20">
+              {generating && <GenerationProgress />}
               {sectionsLoading ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <Skeleton key={i} className="h-64 w-full" />
                 ))
               ) : sections && sections.length > 0 ? (
-                sections.map((section) => (
+                <div className={`space-y-8 transition-opacity duration-500 ${generating ? "opacity-50 pointer-events-none" : ""}`}>
+                {sections.map((section) => (
                   <EditorSection
                     key={section.id}
                     section={section}
@@ -381,10 +429,24 @@ export default function CaseDetail() {
                         : undefined
                     }
                   />
-                ))
+                ))}
+                </div>
               ) : (
-                <div className="text-center py-20 text-muted-foreground">
-                  <p>No sections generated yet.</p>
+                <div className="flex flex-col items-center justify-center text-center py-24 gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/8 text-primary">
+                    <PiSparkleLight className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">No memo drafted yet</p>
+                    <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                      Generate a full 12-section CAM draft from the case financials and data room, then review and edit each section.
+                    </p>
+                  </div>
+                  {!generating && (
+                    <Button onClick={handleGenerate}>
+                      <PiSparkleLight className="mr-2 h-4 w-4" /> Generate AI Draft
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
