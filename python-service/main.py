@@ -901,11 +901,15 @@ async def export_pdf_endpoint(data: dict):
 
 
 @app.post("/cam/draft-sections")
-async def draft_cam_sections_endpoint(data: dict):
+def draft_cam_sections_endpoint(data: dict):
     """
     Generate AI-drafted CAM note sections for a borrower.
     Input: {financials, ratios, company_name, research_brief (opt), regenerate (opt section key)}
     Output: {sections: {section_key: {content, user_edited, ai_generated, ...}}}
+
+    Sync `def` on purpose: generation blocks for minutes, so FastAPI must run
+    it in its threadpool — an `async def` here freezes the event loop (and
+    /health) for the whole generation.
     """
     financials     = data.get("financials", {})
     ratios         = data.get("ratios", {})

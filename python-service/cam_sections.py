@@ -24,6 +24,7 @@ import os
 import re
 import logging
 import httpx
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -260,14 +261,20 @@ def _ollama_call(prompt: str) -> str:
         return ""
 
 
+_genai_client = None
+
+
 def _gemini_call(prompt: str) -> str:
+    global _genai_client
     try:
         from google import genai
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             return ""
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
+        # Client is thread-safe; reuse it across (parallel) section calls.
+        if _genai_client is None:
+            _genai_client = genai.Client(api_key=api_key)
+        response = _genai_client.models.generate_content(
             model="models/gemini-flash-lite-latest",
             contents=prompt,
         )
@@ -836,17 +843,43 @@ def generate_cam_sections(
     # Batch generation works well for cloud LLMs; for local Ollama generate individually
     # to avoid context overflow and timeouts.
     use_batch = provider not in ("ollama",)
+    batch: Dict[str, str] = {}
     if use_batch:
-        logger.info(f"[CAM] Batch-generating {len(gen_sections)} sections for {company_name}")
-        batch = _draft_all_sections_batch(context_text, company_name, gen_sections)
-    else:
-        batch = {}
+        # Output tokens generate sequentially within one call, so one giant
+        # batch's wall time scales with total output. Small groups drafted in
+        # parallel make wall time ≈ the slowest group instead of the sum.
+        group_size = 4
+        groups = [gen_sections[i:i + group_size] for i in range(0, len(gen_sections), group_size)]
+        logger.info(
+            f"[CAM] Drafting {len(gen_sections)} sections in {len(groups)} parallel batches for {company_name}"
+        )
+        with ThreadPoolExecutor(max_workers=len(groups)) as pool:
+            futures = [
+                pool.submit(_draft_all_sections_batch, context_text, company_name, g)
+                for g in groups
+            ]
+            for fut in as_completed(futures):
+                try:
+                    batch.update(fut.result() or {})
+                except Exception as e:
+                    logger.error(f"[CAM] Batch group failed: {e}")
+
+    # Re-draft anything the batch missed — in parallel for cloud providers,
+    # sequentially for local Ollama (a local model gains nothing from threads).
+    missing = [k for k in gen_sections if not batch.get(k)]
+    if missing:
+        logger.info(f"[CAM] Generating {len(missing)} sections individually for {company_name}: {missing}")
+        if use_batch:
+            with ThreadPoolExecutor(max_workers=min(4, len(missing))) as pool:
+                batch.update(
+                    dict(pool.map(lambda k: (k, _draft_section(k, context_text, company_name)), missing))
+                )
+        else:
+            for k in missing:
+                batch[k] = _draft_section(k, context_text, company_name)
 
     for key in gen_sections:
         content = batch.get(key, "")
-        if not content:
-            logger.info(f"[CAM] Generating section '{key}' individually for {company_name}")
-            content = _draft_section(key, context_text, company_name)
         conf, reason = _resolve_confidence(key, financials)
         sections[key] = {
             "content":           content,
