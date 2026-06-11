@@ -58,7 +58,7 @@ const steps = [
     number: "02",
     icon: PiRobotLight,
     title: "AI drafts the memo",
-    description: "CreditGuard AI generates a complete 12-section CAM in under 5 minutes, grounded in your data.",
+    description: "CreditGuard AI drafts all 12 CAM sections in parallel — a complete memo in under a minute, grounded in your data.",
   },
   {
     number: "03",
@@ -293,7 +293,7 @@ export default function Landing() {
                 transition={{ duration: 0.7, delay: 0.22, ease }}
                 className="mt-6 max-w-[520px] text-[1.05rem] font-light leading-relaxed text-muted-foreground"
               >
-                Generate banker-grade credit appraisal memorandums from public filings, financials, and your data room — in minutes, not days. Built for relationship managers and credit analysts.
+                Generate banker-grade credit appraisal memorandums from public filings, financials, and your data room — in seconds, not days. Built for relationship managers and credit analysts.
               </motion.p>
 
               {/* CTA row */}
@@ -343,7 +343,7 @@ export default function Landing() {
           >
             {[
               { value: "12", suffix: "", label: "CAM sections, each backed by citations" },
-              { value: "5", suffix: " min", label: "from borrower intake to first full draft" },
+              { value: "15", suffix: " sec", label: "from borrower intake to first full draft" },
               { value: "80", suffix: "%", label: "less manual effort per memo vs spreadsheets" },
             ].map((s) => (
               <div key={s.label} className="flex flex-col gap-0.5">

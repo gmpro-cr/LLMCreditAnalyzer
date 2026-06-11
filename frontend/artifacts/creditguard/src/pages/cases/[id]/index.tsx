@@ -178,10 +178,9 @@ function EditorSection({
 
 const GENERATION_STAGES = [
   { at: 0, label: "Validating financial data" },
-  { at: 15, label: "Computing ratios and risk flags" },
-  { at: 40, label: "Researching market and industry context" },
-  { at: 90, label: "Drafting the 12 memo sections" },
-  { at: 180, label: "Formatting tables and citations" },
+  { at: 2, label: "Computing ratios and risk flags" },
+  { at: 5, label: "Drafting the 12 memo sections in parallel" },
+  { at: 16, label: "Formatting tables and citations" },
 ];
 
 function GenerationProgress() {
@@ -207,7 +206,7 @@ function GenerationProgress() {
           <div className="min-w-0">
             <p className="text-sm font-medium text-foreground">{stage.label}…</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              A full draft usually takes 2–5 minutes. You can keep working in another tab.
+              A full draft is usually ready in under half a minute.
             </p>
           </div>
         </div>
