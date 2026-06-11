@@ -52,7 +52,7 @@ export function Sidebar() {
 
   const handleSignOut = () => {
     signOut();
-    setLocation("/login", { replace: true });
+    setLocation("/", { replace: true });
   };
 
   const initials = user?.initials ?? "RM";
@@ -61,9 +61,9 @@ export function Sidebar() {
 
   return (
     <div className="flex h-screen w-60 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
-      <div className="flex h-16 shrink-0 items-center px-5 border-b border-sidebar-border/30">
+      <div className="flex h-16 shrink-0 items-center px-5 border-b border-sidebar-border/60">
         <Link href="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
-          <CreditGuardMark className="h-5 w-5 text-emerald-400 shrink-0" />
+          <CreditGuardMark className="h-5 w-5 text-primary shrink-0" />
           <span className="font-semibold text-[15px] tracking-[-0.02em]">CreditGuard AI</span>
         </Link>
       </div>
@@ -78,15 +78,15 @@ export function Sidebar() {
                 href={item.href}
                 className={`relative flex items-center gap-3 px-3 py-2.5 text-sm rounded-md transition-all duration-150 ${
                   isActive
-                    ? "text-sidebar-foreground bg-sidebar-accent/60 font-medium"
-                    : "text-sidebar-foreground/60 hover:text-sidebar-foreground/90 hover:bg-sidebar-accent/30 font-normal"
+                    ? "text-foreground bg-primary/[0.07] font-medium"
+                    : "text-sidebar-foreground/55 hover:text-sidebar-foreground/90 hover:bg-sidebar-accent/60 font-normal"
                 }`}
               >
                 {isActive && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-emerald-400" />
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-primary" />
                 )}
                 <item.icon
-                  className={`h-[18px] w-[18px] shrink-0 transition-colors ${isActive ? "text-emerald-400" : ""}`}
+                  className={`h-[18px] w-[18px] shrink-0 transition-colors ${isActive ? "text-primary" : ""}`}
                 />
                 {item.name}
               </Link>
@@ -95,12 +95,12 @@ export function Sidebar() {
         </nav>
       </div>
 
-      <div className="p-3 border-t border-sidebar-border/30">
+      <div className="p-3 border-t border-sidebar-border/60">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="w-full flex items-center gap-3 px-2 py-2 rounded-md hover:bg-sidebar-accent/40 transition-colors text-left">
+            <button className="w-full flex items-center gap-3 px-2 py-2 rounded-md hover:bg-sidebar-accent/60 transition-colors text-left">
               <div
-                className="h-8 w-8 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-400 font-semibold text-[11px] tracking-wide shrink-0 border border-emerald-500/20"
+                className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-semibold text-[11px] tracking-wide shrink-0 border border-primary/15"
               >
                 {initials}
               </div>

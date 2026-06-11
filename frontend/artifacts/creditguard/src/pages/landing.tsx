@@ -74,6 +74,135 @@ const riskRows = [
   { label: "Sector concentration", level: "Low", dot: "bg-emerald-500", text: "text-emerald-600" },
 ];
 
+/* Hero product visual — a believable slice of the CAM the engine produces.
+   Emerald/amber/red here are semantic data colours, not brand accents. */
+const spreadRows = [
+  { metric: "Revenue (₹ Cr)", fy23: "412.6", fy24: "489.3", fy25: "547.1", trend: "up" },
+  { metric: "EBITDA margin", fy23: "11.2%", fy24: "12.8%", fy25: "13.4%", trend: "up" },
+  { metric: "DSCR", fy23: "1.42", fy24: "1.61", fy25: "1.78", trend: "up" },
+  { metric: "Debt / Equity", fy23: "1.9x", fy24: "1.6x", fy25: "1.3x", trend: "down" },
+];
+
+const sectionChips = [
+  { label: "Executive summary", done: true },
+  { label: "Financial analysis", done: true },
+  { label: "Industry outlook", done: true },
+  { label: "Risk assessment", done: false },
+];
+
+function CamPreview() {
+  return (
+    <div className="relative" aria-hidden="true">
+      {/* Main CAM card */}
+      <motion.div
+        initial={{ opacity: 0, y: 28 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.85, delay: 0.3, ease }}
+        className="rounded-2xl border border-border/80 bg-card shadow-[0_24px_60px_-18px_rgba(8,18,42,0.18)] overflow-hidden"
+      >
+        {/* Borrower header */}
+        <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">
+          <div>
+            <p className="text-[13px] font-semibold text-foreground leading-tight">Tristar Polymers Ltd</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">Working capital · ₹18.5 Cr · Speciality chemicals</p>
+          </div>
+          <span className="rounded-md bg-primary/8 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary">
+            CAM draft
+          </span>
+        </div>
+
+        {/* Mini financial spread */}
+        <div className="px-5 py-4">
+          <div className="mb-2 flex items-baseline justify-between">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Financial spread</p>
+            <p className="font-mono text-[10px] text-muted-foreground/70">audited · FY23–25</p>
+          </div>
+          <table className="w-full text-[11.5px] tabular">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                <th className="pb-1.5 text-left font-medium">Metric</th>
+                <th className="pb-1.5 text-right font-medium">FY23</th>
+                <th className="pb-1.5 text-right font-medium">FY24</th>
+                <th className="pb-1.5 text-right font-medium">FY25</th>
+              </tr>
+            </thead>
+            <tbody>
+              {spreadRows.map((r) => (
+                <tr key={r.metric} className="border-t border-border/50">
+                  <td className="py-1.5 pr-2 text-muted-foreground">{r.metric}</td>
+                  <td className="py-1.5 text-right font-mono text-foreground/70">{r.fy23}</td>
+                  <td className="py-1.5 text-right font-mono text-foreground/70">{r.fy24}</td>
+                  <td className="py-1.5 text-right font-mono font-semibold text-foreground">{r.fy25}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Section status chips */}
+        <div className="flex flex-wrap gap-1.5 border-t border-border/70 bg-muted/40 px-5 py-3.5">
+          {sectionChips.map((c) => (
+            <span
+              key={c.label}
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-medium ${
+                c.done
+                  ? "bg-emerald-500/10 text-emerald-700"
+                  : "bg-primary/8 text-primary"
+              }`}
+            >
+              {c.done ? (
+                <PiCheckCircleLight className="h-3 w-3" />
+              ) : (
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/50" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+                </span>
+              )}
+              {c.label}
+              {!c.done && "…"}
+            </span>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* Floating risk panel */}
+      <motion.div
+        initial={{ opacity: 0, y: 24, rotate: 0 }}
+        animate={{ opacity: 1, y: 0, rotate: -1.5 }}
+        transition={{ duration: 0.85, delay: 0.5, ease }}
+        className="absolute -bottom-10 -left-6 w-[240px] rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_18px_44px_-14px_rgba(8,18,42,0.22)]"
+      >
+        <div className="mb-2 flex items-center gap-2">
+          <PiShieldCheckLight className="h-3.5 w-3.5 text-primary" />
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Risk flags</p>
+        </div>
+        <div className="divide-y divide-border/60">
+          {riskRows.map((r) => (
+            <div key={r.label} className="flex items-center justify-between py-1.5 text-[11px]">
+              <span className="text-muted-foreground">{r.label}</span>
+              <span className={`flex items-center gap-1.5 font-semibold ${r.text}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${r.dot}`} />
+                {r.level}
+              </span>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* Floating citation chip */}
+      <motion.div
+        initial={{ opacity: 0, y: -14, rotate: 0 }}
+        animate={{ opacity: 1, y: 0, rotate: 1.25 }}
+        transition={{ duration: 0.8, delay: 0.66, ease }}
+        className="absolute -top-5 right-4 flex items-center gap-2 rounded-full border border-border/80 bg-card px-3 py-1.5 shadow-[0_10px_28px_-10px_rgba(8,18,42,0.2)]"
+      >
+        <PiBuildingsLight className="h-3.5 w-3.5 text-primary" />
+        <span className="text-[10.5px] font-medium text-muted-foreground">Source: BSE filing · FY25 annual report</span>
+      </motion.div>
+    </div>
+  );
+}
+
 export default function Landing() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -100,7 +229,7 @@ export default function Landing() {
           className="pointer-events-auto flex items-center justify-between gap-6 w-full max-w-xl rounded-full border border-border/60 bg-background/90 px-4 py-2 shadow-[0_2px_20px_rgba(8,18,42,0.07)] backdrop-blur-xl"
         >
           <div className="flex items-center gap-2 pl-1">
-            <CreditGuardMark className="h-4 w-4 text-emerald-500 shrink-0" />
+            <CreditGuardMark className="h-4 w-4 text-primary shrink-0" />
             <span className="font-semibold text-[13.5px] tracking-[-0.02em]">CreditGuard AI</span>
           </div>
           <div className="hidden sm:flex items-center gap-5">
@@ -128,83 +257,94 @@ export default function Landing() {
         {/* Ambient blobs — GPU-safe, fixed pseudo-elements */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
           <div className="absolute -top-32 right-0 h-[520px] w-[520px] rounded-full bg-primary/[0.06] blur-3xl" />
-          <div className="absolute top-2/3 -left-48 h-[420px] w-[420px] rounded-full bg-emerald-500/[0.06] blur-3xl" />
+          <div className="absolute top-2/3 -left-48 h-[420px] w-[420px] rounded-full bg-primary/[0.04] blur-3xl" />
         </div>
 
-        <div className="relative mx-auto w-full max-w-5xl px-6 pt-36 pb-24">
-          {/* Eyebrow */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.05, ease }}
-            className="mb-7 inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/6 px-3.5 py-1.5 text-[10.5px] font-medium uppercase tracking-[0.18em] text-emerald-700"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            AI-powered credit analysis
-          </motion.div>
+        <div className="relative mx-auto w-full max-w-6xl px-6 pt-32 pb-24">
+          <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-12">
 
-          {/* Headline */}
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, delay: 0.12, ease }}
-            className="font-serif max-w-[680px] text-[clamp(3rem,6.5vw,5.25rem)] font-medium leading-[1.04] tracking-[-0.03em] text-foreground"
-          >
-            The AI co-pilot for credit appraisal.
-          </motion.h1>
+            {/* ── Left: copy ── */}
+            <div>
+              {/* Eyebrow */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.05, ease }}
+                className="mb-7 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.05] px-3.5 py-1.5 text-[10.5px] font-medium uppercase tracking-[0.18em] text-primary"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                AI-powered credit analysis
+              </motion.div>
 
-          {/* Subtext */}
-          <motion.p
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.22, ease }}
-            className="mt-7 max-w-[480px] text-[1.05rem] font-light leading-relaxed text-muted-foreground"
-          >
-            Generate banker-grade credit appraisal memorandums from public filings, financials, and your data room — in minutes, not days. Built for relationship managers and credit analysts.
-          </motion.p>
+              {/* Headline */}
+              <motion.h1
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.75, delay: 0.12, ease }}
+                className="font-serif text-[clamp(2.75rem,4.8vw,4.25rem)] font-medium leading-[1.06] tracking-[-0.03em] text-foreground"
+              >
+                The AI co-pilot for credit appraisal.
+              </motion.h1>
 
-          {/* CTA row */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.65, delay: 0.32, ease }}
-            className="mt-10 flex flex-wrap items-center gap-4"
-          >
-            {/* Primary — Button-in-button */}
-            <button
-              onClick={handleDemo}
-              disabled={loading}
-              className="group flex items-center gap-3 rounded-full bg-primary pl-6 pr-2 py-2 text-[15px] font-medium text-primary-foreground shadow-[0_2px_14px_rgba(4,112,255,0.28)] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-primary/90 hover:shadow-[0_4px_20px_rgba(4,112,255,0.36)] active:scale-[0.98] disabled:opacity-60"
-            >
-              {loading ? "Entering workspace…" : "Enter demo workspace"}
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-foreground/15 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5 group-hover:-translate-y-px">
-                {loading
-                  ? <PiSpinnerLight className="h-4 w-4 animate-spin" />
-                  : <PiArrowRightLight className="h-4 w-4" />
-                }
-              </span>
-            </button>
+              {/* Subtext */}
+              <motion.p
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.22, ease }}
+                className="mt-6 max-w-[520px] text-[1.05rem] font-light leading-relaxed text-muted-foreground"
+              >
+                Generate banker-grade credit appraisal memorandums from public filings, financials, and your data room — in minutes, not days. Built for relationship managers and credit analysts.
+              </motion.p>
 
-            {/* Ghost */}
-            <a
-              href="#how-it-works"
-              className="text-[15px] font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
-            >
-              See how it works →
-            </a>
-          </motion.div>
+              {/* CTA row */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.65, delay: 0.32, ease }}
+                className="mt-9 flex flex-wrap items-center gap-4"
+              >
+                {/* Primary — Button-in-button */}
+                <button
+                  onClick={handleDemo}
+                  disabled={loading}
+                  className="group flex items-center gap-3 rounded-full bg-primary pl-6 pr-2 py-2 text-[15px] font-medium text-primary-foreground shadow-[0_2px_14px_rgba(4,112,255,0.28)] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-primary/90 hover:shadow-[0_4px_20px_rgba(4,112,255,0.36)] active:scale-[0.98] disabled:opacity-60"
+                >
+                  {loading ? "Entering workspace…" : "Enter demo workspace"}
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-foreground/15 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5 group-hover:-translate-y-px">
+                    {loading
+                      ? <PiSpinnerLight className="h-4 w-4 animate-spin" />
+                      : <PiArrowRightLight className="h-4 w-4" />
+                    }
+                  </span>
+                </button>
+
+                {/* Ghost */}
+                <a
+                  href="#how-it-works"
+                  className="text-[15px] font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
+                >
+                  See how it works →
+                </a>
+              </motion.div>
+            </div>
+
+            {/* ── Right: product preview ── */}
+            <div className="hidden lg:block lg:pl-4">
+              <CamPreview />
+            </div>
+          </div>
 
           {/* Stats strip */}
           <motion.div
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.65, delay: 0.44, ease }}
-            className="mt-16 flex flex-wrap gap-x-12 gap-y-5 border-t border-border/60 pt-10"
+            className="mt-20 flex flex-wrap gap-x-12 gap-y-5 border-t border-border/60 pt-10"
           >
             {[
-              { value: "12", suffix: "", label: "CAM sections generated" },
-              { value: "5", suffix: " min", label: "average draft time" },
-              { value: "80", suffix: "%", label: "reduction in manual effort" },
+              { value: "12", suffix: "", label: "CAM sections, each backed by citations" },
+              { value: "5", suffix: " min", label: "from borrower intake to first full draft" },
+              { value: "80", suffix: "%", label: "less manual effort per memo vs spreadsheets" },
             ].map((s) => (
               <div key={s.label} className="flex flex-col gap-0.5">
                 <span className="font-display text-[2.25rem] leading-none tracking-[-0.03em] tabular text-foreground">
@@ -248,9 +388,9 @@ export default function Landing() {
 
             {/* ── Tall card: Risk flags (spans 2 cols, 2 rows) */}
             <FadeUp delay={0.1} className="md:col-span-2 md:row-span-2">
-              <div className="h-full p-1.5 rounded-[1.625rem] bg-emerald-500/[0.04] ring-1 ring-emerald-500/[0.12]">
+              <div className="h-full p-1.5 rounded-[1.625rem] bg-muted/60 ring-1 ring-border/80">
                 <div className="h-full rounded-[calc(1.625rem-6px)] bg-card p-7 shadow-[inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col gap-7 min-h-[420px]">
-                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/9 text-emerald-600">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/9 text-primary">
                     <PiShieldCheckLight className="h-5 w-5" />
                   </div>
                   <div>
@@ -335,15 +475,15 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── CTA dark band ────────────────────────────────────────────────── */}
-      <section className="bg-sidebar text-sidebar-foreground">
+      {/* ── CTA dark band — deep navy in the site's cool-gray family ─────── */}
+      <section className="bg-[hsl(218,40%,10%)] text-[hsl(210,40%,98%)]">
         <div className="mx-auto max-w-5xl px-6 py-24">
           <FadeUp>
-            <div className="mb-6 h-px w-10 bg-emerald-400/50" />
+            <div className="mb-6 h-px w-10 bg-primary/60" />
             <h2 className="font-serif text-[2.25rem] font-medium leading-[1.1] tracking-[-0.025em] mb-4 max-w-md">
               Ready to cut memo time by 80%?
             </h2>
-            <p className="mb-10 max-w-md text-sm font-light leading-relaxed text-sidebar-foreground/55">
+            <p className="mb-10 max-w-md text-sm font-light leading-relaxed text-[hsl(210,40%,98%)]/55">
               No sign-up required. Explore a fully functional demo workspace with sample cases, AI memo generation, and risk analysis tools.
             </p>
             <button
@@ -367,7 +507,7 @@ export default function Landing() {
       <footer className="border-t border-border">
         <div className="mx-auto max-w-5xl px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <CreditGuardMark className="h-4 w-4 text-emerald-500" />
+            <CreditGuardMark className="h-4 w-4 text-primary" />
             <span className="text-xs font-medium text-foreground/70">CreditGuard AI</span>
           </div>
           <p className="text-xs text-muted-foreground">

@@ -94,15 +94,15 @@
   --card-foreground: 222 39% 14%;
   --card-border: 220 14% 90%;
 
-  /* Dark slate sidebar — grounds the app shell */
-  --sidebar: 215 33% 11%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 215 33% 11%;
-  --sidebar-primary: 210 40% 98%;
-  --sidebar-primary-foreground: 222 39% 14%;
-  --sidebar-accent: 215 28% 17%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 210 40% 98%;
+  /* Light sidebar — same surface family as the app, primary accents */
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 222 39% 14%;
+  --sidebar-border: 220 14% 90%;
+  --sidebar-primary: 213 94% 48%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 220 16% 94%;
+  --sidebar-accent-foreground: 222 39% 14%;
+  --sidebar-ring: 213 94% 48%;
 
   --popover: 0 0% 100%;
   --popover-foreground: 222 39% 14%;
@@ -337,6 +337,11 @@
   /* Financial figures line up and compare cleanly */
   table {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Tidy paragraph rag — avoids orphans and ragged short lines */
+  p {
+    text-wrap: pretty;
   }
 }
 
