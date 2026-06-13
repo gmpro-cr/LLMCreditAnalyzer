@@ -104,8 +104,8 @@ router.get("/search", async (req, res) => {
     const results = await searchNSE(q);
     return res.json(results);
   } catch (err) {
-    logger.error({ err }, "All company search sources failed");
-    return res.status(502).json({ error: "Failed to search companies" });
+    logger.error({ err }, "All company search sources failed — returning empty");
+    return res.json([]);
   }
 });
 

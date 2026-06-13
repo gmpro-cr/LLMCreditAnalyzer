@@ -8,4 +8,9 @@ import "./index.css";
 const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
 if (apiUrl) setBaseUrl(apiUrl);
 
+// Warm up both backend services on app load so Render free-tier instances are
+// awake before the user tries to generate a memo or search companies.
+fetch("/api/healthz").catch(() => {});
+fetch("/api/python-health").catch(() => {});
+
 createRoot(document.getElementById("root")!).render(<App />);
