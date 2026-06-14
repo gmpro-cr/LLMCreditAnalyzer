@@ -10,9 +10,16 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Supabase creds + provider config for the api-server
 set -a; source "$ROOT/.env.local"; set +a
 export SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL:-}"
+# Express now uses the user's JWT (anon key) for RLS-scoped queries.
+export SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY:-${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}}"
+# The Vite SPA reads these (VITE_ prefix) to talk to Supabase Auth.
+export VITE_SUPABASE_URL="${VITE_SUPABASE_URL:-${NEXT_PUBLIC_SUPABASE_URL:-}}"
+export VITE_SUPABASE_ANON_KEY="${VITE_SUPABASE_ANON_KEY:-${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}}"
 export PYTHON_SERVICE_URL="http://127.0.0.1:8000"
 export PORT=3001
 export NODE_ENV=development
+# INTERNAL_API_TOKEN is left unset locally → the Python engine skips the shared-
+# secret check for local dev. Set it (same value on both services) in production.
 
 # Preflight: refuse to start if any required port already has a listener on
 # EITHER stack. A half-free port is worse than a busy one — another dev server

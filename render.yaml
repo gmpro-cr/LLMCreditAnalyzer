@@ -1,6 +1,15 @@
 # Render Blueprint — both CreditGuard AI backends (free tier).
 # Deploy via Render → New → Blueprint, pointed at this repo.
-# Set the two `sync: false` secrets (GEMINI_API_KEY, SUPABASE_*) in the dashboard.
+# Set the `sync: false` secrets (GEMINI_API_KEY, SUPABASE_*) in the dashboard.
+# INTERNAL_API_TOKEN is auto-generated and shared between the two services via
+# the env-var group below, so the Python engine only accepts calls from Express.
+
+envVarGroups:
+  - name: creditguard-internal
+    envVars:
+      - key: INTERNAL_API_TOKEN
+        generateValue: true
+
 services:
   # ── Python analysis engine (FastAPI) ──────────────────────────────────────
   - type: web
@@ -11,6 +20,7 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - fromGroup: creditguard-internal
       - key: GEMINI_API_KEY
         sync: false
       - key: MEMO_PROVIDER
@@ -19,6 +29,9 @@ services:
         value: gemini
       - key: RESEARCHER_PROVIDER
         value: gemini
+      # Restrict browser CORS to your own Vercel project's preview/prod domains.
+      - key: CORS_ORIGIN_REGEX
+        sync: false
 
   # ── Express API server (cases CRUD, Supabase, proxies the Python engine) ──
   - type: web
@@ -29,11 +42,18 @@ services:
     buildCommand: NODE_ENV=development npx -y pnpm@9 install --no-frozen-lockfile && npx -y pnpm@9 --filter @workspace/api-server build
     startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
     envVars:
+      - fromGroup: creditguard-internal
       - key: NODE_ENV
         value: production
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Anon key — used to build per-request, RLS-scoped Supabase clients.
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      # Comma-separated allowlist of browser origins (your Vercel domain(s)).
+      - key: CORS_ORIGINS
         sync: false
       # Points at the Python service above (Render URL = https://<name>.onrender.com).
       - key: PYTHON_SERVICE_URL

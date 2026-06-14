@@ -1571,9 +1571,9 @@ pnpm --filter @workspace/api-server build 2>&1 | tail -5
 ```bash
 lsof -ti:3001 | xargs kill -9
 cd /Users/gaurav/creditguardai/frontend/artifacts/api-server && \
-  SUPABASE_URL=https://citgdrwspttdsqsujzzs.supabase.co \
-  SUPABASE_SERVICE_ROLE_KEY=sb_secret_pCiny7dFQmUxrtUAvdBQBQ_d-_9R2XO \
-  PYTHON_SERVICE_URL=http://localhost:8001 PORT=3001 \
+  SUPABASE_URL=<your-supabase-url> \
+  SUPABASE_SERVICE_ROLE_KEY=<set-in-env-never-commit> \
+  PYTHON_SERVICE_URL=http://127.0.0.1:8000 PORT=3001 \
   node --enable-source-maps ./dist/index.mjs &
 ```
 

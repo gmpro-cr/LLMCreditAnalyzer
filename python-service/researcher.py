@@ -13,8 +13,11 @@ The LLM drives the search — not pre-defined templates.
 """
 import os
 import re
+import socket
+import ipaddress
 import logging
 import httpx
+from urllib.parse import urlparse
 from typing import Dict, Any, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -48,12 +51,50 @@ def _ddg_search(query: str, max_results: int = RESULTS_PER_QUERY) -> List[dict]:
         return []
 
 
+def _is_safe_public_url(url: str) -> bool:
+    """SSRF guard: only http(s) to a public IP. Blocks loopback/private/link-local
+    /reserved ranges and unresolvable hosts. URLs here derive from web-search
+    results seeded by user input, so they must not be trusted to be external."""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = parsed.hostname
+    if not host:
+        return False
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return False
+    for info in infos:
+        ip_str = info[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return False
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return False
+    return True
+
+
 def _fetch_page(url: str, max_chars: int = PAGE_MAX_CHARS) -> str:
     if any(d in url for d in SKIP_DOMAINS) or url.endswith(".pdf"):
         return ""
+    if not _is_safe_public_url(url):
+        logger.warning(f"Blocked non-public/unsafe URL: {url[:120]}")
+        return ""
     try:
+        # allow_redirects off-by-default would be ideal, but some sources 301 to
+        # canonical hosts; we re-validate the final URL after the request.
         resp = httpx.get(url, timeout=8.0, follow_redirects=True,
                          headers={"User-Agent": "Mozilla/5.0 (compatible; CreditResearchBot/1.0)"})
+        # A redirect could have landed on an internal address — re-check.
+        if not _is_safe_public_url(str(resp.url)):
+            logger.warning(f"Blocked redirect to unsafe URL: {str(resp.url)[:120]}")
+            return ""
         resp.raise_for_status()
         text = re.sub(r"<style[^>]*>.*?</style>", " ", resp.text, flags=re.DOTALL)
         text = re.sub(r"<script[^>]*>.*?</script>", " ", text, flags=re.DOTALL)

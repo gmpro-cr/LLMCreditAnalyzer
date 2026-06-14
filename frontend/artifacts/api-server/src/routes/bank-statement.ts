@@ -1,10 +1,9 @@
 import { Router } from "express";
 import multer from "multer";
+import { PYTHON_URL, internalHeaders } from "../lib/python.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-
-const PYTHON_URL = () => process.env.PYTHON_SERVICE_URL || "http://localhost:8001";
 
 router.post("/excel", upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -23,6 +22,7 @@ router.post("/excel", upload.single("file"), async (req, res) => {
   try {
     const pyRes = await fetch(`${PYTHON_URL()}/analyze-bank-statement/excel`, {
       method: "POST",
+      headers: internalHeaders(),
       body: formData,
       signal: AbortSignal.timeout(180_000),
     });
@@ -60,6 +60,7 @@ router.post("/analyze", upload.single("file"), async (req, res) => {
   try {
     const pyRes = await fetch(`${PYTHON_URL()}/analyze-bank-statement`, {
       method: "POST",
+      headers: internalHeaders(),
       body: formData,
       signal: AbortSignal.timeout(180_000),
     });

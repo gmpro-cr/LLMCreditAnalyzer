@@ -1,10 +1,12 @@
 import { Router } from "express";
-import { supabase, insertActivity } from "../lib/supabase-db.js";
 
 const router = Router();
 
-router.get("/stats", async (_req, res) => {
-  const { data: allCases } = await supabase.from("cases").select("status, updated_at");
+// All queries run through req.db (the user-scoped RLS client), so each user's
+// dashboard reflects only their own cases and activity.
+
+router.get("/stats", async (req, res) => {
+  const { data: allCases } = await req.db.from("cases").select("status, updated_at");
   const cases = allCases ?? [];
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -19,13 +21,13 @@ router.get("/stats", async (_req, res) => {
   });
 });
 
-router.get("/recent-activity", async (_req, res) => {
-  const { data } = await supabase.from("activity_log").select("*").order("timestamp", { ascending: false }).limit(20);
+router.get("/recent-activity", async (req, res) => {
+  const { data } = await req.db.from("activity_log").select("*").order("timestamp", { ascending: false }).limit(20);
   res.json(data ?? []);
 });
 
-router.get("/status-breakdown", async (_req, res) => {
-  const { data: cases } = await supabase.from("cases").select("status");
+router.get("/status-breakdown", async (req, res) => {
+  const { data: cases } = await req.db.from("cases").select("status");
   const counts: Record<string, number> = {};
   for (const c of cases ?? []) counts[c.status] = (counts[c.status] || 0) + 1;
 

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { listSections, updateSection, bulkUpdateSections, listRiskFlags, insertActivity, updateCase, getCase, getCaseExtractedData } from "../lib/supabase-db.js";
+import { PYTHON_URL, internalHeaders } from "../lib/python.js";
 import { ListSectionsParams, UpdateSectionBody, GenerateMemoParams, ListRiskFlagsParams } from "@workspace/api-zod";
 
 const router = Router({ mergeParams: true });
@@ -19,7 +20,7 @@ function formatSection(s: any) {
 
 router.get("/:id/sections", async (req, res) => {
   const { id } = ListSectionsParams.parse({ id: Number(req.params.id) });
-  const sections = await listSections(id);
+  const sections = await listSections(req.db, id);
   res.json(sections.map(formatSection));
 });
 
@@ -33,26 +34,26 @@ router.patch("/:id/sections/:sectionKey", async (req, res) => {
   if (body.isReviewed !== undefined) updates.is_reviewed = body.isReviewed;
   if (body.isLocked !== undefined) updates.is_locked = body.isLocked;
 
-  const updated = await updateSection(id, sectionKey, updates).catch(() => null);
+  const updated = await updateSection(req.db, id, sectionKey, updates).catch(() => null);
   if (!updated) return res.status(404).json({ error: "Section not found" });
 
   // Recompute memo_progress
-  const allSections = await listSections(id);
+  const allSections = await listSections(req.db, id);
   const progress = Math.round((allSections.filter((s) => s.is_reviewed).length / allSections.length) * 100);
-  await updateCase(id, { memo_progress: progress, updated_at: new Date().toISOString() });
+  await updateCase(req.db, id, { memo_progress: progress, updated_at: new Date().toISOString() });
 
   return res.json(formatSection(updated));
 });
 
 router.post("/:id/generate", async (req, res) => {
   const { id } = GenerateMemoParams.parse({ id: Number(req.params.id) });
-  const c = await getCase(id).catch(() => null);
+  const c = await getCase(req.db, id).catch(() => null);
   if (!c) return res.status(404).json({ error: "Case not found" });
 
-  const pythonUrl = process.env.PYTHON_SERVICE_URL || "http://localhost:8001";
+  const pythonUrl = PYTHON_URL();
 
   // Load any collected data from the Data Room
-  const extracted = await getCaseExtractedData(id).catch(() => null);
+  const extracted = await getCaseExtractedData(req.db, id).catch(() => null);
 
   // If financials has multi-year arrays (from BSE/Screener fetch), use directly.
   // Otherwise fall back to base case info.
@@ -121,7 +122,7 @@ router.post("/:id/generate", async (req, res) => {
   try {
     const pyRes = await fetch(`${pythonUrl}/cam/draft-sections`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: internalHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         financials,
         ratios: {},
@@ -174,26 +175,26 @@ router.post("/:id/generate", async (req, res) => {
     for (const [uiKey, { content, confidence }] of Object.entries(uiContent)) {
       updates.push({ sectionKey: uiKey, values: { content, confidence } });
     }
-    if (updates.length) await bulkUpdateSections(id, updates);
+    if (updates.length) await bulkUpdateSections(req.db, id, updates);
   } catch (e) {
     console.error("[generate] Python service error:", e);
     return res.status(502).json({ error: "AI engine request failed. Please try again." });
   }
 
   // Recompute progress from actual reviewed sections (don't regress existing progress)
-  const allSections = await listSections(id);
+  const allSections = await listSections(req.db, id);
   const progress = allSections.length
     ? Math.round((allSections.filter((s) => s.is_reviewed).length / allSections.length) * 100)
     : 0;
-  await updateCase(id, { memo_progress: Math.max(progress, 10), updated_at: new Date().toISOString() });
-  await insertActivity({ case_id: id, borrower_name: c.borrower_name, action: "AI generation completed — all 12 sections drafted", actor: "CreditGuard AI" });
+  await updateCase(req.db, id, { memo_progress: Math.max(progress, 10), updated_at: new Date().toISOString() });
+  await insertActivity(req.db, { case_id: id, borrower_name: c.borrower_name, action: "AI generation completed — all 12 sections drafted", actor: "CreditGuard AI" });
 
   return res.json({ message: "Memo generated successfully", caseId: id });
 });
 
 router.get("/:id/risk-flags", async (req, res) => {
   const { id } = ListRiskFlagsParams.parse({ id: Number(req.params.id) });
-  const flags = await listRiskFlags(id);
+  const flags = await listRiskFlags(req.db, id);
   res.json(flags);
 });
 
@@ -201,11 +202,11 @@ router.get("/:id/export-pdf", async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
 
-  const c = await getCase(id).catch(() => null);
+  const c = await getCase(req.db, id).catch(() => null);
   if (!c) return res.status(404).json({ error: "Case not found" });
 
-  const sections = await listSections(id).catch(() => []);
-  const pythonUrl = process.env.PYTHON_SERVICE_URL || "http://localhost:8001";
+  const sections = await listSections(req.db, id).catch(() => []);
+  const pythonUrl = PYTHON_URL();
 
   // Assemble memo_content from all sections with content
   const SECTION_ORDER = [
@@ -228,7 +229,7 @@ router.get("/:id/export-pdf", async (req, res) => {
   try {
     const pyRes = await fetch(`${pythonUrl}/export-pdf`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: internalHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ memo_content: memoContent, company_name: c.borrower_name }),
       signal: AbortSignal.timeout(60_000),
     });

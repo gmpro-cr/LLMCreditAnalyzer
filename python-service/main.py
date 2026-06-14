@@ -2,7 +2,7 @@
 CreditGuard AI — Python Analysis Service
 FastAPI backend: PDF extraction, ratio computation, CAM memo generation, Word export.
 """
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -28,14 +28,42 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="CreditGuard AI Analysis Service", version="1.0.0")
+# ── Internal shared-secret auth ─────────────────────────────────────────────
+# This engine is only meant to be called by the Express API server. When
+# INTERNAL_API_TOKEN is set (production), every request except the public
+# liveness probes must carry a matching X-Internal-Token header. Left unset in
+# local dev, the check is skipped.
+INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "")
+_PUBLIC_PATHS = {"/health", "/", "/docs", "/openapi.json", "/redoc"}
 
-# Note: allow_origins does not glob — "https://*.vercel.app" would never match.
-# Vercel preview/prod domains are matched via allow_origin_regex instead.
+
+async def verify_internal_token(request: Request) -> None:
+    if request.method == "OPTIONS" or request.url.path in _PUBLIC_PATHS:
+        return
+    if not INTERNAL_API_TOKEN:
+        return  # not configured (local dev)
+    if request.headers.get("x-internal-token", "") != INTERNAL_API_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+app = FastAPI(
+    title="CreditGuard AI Analysis Service",
+    version="1.0.0",
+    dependencies=[Depends(verify_internal_token)],
+)
+
+# CORS allowlist is environment-driven. CORS_ORIGINS is a comma-separated exact
+# list; CORS_ORIGIN_REGEX matches deploy preview domains. Set CORS_ORIGIN_REGEX
+# to your project's own preview pattern in production rather than all *.vercel.app.
+# Note: allow_origins does not glob — that is what the regex is for.
+_default_origins = "http://localhost:3000,http://localhost:3001,http://localhost:5173,http://127.0.0.1:5173"
+cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
+cors_origin_regex = os.getenv("CORS_ORIGIN_REGEX", r"https://.*\.vercel\.app")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origins=cors_origins,
+    allow_origin_regex=cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,6 +75,66 @@ MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB cap — uploads are read fully into
 def _check_upload_size(content: bytes) -> None:
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(413, f"File too large — maximum size is {MAX_UPLOAD_BYTES // (1024 * 1024)} MB")
+
+
+# ── Request models (replace untyped `data: dict` bodies) ────────────────────
+from typing import Any, Optional  # noqa: E402
+
+
+class FetchAnnualReportsRequest(BaseModel):
+    symbol: str = Field(default="", max_length=20)
+    company_name: str = Field(default="", max_length=200)
+
+
+class PublicMemoRequest(BaseModel):
+    symbol: str = Field(default="", max_length=20)
+    company_name: str = Field(default="", max_length=200)
+    industry: str = Field(default="Manufacturing", max_length=100)
+
+
+class ResearchRequest(BaseModel):
+    company_name: str = Field(default="", max_length=200)
+    industry: str = Field(default="", max_length=100)
+    sector: str = Field(default="Manufacturing", max_length=100)
+    financials_snapshot: dict = Field(default_factory=dict)
+
+
+class GenerateMemoRequest(BaseModel):
+    financials: dict = Field(default_factory=dict)
+    ratios: dict = Field(default_factory=dict)
+    company_name: str = Field(default="Unknown Borrower", max_length=200)
+    covenants: list = Field(default_factory=list)
+    research_brief: str = ""
+
+
+class DraftSectionsRequest(BaseModel):
+    financials: dict = Field(default_factory=dict)
+    ratios: dict = Field(default_factory=dict)
+    company_name: str = Field(default="Unknown Borrower", max_length=200)
+    research_brief: str = ""
+    regenerate: Optional[str] = None
+    peers: list = Field(default_factory=list)
+
+
+class ExportDocxRequest(BaseModel):
+    memo_content: str = ""
+    company_name: str = Field(default="Borrower", max_length=200)
+
+
+class ExportPdfRequest(BaseModel):
+    memo_content: str = ""
+    company_name: str = Field(default="Borrower", max_length=200)
+    sections: dict = Field(default_factory=dict)
+
+
+class EvaluateCovenantsRequest(BaseModel):
+    ratios: dict = Field(default_factory=dict)
+    covenants: list = Field(default_factory=list)
+
+
+class RiskFlagsRequest(BaseModel):
+    ratios: dict = Field(default_factory=dict)
+    financials: dict = Field(default_factory=dict)
 
 
 @app.get("/health")
@@ -92,7 +180,7 @@ async def extract(
         return {"financials": financials, "ratios": ratios, "company_name": company_name or financials.get("company_info", {}).get("name", "")}
     except Exception as e:
         logger.error(f"Extraction failed: {e}", exc_info=True)
-        raise HTTPException(500, f"Extraction failed: {str(e)}")
+        raise HTTPException(500, "Extraction failed. Please verify the document and try again.")
     finally:
         os.unlink(tmp_path)
 
@@ -207,7 +295,7 @@ async def fetch_public_data(data: PublicDataRequest):
         return result
     except Exception as e:
         logger.error(f"Public data fetch failed: {e}", exc_info=True)
-        raise HTTPException(500, f"Public data fetch failed: {str(e)}")
+        raise HTTPException(500, "Public data fetch failed. Please try again.")
 
 
 @app.get("/public-data/stock/{symbol}")
@@ -221,19 +309,20 @@ async def get_stock_quote(symbol: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.error(f"Stock quote failed: {e}", exc_info=True)
+        raise HTTPException(500, "Could not fetch stock data.")
 
 
 @app.post("/fetch-annual-reports")
-async def fetch_annual_reports_endpoint(data: dict):
+async def fetch_annual_reports_endpoint(data: FetchAnnualReportsRequest):
     """
     Fetch last 3 annual report PDFs for a listed company (BSE → IR fallback).
     Extract financials from each PDF.
     Input: {symbol, company_name}
     Output: {reports: [{fiscal_year, size_kb, source, financials, ratios}], merged_financials, company_name}
     """
-    symbol = data.get("symbol", "")
-    company_name = data.get("company_name", "")
+    symbol = data.symbol
+    company_name = data.company_name
     if not symbol:
         raise HTTPException(400, "symbol is required")
 
@@ -429,15 +518,15 @@ Respond with only valid JSON."""
 
 
 @app.post("/public-data/generate-memo")
-async def generate_memo_from_public_data(data: dict):
+async def generate_memo_from_public_data(data: PublicMemoRequest):
     """
     Full auto-analysis for a listed company using only public data.
     Fetches Screener.in financials → computes ratios → runs web research → generates CAM memo.
     No PDF upload required. Input: {symbol, company_name, industry}
     """
-    symbol       = data.get("symbol", "").strip().upper()
-    company_name = data.get("company_name", "")
-    industry     = data.get("industry", "Manufacturing")
+    symbol       = data.symbol.strip().upper()
+    company_name = data.company_name
+    industry     = data.industry
 
     if not symbol and not company_name:
         raise HTTPException(400, "symbol or company_name is required")
@@ -530,20 +619,20 @@ async def generate_memo_from_public_data(data: dict):
         raise
     except Exception as e:
         logger.error(f"[PublicMemo] Failed: {e}", exc_info=True)
-        raise HTTPException(500, f"Auto-analysis failed: {str(e)}")
+        raise HTTPException(500, "Auto-analysis failed. Please try again.")
 
 
 @app.post("/research")
-async def research_company(data: dict):
+async def research_company(data: ResearchRequest):
     """
     Autoresearch agent: run web research on a company and return a Research Brief.
     Also fetches Screener.in multi-year financials for the company (best-effort).
     Input: {company_name, sector/industry, financials_snapshot (optional)}
     Output: {brief, sources, queries_run, financials (if found on Screener)}
     """
-    company_name = data.get("company_name", "")
-    industry     = data.get("industry", "") or data.get("sector", "Manufacturing")
-    snapshot     = data.get("financials_snapshot", {})
+    company_name = data.company_name
+    industry     = data.industry or data.sector
+    snapshot     = data.financials_snapshot
 
     if not company_name:
         raise HTTPException(400, "company_name is required")
@@ -565,20 +654,20 @@ async def research_company(data: dict):
         return result
     except Exception as e:
         logger.error(f"Research failed: {e}", exc_info=True)
-        raise HTTPException(500, f"Research failed: {str(e)}")
+        raise HTTPException(500, "Research failed. Please try again.")
 
 
 @app.post("/generate-memo")
-async def generate_memo(data: dict):
+async def generate_memo(data: GenerateMemoRequest):
     """
     Step 2 of pipeline: Given extracted financials + ratios, generate SBI CAM memo.
     Optionally accepts research_brief to enrich memo narrative with web intelligence.
     """
-    financials     = data.get("financials", {})
-    ratios         = data.get("ratios", {})
-    company_name   = data.get("company_name", "Unknown Borrower")
-    covenants      = data.get("covenants", [])
-    research_brief = data.get("research_brief", "")
+    financials     = data.financials
+    ratios         = data.ratios
+    company_name   = data.company_name
+    covenants      = data.covenants
+    research_brief = data.research_brief
 
     if not financials:
         raise HTTPException(400, "financials is required")
@@ -591,14 +680,14 @@ async def generate_memo(data: dict):
         return {"memo_content": memo_content, "company_name": company_name, "data_quality": dq}
     except Exception as e:
         logger.error(f"Memo generation failed: {e}", exc_info=True)
-        raise HTTPException(500, f"Memo generation failed: {str(e)}")
+        raise HTTPException(500, "Memo generation failed. Please try again.")
 
 
 @app.post("/export-docx")
-async def export_docx_endpoint(data: dict):
+async def export_docx_endpoint(data: ExportDocxRequest):
     """Export memo text to .docx and return the file."""
-    memo_content = data.get("memo_content", "")
-    company_name = data.get("company_name", "Borrower")
+    memo_content = data.memo_content
+    company_name = data.company_name
     if not memo_content:
         raise HTTPException(400, "memo_content is required")
 
@@ -618,15 +707,15 @@ async def export_docx_endpoint(data: dict):
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
         logger.error(f"DOCX export failed: {e}", exc_info=True)
-        raise HTTPException(500, f"DOCX export failed: {str(e)}")
+        raise HTTPException(500, "DOCX export failed. Please try again.")
 
 
 @app.post("/export-pdf")
-async def export_pdf_endpoint(data: dict):
+async def export_pdf_endpoint(data: ExportPdfRequest):
     """Export memo text to PDF and return the file."""
-    memo_content = data.get("memo_content", "")
-    company_name = data.get("company_name", "Borrower")
-    sections = data.get("sections", {})   # optional: dict of {title: content}
+    memo_content = data.memo_content
+    company_name = data.company_name
+    sections = data.sections   # optional: dict of {title: content}
     if not memo_content and not sections:
         raise HTTPException(400, "memo_content or sections is required")
 
@@ -833,10 +922,10 @@ async def export_pdf_endpoint(data: dict):
         # Cover summary table
         cover_rows = [
             ["Borrower", company_name],
-            ["Sector", sections.get("_meta_sector", "Pharmaceuticals")],
-            ["Facility", sections.get("_meta_facility", "Term Loan — ₹500 Crore")],
+            ["Sector", sections.get("_meta_sector", "—")],
+            ["Facility", sections.get("_meta_facility", "—")],
             ["Date", today],
-            ["RM", sections.get("_meta_rm", "Gaurav Mahale")],
+            ["RM", sections.get("_meta_rm", "—")],
             ["Status", "AI Draft — Pending RM Review"],
         ]
         cover_tbl = Table(cover_rows, colWidths=[PAGE_W*0.3, PAGE_W*0.7])
@@ -897,11 +986,11 @@ async def export_pdf_endpoint(data: dict):
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
         logger.error(f"PDF export failed: {e}", exc_info=True)
-        raise HTTPException(500, f"PDF export failed: {str(e)}")
+        raise HTTPException(500, "PDF export failed. Please try again.")
 
 
 @app.post("/cam/draft-sections")
-def draft_cam_sections_endpoint(data: dict):
+def draft_cam_sections_endpoint(data: DraftSectionsRequest):
     """
     Generate AI-drafted CAM note sections for a borrower.
     Input: {financials, ratios, company_name, research_brief (opt), regenerate (opt section key)}
@@ -911,11 +1000,11 @@ def draft_cam_sections_endpoint(data: dict):
     it in its threadpool — an `async def` here freezes the event loop (and
     /health) for the whole generation.
     """
-    financials     = data.get("financials", {})
-    ratios         = data.get("ratios", {})
-    company_name   = data.get("company_name", "Unknown Borrower")
-    research_brief = data.get("research_brief", "")
-    regenerate     = data.get("regenerate")   # single section key or None
+    financials     = data.financials
+    ratios         = data.ratios
+    company_name   = data.company_name
+    research_brief = data.research_brief
+    regenerate     = data.regenerate   # single section key or None
 
     if not financials:
         raise HTTPException(400, "financials is required")
@@ -930,7 +1019,7 @@ def draft_cam_sections_endpoint(data: dict):
         sections = generate_cam_sections(financials, ratios, company_name, research_brief, regenerate)
     except Exception as e:
         logger.error(f"CAM section generation failed: {e}", exc_info=True)
-        raise HTTPException(500, f"CAM section generation failed: {str(e)}")
+        raise HTTPException(500, "CAM section generation failed. Please try again.")
 
     # Honesty gate: a 200 with no drafted content reads as success in the UI.
     drafted = sum(
@@ -950,13 +1039,13 @@ def draft_cam_sections_endpoint(data: dict):
 
 
 @app.post("/evaluate-covenants")
-async def evaluate_covenants_endpoint(data: dict):
+async def evaluate_covenants_endpoint(data: EvaluateCovenantsRequest):
     """
     Evaluate covenant conditions against current ratios.
     Input: {ratios: {...}, covenants: [{ratio_name, operator, threshold}]}
     """
-    ratios    = data.get("ratios", {})
-    covenants = data.get("covenants", [])
+    ratios    = data.ratios
+    covenants = data.covenants
     if not ratios:
         raise HTTPException(400, "ratios is required")
 
@@ -966,14 +1055,14 @@ async def evaluate_covenants_endpoint(data: dict):
 
 
 @app.post("/risk-flags")
-async def get_risk_flags(data: dict):
+async def get_risk_flags(data: RiskFlagsRequest):
     """
     Generate risk flags from financial ratios.
     Input: {ratios: {...}, financials: {...}}
     Output: {flags: [...], high_count, medium_count, low_count}
     """
-    ratios     = data.get("ratios", {})
-    financials = data.get("financials", {})
+    ratios     = data.ratios
+    financials = data.financials
     if not ratios:
         raise HTTPException(400, "ratios is required")
     flags = generate_risk_flags(ratios, financials)
@@ -1026,7 +1115,7 @@ async def analyze_full(
         }
     except Exception as e:
         logger.error(f"Full analysis failed: {e}", exc_info=True)
-        raise HTTPException(500, f"Analysis failed: {str(e)}")
+        raise HTTPException(500, "Analysis failed. Please try again.")
     finally:
         os.unlink(tmp_path)
 
@@ -1069,7 +1158,7 @@ async def analyze_bank_statement_endpoint(
         raise HTTPException(400, str(ve))
     except Exception as e:
         logger.error(f"Bank statement analysis failed: {e}", exc_info=True)
-        raise HTTPException(500, f"Analysis failed: {str(e)}")
+        raise HTTPException(500, "Analysis failed. Please try again.")
 
 
 # ── Bank Statement Excel Export ───────────────────────────────────────────────
@@ -1111,7 +1200,7 @@ async def export_bank_statement_excel(
         raise HTTPException(400, str(ve))
     except Exception as e:
         logger.error(f"Bank statement Excel export failed: {e}", exc_info=True)
-        raise HTTPException(500, f"Export failed: {str(e)}")
+        raise HTTPException(500, "Export failed. Please try again.")
 
     from fastapi.responses import Response
     safe_holder = (account_holder or "statement").replace("/", "_").replace("\\", "_").strip() or "statement"

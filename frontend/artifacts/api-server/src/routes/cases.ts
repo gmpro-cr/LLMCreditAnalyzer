@@ -35,13 +35,14 @@ function formatCase(c: any) {
 
 router.get("/", async (req, res) => {
   const params = ListCasesQueryParams.safeParse(req.query);
-  const rows = await listCases(params.success ? params.data : {});
+  const rows = await listCases(req.db, params.success ? params.data : {});
   res.json(rows.map(formatCase));
 });
 
 router.post("/", async (req, res) => {
   const body = CreateCaseBody.parse(req.body);
-  const newCase = await createCase({
+  const newCase = await createCase(req.db, {
+    user_id: req.userId,
     borrower_name: body.borrowerName,
     cin: body.cin ?? null,
     pan: body.pan ?? null,
@@ -53,7 +54,7 @@ router.post("/", async (req, res) => {
     memo_progress: 0,
   });
 
-  await insertSections(MEMO_SECTIONS.map((s) => ({
+  await insertSections(req.db, MEMO_SECTIONS.map((s) => ({
     case_id: newCase.id,
     section_key: s.key,
     section_title: s.title,
@@ -63,13 +64,13 @@ router.post("/", async (req, res) => {
     is_locked: false,
   })));
 
-  await insertActivity({ case_id: newCase.id, borrower_name: newCase.borrower_name, action: "Case created", actor: newCase.rm_name });
+  await insertActivity(req.db, { case_id: newCase.id, borrower_name: newCase.borrower_name, action: "Case created", actor: newCase.rm_name });
   res.status(201).json(formatCase(newCase));
 });
 
 router.get("/:id", async (req, res) => {
   const { id } = GetCaseParams.parse({ id: Number(req.params.id) });
-  const c = await getCase(id).catch(() => null);
+  const c = await getCase(req.db, id).catch(() => null);
   if (!c) return res.status(404).json({ error: "Not found" });
   return res.json(formatCase(c));
 });
@@ -87,16 +88,16 @@ router.patch("/:id", async (req, res) => {
   if (body.rmName !== undefined) updates.rm_name = body.rmName;
   if (body.status !== undefined) updates.status = body.status;
 
-  const updated = await updateCase(id, updates).catch(() => null);
+  const updated = await updateCase(req.db, id, updates).catch(() => null);
   if (!updated) return res.status(404).json({ error: "Not found" });
 
-  await insertActivity({ case_id: id, borrower_name: updated.borrower_name, action: body.status ? `Status changed to ${body.status}` : "Case updated", actor: updated.rm_name });
+  await insertActivity(req.db, { case_id: id, borrower_name: updated.borrower_name, action: body.status ? `Status changed to ${body.status}` : "Case updated", actor: updated.rm_name });
   return res.json(formatCase(updated));
 });
 
 router.delete("/:id", async (req, res) => {
   const { id } = DeleteCaseParams.parse({ id: Number(req.params.id) });
-  await deleteCase(id);
+  await deleteCase(req.db, id);
   res.status(204).send();
 });
 

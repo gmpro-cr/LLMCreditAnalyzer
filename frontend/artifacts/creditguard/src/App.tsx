@@ -25,7 +25,11 @@ const queryClient = new QueryClient({
 });
 
 function Router() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+
+  // Avoid a flash of the landing page (and a wrong redirect) while the
+  // Supabase session is still resolving on first load.
+  if (loading) return null;
 
   if (!isAuthenticated) {
     return (

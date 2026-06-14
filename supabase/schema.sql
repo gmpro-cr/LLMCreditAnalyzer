@@ -1,4 +1,12 @@
 -- CreditGuard AI — Supabase Schema
+--
+-- ⚠️ DEPRECATED / NOT THE RUNNING SCHEMA.
+-- This file describes an older borrowers/* design the app no longer uses.
+-- The authoritative schema (cases/memo_sections/risk_flags/activity_log/
+-- case_documents/case_extracted_data) + multi-tenancy + RLS lives in:
+--   migrations/0001_documented_schema_and_rls.sql
+-- Kept only for historical reference.
+--
 -- Run this in your Supabase SQL Editor
 
 -- Enable UUID extension
