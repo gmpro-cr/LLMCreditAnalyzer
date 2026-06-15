@@ -21,7 +21,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { authedFetch } from "@/lib/auth";
 
 interface RecurringItem {
   counterparty: string;
@@ -127,7 +126,7 @@ export default function BankStatement() {
       if (periodTo) fd.append("periodTo", periodTo);
       if (holder) fd.append("accountHolder", holder);
 
-      const res = await authedFetch(`${import.meta.env.VITE_API_URL || ""}/api/bank-statement/analyze`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/bank-statement/analyze`, {
         method: "POST",
         body: fd,
       });
@@ -159,7 +158,7 @@ export default function BankStatement() {
       if (periodTo) fd.append("periodTo", periodTo);
       if (holder) fd.append("accountHolder", holder);
 
-      const res = await authedFetch(`${import.meta.env.VITE_API_URL || ""}/api/bank-statement/excel`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/bank-statement/excel`, {
         method: "POST",
         body: fd,
       });

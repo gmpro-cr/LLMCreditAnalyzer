@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
   PiSparkleLight,
@@ -11,18 +12,8 @@ import {
   PiSpinnerLight,
   PiBuildingsLight,
 } from "react-icons/pi";
-import { signInWithGoogle, signInWithEmail, signUpWithEmail } from "@/lib/auth";
-import { isSupabaseConfigured } from "@/lib/supabase";
+import { signInDemo } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 function CreditGuardMark({ className }: { className?: string }) {
   return (
@@ -213,53 +204,17 @@ function CamPreview() {
 }
 
 export default function Landing() {
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [authOpen, setAuthOpen] = useState(false);
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
 
-  const openAuth = () => {
-    if (!isSupabaseConfigured) {
-      toast({
-        title: "Sign-in unavailable",
-        description: "Authentication is not configured for this deployment.",
-        variant: "destructive",
-      });
-      return;
-    }
-    setAuthOpen(true);
-  };
-
-  const handleGoogle = async () => {
+  const handleDemo = async () => {
     if (loading) return;
     setLoading(true);
-    try {
-      await signInWithGoogle(); // redirects away on success
-    } catch (e) {
-      toast({ title: "Google sign-in failed", description: (e as Error).message, variant: "destructive" });
-      setLoading(false);
-    }
-  };
-
-  const handleEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loading) return;
-    setLoading(true);
-    try {
-      if (mode === "signup") {
-        await signUpWithEmail(email, password);
-        toast({ title: "Account created", description: "You're signed in." });
-      } else {
-        await signInWithEmail(email, password);
-      }
-      // On success, useAuth's onAuthStateChange switches the app into the workspace.
-    } catch (err) {
-      toast({ title: "Sign-in failed", description: (err as Error).message, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+    await new Promise((r) => setTimeout(r, 420));
+    signInDemo("demo@creditguard.ai");
+    toast({ title: "Welcome to CreditGuard AI", description: "You're in the demo workspace." });
+    setLocation("/");
   };
 
   return (
@@ -282,12 +237,16 @@ export default function Landing() {
             <a href="#how-it-works" className="text-[13px] text-muted-foreground hover:text-foreground transition-colors duration-200">How it works</a>
           </div>
           <button
-            onClick={openAuth}
+            onClick={handleDemo}
+            disabled={loading}
             className="group flex items-center gap-2 rounded-full bg-primary pl-4 pr-1.5 py-1.5 text-[13px] font-medium text-primary-foreground transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-primary/90 active:scale-[0.97] disabled:opacity-60"
           >
-            Sign in
+            {loading ? "Entering…" : "Enter demo"}
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary-foreground/15 transition-transform duration-300 group-hover:translate-x-0.5">
-              <PiArrowRightLight className="h-3 w-3" />
+              {loading
+                ? <PiSpinnerLight className="h-3 w-3 animate-spin" />
+                : <PiArrowRightLight className="h-3 w-3" />
+              }
             </span>
           </button>
         </motion.nav>
@@ -346,12 +305,16 @@ export default function Landing() {
               >
                 {/* Primary — Button-in-button */}
                 <button
-                  onClick={openAuth}
+                  onClick={handleDemo}
+                  disabled={loading}
                   className="group flex items-center gap-3 rounded-full bg-primary pl-6 pr-2 py-2 text-[15px] font-medium text-primary-foreground shadow-[0_2px_14px_rgba(4,112,255,0.28)] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-primary/90 hover:shadow-[0_4px_20px_rgba(4,112,255,0.36)] active:scale-[0.98] disabled:opacity-60"
                 >
-                  Get started
+                  {loading ? "Entering workspace…" : "Enter demo workspace"}
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-foreground/15 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5 group-hover:-translate-y-px">
-                    <PiArrowRightLight className="h-4 w-4" />
+                    {loading
+                      ? <PiSpinnerLight className="h-4 w-4 animate-spin" />
+                      : <PiArrowRightLight className="h-4 w-4" />
+                    }
                   </span>
                 </button>
 
@@ -524,12 +487,16 @@ export default function Landing() {
               No sign-up required. Explore a fully functional demo workspace with sample cases, AI memo generation, and risk analysis tools.
             </p>
             <button
-              onClick={openAuth}
+              onClick={handleDemo}
+              disabled={loading}
               className="group flex items-center gap-3 rounded-full bg-primary pl-6 pr-2 py-2.5 text-[15px] font-medium text-primary-foreground shadow-[0_2px_16px_rgba(4,112,255,0.30)] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-primary/90 hover:shadow-[0_4px_22px_rgba(4,112,255,0.40)] active:scale-[0.98] disabled:opacity-60"
             >
-              Get started
+              {loading ? "Entering workspace…" : "Enter demo workspace"}
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5 group-hover:-translate-y-px">
-                <PiArrowRightLight className="h-4 w-4" />
+                {loading
+                  ? <PiSpinnerLight className="h-4 w-4 animate-spin" />
+                  : <PiArrowRightLight className="h-4 w-4" />
+                }
               </span>
             </button>
           </FadeUp>
@@ -548,90 +515,6 @@ export default function Landing() {
           </p>
         </div>
       </footer>
-
-      {/* ── Sign-in / sign-up modal ──────────────────────────────────────── */}
-      <Dialog open={authOpen} onOpenChange={setAuthOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CreditGuardMark className="h-5 w-5 text-primary" />
-              {mode === "signup" ? "Create your account" : "Sign in to CreditGuard AI"}
-            </DialogTitle>
-            <DialogDescription>
-              {mode === "signup"
-                ? "Use Google or an email and password to get started."
-                : "Welcome back. Sign in to your workspace."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <button
-            onClick={handleGoogle}
-            disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.26 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
-              <path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z" />
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38z" />
-            </svg>
-            Continue with Google
-          </button>
-
-          <div className="relative my-1 flex items-center">
-            <div className="h-px flex-1 bg-border" />
-            <span className="px-3 text-[11px] uppercase tracking-wider text-muted-foreground">or</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
-          <form onSubmit={handleEmail} className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="auth-email">Email</Label>
-              <Input
-                id="auth-email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="auth-password">Password</Label>
-              <Input
-                id="auth-password"
-                type="password"
-                autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-1 flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
-            >
-              {loading && <PiSpinnerLight className="h-4 w-4 animate-spin" />}
-              {mode === "signup" ? "Create account" : "Sign in"}
-            </button>
-          </form>
-
-          <p className="text-center text-[13px] text-muted-foreground">
-            {mode === "signup" ? "Already have an account?" : "New to CreditGuard AI?"}{" "}
-            <button
-              type="button"
-              onClick={() => setMode(mode === "signup" ? "signin" : "signup")}
-              className="font-medium text-primary hover:underline"
-            >
-              {mode === "signup" ? "Sign in" : "Create one"}
-            </button>
-          </p>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

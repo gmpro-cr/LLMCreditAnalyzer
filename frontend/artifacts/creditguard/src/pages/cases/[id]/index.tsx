@@ -39,7 +39,6 @@ import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
-import { downloadAuthed } from "@/lib/auth";
 import { Textarea } from "@/components/ui/textarea";
 import { MarkdownView } from "@/components/markdown-view";
 
@@ -244,25 +243,9 @@ export default function CaseDetail() {
   const updateCase = useUpdateCase();
   const generateMemo = useGenerateMemo();
   const [generating, setGenerating] = useState(false);
-  const [exportingPdf, setExportingPdf] = useState(false);
   const [mainTab, setMainTab] = useState<"memo" | "dataroom">("memo");
 
   const hasContent = sections?.some(s => s.content && s.content.trim().length > 0);
-
-  const handleExportPdf = async () => {
-    if (exportingPdf) return;
-    setExportingPdf(true);
-    try {
-      await downloadAuthed(
-        `${import.meta.env.VITE_API_URL || ""}/api/cases/${id}/export-pdf`,
-        `CAM_${caseData?.borrowerName ?? "case"}.pdf`,
-      );
-    } catch (e) {
-      toast({ title: "Export failed", description: (e as Error).message, variant: "destructive" });
-    } finally {
-      setExportingPdf(false);
-    }
-  };
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -369,9 +352,13 @@ export default function CaseDetail() {
               )}
             </Button>
 
-            <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={exportingPdf}>
-              <PiDownloadSimpleLight className="mr-2 h-4 w-4" />
-              {exportingPdf ? "Exporting…" : "Export PDF"}
+            <Button variant="outline" size="sm" asChild>
+              <a
+                href={`${import.meta.env.VITE_API_URL || ""}/api/cases/${id}/export-pdf`}
+                download={`CAM_${caseData.borrowerName}.pdf`}
+              >
+                <PiDownloadSimpleLight className="mr-2 h-4 w-4" /> Export PDF
+              </a>
             </Button>
 
             {caseData.status === 'draft' && (

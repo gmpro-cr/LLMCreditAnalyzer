@@ -18,6 +18,11 @@ Data flow: **SPA → (Supabase Auth) → api-server → (Supabase RLS + Python e
 
 ## 0. Security setup (do this first)
 
+> **Auth is currently DISABLED in the app** (removed 2026-06-16, to be re-added later).
+> The Supabase-Auth/RLS steps in this section apply only when you re-enable auth
+> (the code is recoverable from commit `640918f`). The Python-engine lockdown
+> (`INTERNAL_API_TOKEN`) and the other hardening remain active.
+
 1. **Rotate the Supabase service-role key.** A previous key was committed to the
    repo history. In Supabase → **Settings → API → Service role**, regenerate it,
    and use the new value everywhere below. (The old value is now useless once rotated.)

@@ -8,7 +8,7 @@ import {
   getCaseExtractedData,
   upsertCaseExtractedData,
   getCase,
-  supabaseAdmin,
+  supabase,
 } from "../lib/supabase-db.js";
 import { PYTHON_URL, internalHeaders } from "../lib/python.js";
 
@@ -35,8 +35,8 @@ router.get("/:id/data-room", async (req, res) => {
   if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
   try {
     const [docs, extracted] = await Promise.all([
-      listCaseDocuments(req.db, id),
-      getCaseExtractedData(req.db, id),
+      listCaseDocuments(id),
+      getCaseExtractedData(id),
     ]);
 
     const checks = [
@@ -63,10 +63,6 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
   if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
   const { symbol, companyName } = req.body;
   if (!symbol) return res.status(400).json({ error: "symbol is required" });
-
-  // Ownership check — RLS-scoped lookup; 404 if the case isn't the caller's.
-  const owned = await getCase(req.db, id).catch(() => null);
-  if (!owned) return res.status(404).json({ error: "Case not found" });
 
   if (!await awaitPython(PYTHON_URL())) {
     return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds." });
@@ -95,7 +91,7 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
   try {
     for (const rpt of reports) {
       if (rpt.error) continue;
-      await insertCaseDocument(req.db, {
+      await insertCaseDocument({
         case_id: id,
         doc_type: "annual_report",
         filename: `Annual Report ${rpt.fiscal_year}.pdf`,
@@ -105,7 +101,7 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
         source: rpt.source || "bse",
       });
     }
-    await upsertCaseExtractedData(req.db, id, { financials: merged_financials });
+    await upsertCaseExtractedData(id, { financials: merged_financials });
   } catch (e) {
     console.error("[fetch-reports] DB error:", e);
     // still return what Python found, even if DB write partially failed
@@ -118,7 +114,7 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
 router.post("/:id/data-room/run-research", async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
-  const c = await getCase(req.db, id).catch(() => null);
+  const c = await getCase(id).catch(() => null);
   if (!c) return res.status(404).json({ error: "Case not found" });
 
   if (!await awaitPython(PYTHON_URL())) {
@@ -144,7 +140,7 @@ router.post("/:id/data-room/run-research", async (req, res) => {
 
   const pyData = await pyRes.json() as Record<string, unknown>;
 
-  const existing = await getCaseExtractedData(req.db, id);
+  const existing = await getCaseExtractedData(id);
   const existingResearch: unknown[] = (existing?.research as unknown[]) || [];
   const brief = typeof pyData.brief === "string" ? pyData.brief : JSON.stringify(pyData.brief || "");
   const newItems: unknown[] = [{ content: brief, sources: pyData.sources, timestamp: new Date().toISOString() }];
@@ -165,7 +161,7 @@ router.post("/:id/data-room/run-research", async (req, res) => {
         }
       }
     }
-    await upsertCaseExtractedData(req.db, id, upsertPayload);
+    await upsertCaseExtractedData(id, upsertPayload);
   } catch (e) {
     return res.status(500).json({ error: "Failed to save research findings" });
   }
@@ -176,10 +172,10 @@ router.post("/:id/data-room/run-research", async (req, res) => {
 router.get("/:id/data-room/peers", async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
-  const c = await getCase(req.db, id).catch(() => null);
+  const c = await getCase(id).catch(() => null);
   if (!c) return res.status(404).json({ error: "Case not found" });
 
-  const extracted = await getCaseExtractedData(req.db, id);
+  const extracted = await getCaseExtractedData(id);
   const savedPeers = (extracted?.peers as unknown[]) || [];
 
   if (savedPeers.length === 0) {
@@ -209,7 +205,7 @@ router.patch("/:id/data-room/peers", async (req, res) => {
   const { peers } = req.body;
   if (!Array.isArray(peers)) return res.status(400).json({ error: "peers must be an array" });
   try {
-    await upsertCaseExtractedData(req.db, id, { peers });
+    await upsertCaseExtractedData(id, { peers });
   } catch (e) {
     return res.status(500).json({ error: "Failed to save peers" });
   }
@@ -224,10 +220,6 @@ router.post("/:id/data-room/upload", upload.single("file"), async (req, res) => 
 
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-  // Ownership check before doing any storage/extraction work.
-  const owned = await getCase(req.db, id).catch(() => null);
-  if (!owned) return res.status(404).json({ error: "Case not found" });
-
   const { buffer, originalname, mimetype } = req.file;
 
   // Sanitize to prevent path traversal
@@ -236,9 +228,7 @@ router.post("/:id/data-room/upload", upload.single("file"), async (req, res) => 
   const storagePath = `case-${id}/${safeDocType}/${Date.now()}-${safeFilename}`;
 
   // Upload to Supabase Storage (best-effort — don't fail if bucket missing).
-  // Storage is namespaced by case-<id>; the row-level ownership check above
-  // gates access, so the service-role client is acceptable here.
-  const { error: uploadError } = await supabaseAdmin.storage
+  const { error: uploadError } = await supabase.storage
     .from("case-documents")
     .upload(storagePath, buffer, { contentType: mimetype, upsert: false });
   if (uploadError) {
@@ -264,7 +254,7 @@ router.post("/:id/data-room/upload", upload.single("file"), async (req, res) => 
       });
       if (pyRes.ok) {
         extractedData = await pyRes.json() as Record<string, unknown>;
-        await upsertCaseExtractedData(req.db, id, { organogram: extractedData });
+        await upsertCaseExtractedData(id, { organogram: extractedData });
       }
     } catch (e) {
       console.error("[upload] Organogram extraction failed:", e);
@@ -285,7 +275,7 @@ router.post("/:id/data-room/upload", upload.single("file"), async (req, res) => 
         extractedData = d;
         if (["annual_report", "cma"].includes(safeDocType) && d.financials) {
           // Always update financials — each new upload may have more recent data
-          await upsertCaseExtractedData(req.db, id, { financials: d.financials });
+          await upsertCaseExtractedData(id, { financials: d.financials });
         }
       }
     } catch (e) {
@@ -295,7 +285,7 @@ router.post("/:id/data-room/upload", upload.single("file"), async (req, res) => 
 
   let doc: Record<string, unknown>;
   try {
-    doc = await insertCaseDocument(req.db, {
+    doc = await insertCaseDocument({
       case_id: id,
       doc_type: safeDocType,
       filename: originalname,
@@ -316,7 +306,7 @@ router.delete("/:id/data-room/documents/:docId", async (req, res) => {
   const docId = Number(req.params.docId);
   if (isNaN(docId)) return res.status(400).json({ error: "Invalid document id" });
   try {
-    await deleteCaseDocument(req.db, docId);
+    await deleteCaseDocument(docId);
   } catch (e) {
     return res.status(500).json({ error: "Failed to delete document" });
   }
@@ -329,9 +319,9 @@ router.post("/:id/data-room/organogram-tree", async (req, res) => {
   if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
   const { tree, summary } = req.body;
   try {
-    const existing = await getCaseExtractedData(req.db, id);
+    const existing = await getCaseExtractedData(id);
     const current = (existing?.organogram as Record<string, unknown>) || {};
-    await upsertCaseExtractedData(req.db, id, { organogram: { ...current, manual_tree: tree, manual_summary: summary } });
+    await upsertCaseExtractedData(id, { organogram: { ...current, manual_tree: tree, manual_summary: summary } });
   } catch (e) {
     return res.status(500).json({ error: "Failed to save organogram" });
   }
