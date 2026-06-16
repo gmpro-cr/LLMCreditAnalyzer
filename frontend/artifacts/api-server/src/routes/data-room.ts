@@ -10,24 +10,12 @@ import {
   getCase,
   supabase,
 } from "../lib/supabase-db.js";
-import { PYTHON_URL, internalHeaders } from "../lib/python.js";
+import { PYTHON_URL, internalHeaders, wakePython } from "../lib/python.js";
 
 const router = Router({ mergeParams: true });
 // 25 MB — must match the Python engine's MAX_UPLOAD_BYTES so a file accepted
 // here is not silently rejected downstream.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-
-async function awaitPython(url: string, maxMs = 30_000): Promise<boolean> {
-  const deadline = Date.now() + maxMs;
-  while (Date.now() < deadline) {
-    try {
-      const ping = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3_000) });
-      if (ping.ok) return true;
-    } catch { /* still waking */ }
-    await new Promise(r => setTimeout(r, 2_000));
-  }
-  return false;
-}
 
 // ── GET /api/cases/:id/data-room ───────────────────────────────────────────
 router.get("/:id/data-room", async (req, res) => {
@@ -64,7 +52,7 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
   const { symbol, companyName } = req.body;
   if (!symbol) return res.status(400).json({ error: "symbol is required" });
 
-  if (!await awaitPython(PYTHON_URL())) {
+  if (!await wakePython()) {
     return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds." });
   }
 
@@ -117,7 +105,7 @@ router.post("/:id/data-room/run-research", async (req, res) => {
   const c = await getCase(id).catch(() => null);
   if (!c) return res.status(404).json({ error: "Case not found" });
 
-  if (!await awaitPython(PYTHON_URL())) {
+  if (!await wakePython()) {
     return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds." });
   }
 

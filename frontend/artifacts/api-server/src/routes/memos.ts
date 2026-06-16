@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { listSections, updateSection, bulkUpdateSections, listRiskFlags, insertActivity, updateCase, getCase, getCaseExtractedData } from "../lib/supabase-db.js";
-import { PYTHON_URL, internalHeaders } from "../lib/python.js";
+import { PYTHON_URL, internalHeaders, wakePython } from "../lib/python.js";
 import { ListSectionsParams, UpdateSectionBody, GenerateMemoParams, ListRiskFlagsParams } from "@workspace/api-zod";
 
 const router = Router({ mergeParams: true });
@@ -104,18 +104,9 @@ router.post("/:id/generate", async (req, res) => {
     executive_summary:   "executive_summary",
   };
 
-  // Wake-up ping: Render free tier sleeps after 15 min idle.
-  // Poll /health until the service responds 200 (up to 90s), then make the real call.
-  const wakeDeadline = Date.now() + 90_000;
-  let awake = false;
-  while (Date.now() < wakeDeadline) {
-    try {
-      const ping = await fetch(`${pythonUrl}/health`, { signal: AbortSignal.timeout(5_000) });
-      if (ping.ok) { awake = true; break; }
-    } catch { /* still waking */ }
-    await new Promise((r) => setTimeout(r, 3_000));
-  }
-  if (!awake) {
+  // Wake-up: Render free tier sleeps after 15 min idle. wakePython holds each
+  // ping long enough for the cold start (~30-50s) to complete.
+  if (!await wakePython()) {
     return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds." });
   }
 

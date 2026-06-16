@@ -14,3 +14,27 @@ export function internalHeaders(extra?: Record<string, string>): Record<string, 
   if (token) headers["x-internal-token"] = token;
   return headers;
 }
+
+/**
+ * Wake the Render free-tier engine and return once it answers /health.
+ *
+ * IMPORTANT: each ping uses a long timeout. When the service is asleep Render
+ * holds the inbound request open while the instance cold-starts (~30-50s) and
+ * only then returns 200. A short per-ping timeout aborts before the wake
+ * completes, so the service never finishes spinning up and the caller 503s.
+ */
+export async function wakePython(maxMs = 120_000): Promise<boolean> {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    try {
+      const ping = await fetch(`${PYTHON_URL()}/health`, {
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (ping.ok) return true;
+    } catch {
+      /* aborted or connection failed mid cold-start — retry */
+    }
+    await new Promise((r) => setTimeout(r, 2_000));
+  }
+  return false;
+}
