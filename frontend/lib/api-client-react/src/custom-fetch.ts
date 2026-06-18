@@ -360,7 +360,37 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  // Free-tier backends sleep when idle; the first request during a cold start
+  // (or while a sibling service is also spinning up) can return 502/503/504 or
+  // drop the connection. Transparently retry those transient failures a few
+  // times so callers don't surface spurious errors. Bodies here are strings or
+  // FormData (both re-sendable); we never retry a non-transient status.
+  const RETRYABLE_STATUS = new Set([502, 503, 504]);
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY_MS = 8000;
+
+  let response: Response;
+  let attempt = 0;
+  for (;;) {
+    try {
+      response = await fetch(input, { ...init, method, headers });
+    } catch (err) {
+      // Network-level failure (e.g. connection reset mid cold-start).
+      if (attempt < MAX_RETRIES) {
+        attempt++;
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        continue;
+      }
+      throw err;
+    }
+
+    if (!response.ok && RETRYABLE_STATUS.has(response.status) && attempt < MAX_RETRIES) {
+      attempt++;
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      continue;
+    }
+    break;
+  }
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

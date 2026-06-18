@@ -183,7 +183,7 @@ const GENERATION_STAGES = [
   { at: 16, label: "Formatting tables and citations" },
 ];
 
-function GenerationProgress({ waking = false }: { waking?: boolean }) {
+function GenerationProgress() {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -195,8 +195,10 @@ function GenerationProgress({ waking = false }: { waking?: boolean }) {
   const minutes = Math.floor(elapsed / 60);
   const seconds = String(elapsed % 60).padStart(2, "0");
 
-  const label = waking ? "Waking the AI engine" : stage.label;
-  const helper = waking
+  // The engine may be cold-starting; the API client retries underneath, so this
+  // can run longer than usual on the first request after idle.
+  const label = elapsed > 25 ? "Waking the AI engine" : stage.label;
+  const helper = elapsed > 25
     ? "The engine sleeps when idle — the first run can take up to a minute. Hang tight…"
     : "A full draft is usually ready in under half a minute.";
 
@@ -248,46 +250,20 @@ export default function CaseDetail() {
   const updateCase = useUpdateCase();
   const generateMemo = useGenerateMemo();
   const [generating, setGenerating] = useState(false);
-  const [waking, setWaking] = useState(false);
   const [mainTab, setMainTab] = useState<"memo" | "dataroom">("memo");
 
   const hasContent = sections?.some(s => s.content && s.content.trim().length > 0);
 
   const handleGenerate = async () => {
-    // The analysis engine runs on a free tier that sleeps when idle. The first
-    // request after a sleep can return 502/503 (or a network error) while it
-    // cold-starts (~30-60s). Transparently wait and retry a few times so the
-    // user gets a draft instead of an error.
-    const MAX_ATTEMPTS = 6;
-    const RETRY_DELAY_MS = 10_000;
-    const isColdStart = (e: unknown): boolean => {
-      const status = (e as { status?: number })?.status;
-      return status === 502 || status === 503 || status === 504 || status === undefined;
-    };
-
+    // Cold-start 502/503/network errors are retried transparently inside the
+    // API client (customFetch), so a single call here is enough — it just takes
+    // longer while the free-tier engine wakes.
     setGenerating(true);
-    setWaking(false);
     try {
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        try {
-          await generateMemo.mutateAsync({ id });
-          await queryClient.invalidateQueries({ queryKey: getListSectionsQueryKey(id) });
-          await queryClient.invalidateQueries({ queryKey: getGetCaseQueryKey(id) });
-          toast({ title: "Memo generated", description: "All sections have been drafted by AI." });
-          return;
-        } catch (e) {
-          if (isColdStart(e) && attempt < MAX_ATTEMPTS) {
-            setWaking(true);
-            toast({
-              title: "Waking the AI engine…",
-              description: `First run after idle can take ~1 min. Retrying (${attempt}/${MAX_ATTEMPTS - 1})…`,
-            });
-            await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
-            continue;
-          }
-          throw e;
-        }
-      }
+      await generateMemo.mutateAsync({ id });
+      await queryClient.invalidateQueries({ queryKey: getListSectionsQueryKey(id) });
+      await queryClient.invalidateQueries({ queryKey: getGetCaseQueryKey(id) });
+      toast({ title: "Memo generated", description: "All sections have been drafted by AI." });
     } catch (e) {
       const msg: string = String(
         (e && typeof e === "object" && "data" in e && (e as {data?: {error?: string}}).data?.error)
@@ -296,7 +272,6 @@ export default function CaseDetail() {
       toast({ title: "Generation failed", description: msg, variant: "destructive" });
     } finally {
       setGenerating(false);
-      setWaking(false);
     }
   };
 
@@ -439,7 +414,7 @@ export default function CaseDetail() {
           {/* Main Editor Area */}
           <div className="flex-1 overflow-y-auto p-8 lg:pr-4 relative scroll-smooth" id="editor-container">
             <div className="max-w-4xl mx-auto space-y-8 pb-20">
-              {generating && <GenerationProgress waking={waking} />}
+              {generating && <GenerationProgress />}
               {sectionsLoading ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <Skeleton key={i} className="h-64 w-full" />
