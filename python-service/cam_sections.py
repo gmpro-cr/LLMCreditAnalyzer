@@ -27,6 +27,9 @@ import httpx
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Optional
 
+from credit_score import compute_scorecard, format_scorecard_md
+from validators import audit_memo_figures
+
 logger = logging.getLogger(__name__)
 
 # ── Delimiter used to split sections ──────────────────────────────────────────
@@ -348,7 +351,13 @@ def _llm(prompt: str) -> str:
         result = _gemini_call(prompt)
         if result:
             return result
-        logger.warning("Gemini failed, falling back to Ollama")
+        # Gemini quota/outage → fall back to Groq's free tier (if GROQ_API_KEY
+        # is set), then Ollama as a last resort for local dev.
+        logger.warning("Gemini failed, falling back to Groq")
+        result = _groq_call(prompt)
+        if result:
+            return result
+        logger.warning("Groq failed, falling back to Ollama")
         return _ollama_call(prompt)
     # Unknown provider — try Ollama then Gemini
     result = _ollama_call(prompt)
@@ -929,5 +938,38 @@ def generate_cam_sections(
     if "management_profile" in sections:
         sections["management_profile"]["pep_checked"] = False
         sections["management_profile"]["pep_notes"]   = ""
+
+    # Deterministic internal rating — prepend to Financial Analysis (math owned
+    # by Python, not the LLM).
+    try:
+        scorecard = compute_scorecard(financials, ratios)
+        sc_md = format_scorecard_md(scorecard)
+        if sc_md and "financial_analysis" in sections:
+            sections["financial_analysis"]["content"] = (
+                sc_md + "\n\n" + sections["financial_analysis"].get("content", "")
+            )
+        # expose the structured rating too (engine consumers / UI can use it)
+        sections["_credit_rating"] = scorecard
+    except Exception as e:
+        logger.warning(f"[CAM] Scorecard computation failed: {e}")
+
+    # Number grounding — flag any ratio the LLM cited that disagrees with the
+    # computed value, appended to Key Issues.
+    try:
+        combined = "\n".join(
+            s.get("content", "") for s in sections.values() if isinstance(s, dict)
+        )
+        mismatches = audit_memo_figures(combined, ratios)
+        if mismatches and "key_issues" in sections:
+            lines = ["", "", "**Figure Verification (automated):**", ""]
+            for m in mismatches:
+                lines.append(f"- {m['label'].upper()}: memo states {m['stated']}, "
+                             f"computed {m['computed']} — reconcile before reliance.")
+            sections["key_issues"]["content"] = (
+                sections["key_issues"].get("content", "") + "\n".join(lines)
+            )
+            sections["_figure_mismatches"] = mismatches
+    except Exception as e:
+        logger.warning(f"[CAM] Figure audit failed: {e}")
 
     return sections

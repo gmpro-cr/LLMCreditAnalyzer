@@ -77,8 +77,17 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
   const { reports, merged_financials } = pyData;
 
   try {
+    // Idempotency: a retry (e.g. after a cold-start timeout) must not duplicate
+    // annual-report rows. Skip fiscal years already stored for this case.
+    const existing = await listCaseDocuments(id);
+    const haveYears = new Set(
+      existing
+        .filter((d: Record<string, unknown>) => d.doc_type === "annual_report")
+        .map((d: Record<string, unknown>) => String(d.fiscal_year)),
+    );
     for (const rpt of reports) {
       if (rpt.error) continue;
+      if (haveYears.has(String(rpt.fiscal_year))) continue;
       await insertCaseDocument({
         case_id: id,
         doc_type: "annual_report",
@@ -88,6 +97,7 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
         extracted_data: rpt.financials || null,
         source: rpt.source || "bse",
       });
+      haveYears.add(String(rpt.fiscal_year));
     }
     await upsertCaseExtractedData(id, { financials: merged_financials });
   } catch (e) {

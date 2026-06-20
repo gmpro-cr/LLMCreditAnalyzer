@@ -23,6 +23,10 @@ services:
       - fromGroup: creditguard-internal
       - key: GEMINI_API_KEY
         sync: false
+      # Optional free fallback: when Gemini hits quota/outage the engine falls
+      # back to Groq (set a free key from console.groq.com to enable).
+      - key: GROQ_API_KEY
+        sync: false
       - key: MEMO_PROVIDER
         value: gemini
       - key: EXTRACTION_PROVIDER

@@ -22,7 +22,8 @@ from public_data import fetch_all_public_data, fetch_stock_quote, fetch_screener
 from cam_sections import generate_cam_sections, _llm
 from risk_flags import generate_risk_flags
 from bank_statement import analyze_bank_statement, export_to_excel
-from validators import data_quality_report, apply_data_quality
+from validators import data_quality_report, apply_data_quality, apply_figure_audit
+from credit_score import compute_scorecard, format_scorecard_md
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -585,6 +586,11 @@ async def generate_memo_from_public_data(data: PublicMemoRequest):
         )
         # Clamp any residual + append the limitations section
         memo_content = apply_data_quality(memo_content, dq)
+        memo_content = apply_figure_audit(memo_content, ratios)
+        scorecard = compute_scorecard(screener_fin, ratios)
+        sc_md = format_scorecard_md(scorecard)
+        if sc_md:
+            memo_content = sc_md + "\n\n" + memo_content
 
         # Embed research metadata into financials so it persists with the upload
         if research_brief:
@@ -613,6 +619,7 @@ async def generate_memo_from_public_data(data: PublicMemoRequest):
             "research_brief":   research_brief,
             "research_sources": research_sources,
             "data_quality":     dq,
+            "credit_rating":    scorecard,
         }
 
     except HTTPException:
@@ -677,7 +684,13 @@ async def generate_memo(data: GenerateMemoRequest):
         memo_content = generate_cam_memo(financials, ratios, company_name, covenants,
                                          research_brief, max_confidence=dq["max_confidence"])
         memo_content = apply_data_quality(memo_content, dq)
-        return {"memo_content": memo_content, "company_name": company_name, "data_quality": dq}
+        memo_content = apply_figure_audit(memo_content, ratios)
+        scorecard = compute_scorecard(financials, ratios)
+        sc_md = format_scorecard_md(scorecard)
+        if sc_md:
+            memo_content = sc_md + "\n\n" + memo_content
+        return {"memo_content": memo_content, "company_name": company_name,
+                "data_quality": dq, "credit_rating": scorecard}
     except Exception as e:
         logger.error(f"Memo generation failed: {e}", exc_info=True)
         raise HTTPException(500, "Memo generation failed. Please try again.")

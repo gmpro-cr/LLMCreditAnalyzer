@@ -89,3 +89,62 @@ def apply_data_quality(memo: str, report: dict) -> str:
                       f"All figures must be verified against audited financial statements._"]
         memo += "\n".join(lines)
     return memo
+
+
+# ── Number grounding: cross-check figures cited in the memo vs computed ───────
+# Heuristic guard against hallucinated/altered ratios: find a ratio's label in
+# the prose, read the number stated right after it, and compare to the value
+# Python computed. Advisory only (flags for reconciliation), never blocking.
+
+_RATIO_LABELS = {
+    "dscr":              ["debt service coverage", "debt-service coverage", "dscr"],
+    "current_ratio":     ["current ratio"],
+    "debt_equity":       ["debt-to-equity", "debt to equity", "debt-equity", "debt/equity", "gearing ratio"],
+    "interest_coverage": ["interest coverage", "interest cover"],
+    "net_margin":        ["net profit margin", "net margin"],
+    "ebitda_margin":     ["ebitda margin"],
+    "roce":              ["return on capital employed", "roce"],
+    "roe":               ["return on equity"],
+}
+
+
+def audit_memo_figures(memo_text: str, ratios: dict) -> list:
+    """Return [{ratio,label,stated,computed}] where a memo-stated ratio differs
+    materially from the computed value."""
+    import re
+    issues = []
+    ratios = ratios or {}
+    low = (memo_text or "").lower()
+    for key, labels in _RATIO_LABELS.items():
+        computed = as_number(ratios.get(key))
+        if computed is None:
+            continue
+        for label in labels:
+            idx = low.find(label)
+            if idx == -1:
+                continue
+            window = low[idx + len(label): idx + len(label) + 28]
+            m = re.search(r"[-+]?\d+(?:\.\d+)?", window)
+            if not m:
+                continue
+            stated = float(m.group())
+            tol = max(abs(computed) * 0.10, 0.15)  # 10% or 0.15 absolute
+            if abs(stated - computed) > tol:
+                issues.append({"ratio": key, "label": label,
+                               "stated": stated, "computed": round(computed, 2)})
+            break  # only the first label variant per ratio
+    return issues
+
+
+def apply_figure_audit(memo: str, ratios: dict) -> str:
+    """Append a Figure Verification section if any cited ratio mismatches."""
+    issues = audit_memo_figures(memo, ratios)
+    if not issues:
+        return memo
+    lines = ["", "", "## Figure Verification", "",
+             "_Automated cross-check of ratios cited in this memo against the values "
+             "computed from the financial spread. Reconcile before reliance._", ""]
+    for i in issues:
+        lines.append(f"- **{i['label'].upper()}** — memo states {i['stated']}, "
+                     f"computed {i['computed']}. Please reconcile.")
+    return memo + "\n".join(lines)
