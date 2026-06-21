@@ -229,6 +229,28 @@ export default function NewCase() {
       // Determine the ticker to use for BSE/Screener fetches
       const ticker = selectedCompany?.ticker ?? "";
 
+      // Warm the free-tier engine once, up front, so the heavy calls below hit a
+      // ready instance instead of each independently riding out the ~30-50s cold
+      // start (which made the button appear stuck). If it can't wake, stop with a
+      // clear message rather than spinning.
+      setSetupStep("Waking AI engine (first run can take up to a minute)…");
+      try {
+        const wake = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/python-wake`, {
+          signal: AbortSignal.timeout(130_000),
+        });
+        if (!wake.ok) throw new Error("engine not ready");
+      } catch {
+        toast({
+          title: "AI engine is starting up",
+          description: "The analysis engine was idle and is waking. Your case was created — open it and click Generate in a minute.",
+          variant: "destructive",
+        });
+        setIsGenerating(false);
+        setSetupStep("");
+        setLocation(`/cases/${newCase.id}`);
+        return;
+      }
+
       // Run research first (fetches Screener financials + news) — gives memo real data
       try {
         setSetupStep("Fetching public data & research…");
@@ -237,7 +259,12 @@ export default function NewCase() {
         // Non-fatal — continue without research data
       }
 
-      // Fire annual report fetch in background (takes ~2-5 min; don't block UX)
+      setSetupStep("Generating AI draft…");
+      await generateMemo.mutateAsync({ id: newCase.id });
+
+      // Annual reports are heavy (~2-5 min); fetch in the background AFTER the
+      // engine is warm and the memo is drafted, so they don't compete with the
+      // generation during a cold start.
       if (ticker) {
         fetchAnnualReports.mutateAsync({
           caseId: newCase.id,
@@ -245,9 +272,6 @@ export default function NewCase() {
           companyName: values.borrowerName,
         }).catch(() => {});
       }
-
-      setSetupStep("Generating AI draft…");
-      await generateMemo.mutateAsync({ id: newCase.id });
 
       toast({
         title: "Case ready",

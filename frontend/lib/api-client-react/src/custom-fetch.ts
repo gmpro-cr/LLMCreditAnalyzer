@@ -366,7 +366,7 @@ export async function customFetch<T = unknown>(
   // times so callers don't surface spurious errors. Bodies here are strings or
   // FormData (both re-sendable); we never retry a non-transient status.
   const RETRYABLE_STATUS = new Set([502, 503, 504]);
-  const MAX_RETRIES = 5;
+  const MAX_RETRIES = 3;
   const RETRY_DELAY_MS = 8000;
 
   let response: Response;

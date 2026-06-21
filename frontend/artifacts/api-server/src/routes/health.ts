@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
+import { wakePython } from "../lib/python";
 
 const PYTHON_URL = () => process.env["PYTHON_SERVICE_URL"] ?? "http://127.0.0.1:8000";
 
@@ -9,6 +10,14 @@ const router: IRouter = Router();
 router.get("/healthz", (_req, res) => {
   const data = HealthCheckResponse.parse({ status: "ok" });
   res.json(data);
+});
+
+// Blocking wake: holds the request until the engine is up (or ~120s), so the
+// client can show a single "Waking AI engine…" step before a heavy call
+// instead of each call independently riding out the cold start.
+router.get("/python-wake", async (_req, res) => {
+  const awake = await wakePython();
+  return res.status(awake ? 200 : 503).json({ awake });
 });
 
 // Wakeup probe for the Python engine — called at app load to warm up the
