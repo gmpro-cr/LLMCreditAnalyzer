@@ -24,15 +24,21 @@ export function internalHeaders(extra?: Record<string, string>): Record<string, 
  * completes, so the service never finishes spinning up and the caller 503s.
  */
 export async function wakePython(maxMs = 120_000): Promise<boolean> {
+  // Hold a SINGLE request open across the whole cold start. Render keeps the
+  // connection during spin-up (~40-90s, occasionally more) and returns 200 once
+  // ready. Short per-ping timeouts that abort mid-wake can reset Render's
+  // spin-up, so we use one long-held attempt that spans the budget, then a brief
+  // retry only if time remains.
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
+    const remaining = deadline - Date.now();
     try {
       const ping = await fetch(`${PYTHON_URL()}/health`, {
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(Math.max(5_000, remaining - 1_000)),
       });
       if (ping.ok) return true;
     } catch {
-      /* aborted or connection failed mid cold-start — retry */
+      /* timed out / connection failed — retry if budget remains */
     }
     await new Promise((r) => setTimeout(r, 2_000));
   }
