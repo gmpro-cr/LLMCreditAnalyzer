@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listSections, updateSection, bulkUpdateSections, listRiskFlags, insertActivity, updateCase, getCase, getCaseExtractedData } from "../lib/supabase-db.js";
+import { listSections, updateSection, bulkUpdateSections, listRiskFlags, insertActivity, updateCase, getCase, getCaseExtractedData, nullIfMissing } from "../lib/supabase-db.js";
 import { PYTHON_URL, internalHeaders, wakePython } from "../lib/python.js";
 import { ListSectionsParams, UpdateSectionBody, GenerateMemoParams, ListRiskFlagsParams } from "@workspace/api-zod";
 
@@ -34,7 +34,7 @@ router.patch("/:id/sections/:sectionKey", async (req, res) => {
   if (body.isReviewed !== undefined) updates.is_reviewed = body.isReviewed;
   if (body.isLocked !== undefined) updates.is_locked = body.isLocked;
 
-  const updated = await updateSection(id, sectionKey, updates).catch(() => null);
+  const updated = await updateSection(id, sectionKey, updates).catch(nullIfMissing);
   if (!updated) return res.status(404).json({ error: "Section not found" });
 
   // Recompute memo_progress
@@ -47,7 +47,7 @@ router.patch("/:id/sections/:sectionKey", async (req, res) => {
 
 router.post("/:id/generate", async (req, res) => {
   const { id } = GenerateMemoParams.parse({ id: Number(req.params.id) });
-  const c = await getCase(id).catch(() => null);
+  const c = await getCase(id).catch(nullIfMissing);
   if (!c) return res.status(404).json({ error: "Case not found" });
 
   const pythonUrl = PYTHON_URL();
@@ -193,10 +193,12 @@ router.get("/:id/export-pdf", async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
 
-  const c = await getCase(id).catch(() => null);
+  const c = await getCase(id).catch(nullIfMissing);
   if (!c) return res.status(404).json({ error: "Case not found" });
 
-  const sections = await listSections(id).catch(() => []);
+  // No `.catch(() => [])` here: listSections never signals absence via an
+  // error, so a failure is always real and must not export an empty memo.
+  const sections = await listSections(id);
   const pythonUrl = PYTHON_URL();
 
   // Assemble memo_content from all sections with content

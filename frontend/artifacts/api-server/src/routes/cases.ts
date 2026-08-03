@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listCases, getCase, createCase, updateCase, deleteCase, insertSections, insertActivity } from "../lib/supabase-db.js";
+import { listCases, getCase, createCase, updateCase, deleteCase, insertSections, insertActivity, nullIfMissing } from "../lib/supabase-db.js";
 import { ListCasesQueryParams, CreateCaseBody, GetCaseParams, UpdateCaseParams, UpdateCaseBody, DeleteCaseParams } from "@workspace/api-zod";
 
 const router = Router();
@@ -69,7 +69,7 @@ router.post("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   const { id } = GetCaseParams.parse({ id: Number(req.params.id) });
-  const c = await getCase(id).catch(() => null);
+  const c = await getCase(id).catch(nullIfMissing);
   if (!c) return res.status(404).json({ error: "Not found" });
   return res.json(formatCase(c));
 });
@@ -87,7 +87,7 @@ router.patch("/:id", async (req, res) => {
   if (body.rmName !== undefined) updates.rm_name = body.rmName;
   if (body.status !== undefined) updates.status = body.status;
 
-  const updated = await updateCase(id, updates).catch(() => null);
+  const updated = await updateCase(id, updates).catch(nullIfMissing);
   if (!updated) return res.status(404).json({ error: "Not found" });
 
   await insertActivity({ case_id: id, borrower_name: updated.borrower_name, action: body.status ? `Status changed to ${body.status}` : "Case updated", actor: updated.rm_name });

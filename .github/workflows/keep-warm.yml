@@ -3,6 +3,12 @@ name: keep-warm
 # Pings both Render free-tier services so they don't sleep after ~15 min idle
 # (the first request after sleep otherwise returns a 503 during cold start).
 # GitHub's scheduler can lag a few minutes under load — fine for a demo.
+#
+# It also pings the database, which is a different problem with a different
+# clock: Supabase pauses an idle free-tier project after ~7 days and withdraws
+# its DNS record, which is what took the app down on 2026-08-03. Keeping the
+# API warm never touched the database, so it kept idling. GitHub throttles this
+# cron to hours in practice — irrelevant against a 7-day window.
 
 on:
   schedule:
@@ -22,3 +28,11 @@ jobs:
         run: |
           curl -fsS --retry 3 --retry-delay 5 --max-time 90 \
             https://creditguard-python.onrender.com/health
+
+      # Real Supabase activity, so the project's idle timer keeps resetting.
+      # `-f` is deliberate: if the database is unreachable this step fails and
+      # the workflow goes red, which is the alert we did not have last time.
+      - name: Ping database (keeps Supabase off the free-tier pause timer)
+        run: |
+          curl -fsS --retry 3 --retry-delay 5 --max-time 90 \
+            https://creditguard-api.onrender.com/api/db-health

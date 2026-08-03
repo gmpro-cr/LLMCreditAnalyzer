@@ -3,8 +3,16 @@ import { supabase, insertActivity } from "../lib/supabase-db.js";
 
 const router = Router();
 
+// These handlers used to destructure only `{ data }` and fall back to `?? []`,
+// so a database outage produced a confident HTTP 200 reading "0 cases,
+// 0 hours saved" instead of an error. A wrong number is worse than a visible
+// failure, so every query now propagates its error — Express 5 forwards the
+// rejection to the global handler, which maps an unreachable database to a
+// 503 `database_unavailable`.
+
 router.get("/stats", async (_req, res) => {
-  const { data: allCases } = await supabase.from("cases").select("status, updated_at");
+  const { data: allCases, error } = await supabase.from("cases").select("status, updated_at");
+  if (error) throw error;
   const cases = allCases ?? [];
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -20,12 +28,14 @@ router.get("/stats", async (_req, res) => {
 });
 
 router.get("/recent-activity", async (_req, res) => {
-  const { data } = await supabase.from("activity_log").select("*").order("timestamp", { ascending: false }).limit(20);
+  const { data, error } = await supabase.from("activity_log").select("*").order("timestamp", { ascending: false }).limit(20);
+  if (error) throw error;
   res.json(data ?? []);
 });
 
 router.get("/status-breakdown", async (_req, res) => {
-  const { data: cases } = await supabase.from("cases").select("status");
+  const { data: cases, error } = await supabase.from("cases").select("status");
+  if (error) throw error;
   const counts: Record<string, number> = {};
   for (const c of cases ?? []) counts[c.status] = (counts[c.status] || 0) + 1;
 

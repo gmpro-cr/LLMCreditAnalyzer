@@ -26,6 +26,28 @@ export async function listCases(filters?: { status?: string; search?: string }) 
   return data ?? [];
 }
 
+/**
+ * PostgREST reports "0 rows" from `.single()` as an *error* (code PGRST116)
+ * rather than a null result. Callers therefore have to tell a genuinely absent
+ * row apart from a database that is simply unreachable — collapsing the two
+ * made an outage look like a deleted case.
+ */
+export function isMissingRow(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  return (err as Record<string, unknown>)["code"] === "PGRST116";
+}
+
+/**
+ * `.catch(nullIfMissing)` on a lookup: yields null when the row genuinely does
+ * not exist (so the route can answer 404) and rethrows everything else, so an
+ * unreachable database surfaces as 503 instead of being disguised as a
+ * deleted record.
+ */
+export function nullIfMissing(err: unknown): null {
+  if (isMissingRow(err)) return null;
+  throw err;
+}
+
 export async function getCase(id: number) {
   const { data, error } = await supabase.from("cases").select("*").eq("id", id).single();
   if (error) throw error;

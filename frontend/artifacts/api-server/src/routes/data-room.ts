@@ -9,6 +9,7 @@ import {
   upsertCaseExtractedData,
   getCase,
   supabase,
+  nullIfMissing,
 } from "../lib/supabase-db.js";
 import { PYTHON_URL, internalHeaders, wakePython } from "../lib/python.js";
 
@@ -112,7 +113,7 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
 router.post("/:id/data-room/run-research", async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
-  const c = await getCase(id).catch(() => null);
+  const c = await getCase(id).catch(nullIfMissing);
   if (!c) return res.status(404).json({ error: "Case not found" });
 
   if (!await wakePython()) {
@@ -170,7 +171,7 @@ router.post("/:id/data-room/run-research", async (req, res) => {
 router.get("/:id/data-room/peers", async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
-  const c = await getCase(id).catch(() => null);
+  const c = await getCase(id).catch(nullIfMissing);
   if (!c) return res.status(404).json({ error: "Case not found" });
 
   const extracted = await getCaseExtractedData(id);
