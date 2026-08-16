@@ -233,6 +233,33 @@ export class ResponseParseError extends Error {
   }
 }
 
+// Error codes the API server uses for a dependency that is down rather than
+// waking up. Retrying these just burns the retry budget — a paused Supabase
+// project stays unreachable for far longer than any client-side backoff — so
+// the caller is better served by a prompt, honest failure. Codes NOT listed
+// here (notably `upstream_unavailable`, the Python engine's cold start) stay
+// retryable, because those really do recover within the retry window.
+const TERMINAL_ERROR_CODES = new Set(["database_unavailable"]);
+
+/**
+ * Peek at an error body to see whether the server flagged the failure as
+ * terminal. Reads a *clone* so the original body stays unconsumed for
+ * `parseErrorBody` further down.
+ *
+ * Fails open: any problem here (non-JSON body, or a runtime without a working
+ * `clone()` — see the React Native notes above) reports `false`, so the caller
+ * falls back to the plain status-based retry behavior instead of breaking.
+ */
+async function hasTerminalErrorCode(response: Response): Promise<boolean> {
+  try {
+    const data: unknown = await response.clone().json();
+    const code = (data as { code?: unknown } | null)?.code;
+    return typeof code === "string" && TERMINAL_ERROR_CODES.has(code);
+  } catch {
+    return false;
+  }
+}
+
 async function parseJsonBody(
   response: Response,
   requestInfo: { method: string; url: string },
@@ -385,6 +412,12 @@ export async function customFetch<T = unknown>(
     }
 
     if (!response.ok && RETRYABLE_STATUS.has(response.status) && attempt < MAX_RETRIES) {
+      // A retryable *status* is not always a retryable *failure*: the server
+      // marks a downed dependency with a terminal code. Honor it and stop
+      // rather than spending the full backoff on a request that cannot succeed.
+      if (await hasTerminalErrorCode(response)) {
+        break;
+      }
       attempt++;
       await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
       continue;

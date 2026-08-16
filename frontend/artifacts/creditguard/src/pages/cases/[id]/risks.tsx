@@ -17,6 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OutageState } from "@/components/outage-state";
+import { isDataUnavailable } from "@/lib/query-state";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -31,7 +33,13 @@ export default function CaseRisks() {
     query: { enabled: !!id, queryKey: getGetCaseQueryKey(id) }
   });
 
-  const { data: riskFlags, isLoading: riskLoading } = useListRiskFlags(id, {
+  const {
+    data: riskFlags,
+    isLoading: riskLoading,
+    isError: riskError,
+    refetch: refetchRisks,
+    isFetching: riskFetching,
+  } = useListRiskFlags(id, {
     query: { enabled: !!id, queryKey: getListRiskFlagsQueryKey(id) }
   });
 
@@ -106,6 +114,16 @@ export default function CaseRisks() {
               <Skeleton className="h-40 w-full" />
               <Skeleton className="h-40 w-full" />
             </div>
+          ) : isDataUnavailable(riskError, riskLoading, riskFlags) ? (
+            // Safety-critical: the fallback below reads as "no risks found".
+            // Claiming a clean risk profile because the database is unreachable
+            // is the most dangerous thing this page could do.
+            <OutageState
+              title="Can't load risk flags"
+              description="We can't reach the service, so we can't confirm this case's risk profile. Don't treat this as an all-clear."
+              onRetry={() => refetchRisks()}
+              isRetrying={riskFetching}
+            />
           ) : riskFlags && riskFlags.length > 0 ? (
             <div className="space-y-6 pb-12">
               <div className="grid grid-cols-3 gap-4 mb-8">

@@ -35,6 +35,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OutageState } from "@/components/outage-state";
+import { isDataUnavailable } from "@/lib/query-state";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -234,7 +236,13 @@ export default function CaseDetail() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: caseData, isLoading: caseLoading } = useGetCase(id, {
+  const {
+    data: caseData,
+    isLoading: caseLoading,
+    isError: caseError,
+    refetch: refetchCase,
+    isFetching: caseFetching,
+  } = useGetCase(id, {
     query: { enabled: !!id, queryKey: getGetCaseQueryKey(id) }
   });
 
@@ -299,6 +307,21 @@ export default function CaseDetail() {
   };
 
   const highSeverityRisksCount = riskFlags?.filter(r => r.severity === 'high').length || 0;
+
+  // Checked before the skeleton branch below: `!caseData` is also true on
+  // error, so without this the page would show loading skeletons forever.
+  if (isDataUnavailable(caseError, caseLoading, caseData)) {
+    return (
+      <div className="p-8">
+        <OutageState
+          title="Can't load this case"
+          description="The case is safe — we just can't reach the service right now. This usually clears on its own in a few minutes."
+          onRetry={() => refetchCase()}
+          isRetrying={caseFetching}
+        />
+      </div>
+    );
+  }
 
   if (caseLoading || !caseData) {
     return (

@@ -41,6 +41,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OutageState } from "@/components/outage-state";
+import { isDataUnavailable } from "@/lib/query-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useToast } from "@/hooks/use-toast";
@@ -72,9 +74,11 @@ export default function CasesList() {
     ...(statusFilter !== "all" ? { status: statusFilter as CaseStatus } : {})
   };
 
-  const { data: cases, isLoading } = useListCases(queryParams, {
+  const { data: cases, isLoading, isError, refetch, isFetching } = useListCases(queryParams, {
     query: { queryKey: getListCasesQueryKey(queryParams) }
   });
+
+  const casesUnavailable = isDataUnavailable(isError, isLoading, cases);
 
   const deleteCase = useDeleteCase();
 
@@ -179,6 +183,20 @@ export default function CasesList() {
                       <td className="p-4 align-middle"><Skeleton className="h-8 w-8 rounded-md" /></td>
                     </tr>
                   ))
+                ) : casesUnavailable ? (
+                  // Must come before the empty branch: a failed read is not an
+                  // empty portfolio, and saying "No cases yet" here would be a
+                  // false statement about the user's book.
+                  <tr>
+                    <td colSpan={8} className="h-48 text-center">
+                      <OutageState
+                        description="Your cases are safe — we just can't load them right now. This usually clears on its own in a few minutes."
+                        onRetry={() => refetch()}
+                        isRetrying={isFetching}
+                        compact
+                      />
+                    </td>
+                  </tr>
                 ) : cases && cases.length > 0 ? (
                   cases.map((c) => (
                     <tr

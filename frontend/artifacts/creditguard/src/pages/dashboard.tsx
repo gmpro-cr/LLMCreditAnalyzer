@@ -10,13 +10,30 @@ import {
 import { useGetDashboardStats, useGetRecentActivity, getGetDashboardStatsQueryKey, getGetRecentActivityQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OutageState } from "@/components/outage-state";
+import { isDataUnavailable } from "@/lib/query-state";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
-  const { data: stats, isLoading: statsLoading } = useGetDashboardStats({ query: { queryKey: getGetDashboardStatsQueryKey() } });
-  const { data: activity, isLoading: activityLoading } = useGetRecentActivity({ query: { queryKey: getGetRecentActivityQueryKey() } });
+  const {
+    data: stats,
+    isLoading: statsLoading,
+    isError: statsError,
+    refetch: refetchStats,
+    isFetching: statsFetching,
+  } = useGetDashboardStats({ query: { queryKey: getGetDashboardStatsQueryKey() } });
+  const {
+    data: activity,
+    isLoading: activityLoading,
+    isError: activityError,
+    refetch: refetchActivity,
+    isFetching: activityFetching,
+  } = useGetRecentActivity({ query: { queryKey: getGetRecentActivityQueryKey() } });
+
+  const statsUnavailable = isDataUnavailable(statsError, statsLoading, stats);
+  const activityUnavailable = isDataUnavailable(activityError, activityLoading, activity);
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -41,6 +58,19 @@ export default function Dashboard() {
           <Skeleton className="h-[100px] rounded-xl" />
           <Skeleton className="h-[100px] rounded-xl" />
         </div>
+      ) : statsUnavailable ? (
+        // Never fall through to the cards on error: `stats?.x ?? 0` would
+        // render a real-looking 0 for every KPI and misstate the pipeline.
+        <Card>
+          <CardContent className="p-0">
+            <OutageState
+              title="Can't load your pipeline"
+              description="These figures are unavailable right now, so we're not showing them rather than showing zeros."
+              onRetry={() => refetchStats()}
+              isRetrying={statsFetching}
+            />
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Featured top row: Active Cases + Drafts */}
@@ -140,6 +170,13 @@ export default function Dashboard() {
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
             </div>
+          ) : activityUnavailable ? (
+            <OutageState
+              title="Can't load recent activity"
+              onRetry={() => refetchActivity()}
+              isRetrying={activityFetching}
+              compact
+            />
           ) : activity && activity.length > 0 ? (
             <div className="space-y-5">
               {activity.map((item, index) => (
