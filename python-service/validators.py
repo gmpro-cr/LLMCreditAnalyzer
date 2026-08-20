@@ -148,3 +148,83 @@ def apply_figure_audit(memo: str, ratios: dict) -> str:
         lines.append(f"- **{i['label'].upper()}** — memo states {i['stated']}, "
                      f"computed {i['computed']}. Please reconcile.")
     return memo + "\n".join(lines)
+
+
+# ── Recommendation consistency: narrative vs deterministic grade/flags ────────
+# Heuristic guard: if the memo's recommendation section reads as "approve" while
+# the deterministic scorecard grade is Substandard or high-severity risk flags are
+# present, flag it for reconciliation. Advisory only, never blocking — this mirrors
+# the existing "recommendation MUST be authored by RM" scaffold-only disclaimer.
+
+_APPROVE_PATTERNS = [
+    r"recommend(?:ed)?\s+(?:for\s+)?approval",
+    r"recommend(?:ed)?\s+(?:to\s+)?sanction",
+    r"suitable\s+for\s+approval",
+    r"approve\s+the\s+(?:proposed\s+)?(?:credit\s+)?facilit\w*",
+]
+_DECLINE_PATTERNS = [
+    r"recommend(?:ed)?\s+against",
+    r"recommend(?:ed)?\s+(?:to\s+)?(?:decline|reject)",
+    r"not\s+recommend(?:ed)?\s+for\s+approval",
+    r"do\s+not\s+recommend",
+]
+_CONDITIONAL_PATTERNS = [
+    r"recommend(?:ed)?.{0,20}\bsubject\s+to\b",
+    r"conditional\s+approval",
+    r"further\s+review",
+    r"recommend(?:ed)?.{0,20}\bwith\s+conditions?\b",
+]
+
+
+def classify_recommendation(memo_text: str) -> str:
+    """Return 'approve' | 'decline' | 'conditional' | 'unclear' from a memo's stated
+    sentiment. Decline/conditional checked first since 'recommend against approval'
+    would otherwise also match an approve pattern."""
+    low = (memo_text or "").lower()
+    if any(re.search(p, low) for p in _DECLINE_PATTERNS):
+        return "decline"
+    if any(re.search(p, low) for p in _CONDITIONAL_PATTERNS):
+        return "conditional"
+    if any(re.search(p, low) for p in _APPROVE_PATTERNS):
+        return "approve"
+    return "unclear"
+
+
+def audit_recommendation_consistency(memo_text: str, scorecard: dict, risk_flags: list) -> list:
+    """Flag when the memo leans 'approve' while the deterministic grade/risk flags
+    say otherwise. Advisory only."""
+    if classify_recommendation(memo_text) != "approve":
+        return []
+
+    issues = []
+    scorecard = scorecard or {}
+    if scorecard.get("band") == "Substandard":
+        issues.append({
+            "type": "grade_conflict",
+            "message": f"Memo leans toward approval but the internal model grade is "
+                       f"{scorecard.get('grade', 'Unrated')} ({scorecard['band']}).",
+        })
+
+    high_flags = [f for f in (risk_flags or []) if f.get("severity") == "high"]
+    if high_flags:
+        titles = ", ".join(f.get("title", "risk") for f in high_flags[:3])
+        issues.append({
+            "type": "risk_flag_conflict",
+            "message": f"Memo leans toward approval but {len(high_flags)} high-severity "
+                       f"risk flag(s) are present: {titles}.",
+        })
+    return issues
+
+
+def apply_recommendation_audit(memo: str, scorecard: dict, risk_flags: list) -> str:
+    """Append a Recommendation Consistency Check section if the narrative conflicts
+    with the deterministic grade/flags."""
+    issues = audit_recommendation_consistency(memo, scorecard, risk_flags)
+    if not issues:
+        return memo
+    lines = ["", "", "## Recommendation Consistency Check", "",
+             "_Automated cross-check between the narrative recommendation and the "
+             "deterministic model grade / risk flags. Reconcile before reliance._", ""]
+    for i in issues:
+        lines.append(f"- {i['message']}")
+    return memo + "\n".join(lines)

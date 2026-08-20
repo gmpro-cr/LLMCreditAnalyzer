@@ -28,7 +28,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Optional
 
 from credit_score import compute_scorecard, format_scorecard_md
-from validators import audit_memo_figures
+from validators import audit_memo_figures, audit_recommendation_consistency
 
 logger = logging.getLogger(__name__)
 
@@ -971,5 +971,24 @@ def generate_cam_sections(
             sections["_figure_mismatches"] = mismatches
     except Exception as e:
         logger.warning(f"[CAM] Figure audit failed: {e}")
+
+    # Recommendation-consistency check — flag if the narrative leans "approve"
+    # while the deterministic grade/risk flags say otherwise. Reads the grade back
+    # from sections["_credit_rating"] rather than a local variable so this is safe
+    # even if the scorecard computation above failed.
+    try:
+        from risk_flags import generate_risk_flags
+        flags = generate_risk_flags(ratios, financials)
+        scorecard = sections.get("_credit_rating", {})
+        rec_content = sections.get("recommendation", {}).get("content", "")
+        rec_issues = audit_recommendation_consistency(rec_content, scorecard, flags)
+        if rec_issues and "recommendation" in sections:
+            lines = ["", "", "**Recommendation Consistency Check (automated):**", ""]
+            for i in rec_issues:
+                lines.append(f"- {i['message']}")
+            sections["recommendation"]["content"] += "\n".join(lines)
+            sections["_recommendation_conflicts"] = rec_issues
+    except Exception as e:
+        logger.warning(f"[CAM] Recommendation consistency check failed: {e}")
 
     return sections

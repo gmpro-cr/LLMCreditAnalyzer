@@ -20,6 +20,8 @@ import httpx
 from urllib.parse import urlparse
 from typing import Dict, Any, List, Optional, Tuple
 
+from guardrails import sanitize_web_content, wrap_untrusted, UNTRUSTED_CONTENT_NOTICE
+
 logger = logging.getLogger(__name__)
 
 MAX_ROUNDS          = 4      # default reflection rounds (adaptive: 3-5)
@@ -100,7 +102,8 @@ def _fetch_page(url: str, max_chars: int = PAGE_MAX_CHARS) -> str:
         text = re.sub(r"<script[^>]*>.*?</script>", " ", text, flags=re.DOTALL)
         text = re.sub(r"<[^>]+>", " ", text)
         text = re.sub(r"\s+", " ", text).strip()
-        return text[:max_chars]
+        text = text[:max_chars]
+        return sanitize_web_content(text)
     except Exception:
         return ""
 
@@ -276,6 +279,8 @@ SUBJECT: {company_name} | Industry: {industry} (India)
 KNOWN FINANCIALS:
 {fin_summary}
 
+{UNTRUSTED_CONTENT_NOTICE}
+
 RESEARCH GATHERED SO FAR (Round {round_num}):
 {context_so_far[:5000]}
 
@@ -424,6 +429,8 @@ Do NOT include any thinking tags or reasoning traces.
 ## Key External Risk Factors
 (5 specific risks, quantified where possible: e.g. "₹X Cr exposure to Y commodity", "Z% revenue from single customer")
 
+{UNTRUSTED_CONTENT_NOTICE}
+
 ---
 ALL RESEARCH DATA (multi-round):
 {all_context[:8000]}"""
@@ -535,8 +542,8 @@ def run_research(
                 src = {"title": r["title"], "url": r["url"]}
                 sources.append(src)
                 new_sources.append(src)
-                snippet = f"[{r['title']}]\n{r['snippet']}"
-                all_snippets.append(snippet)
+                snippet = f"[{r['title']}]\n{sanitize_web_content(r['snippet'])}"
+                all_snippets.append(wrap_untrusted(snippet, r["url"]))
         return new_sources
 
     def _fetch_pages(src_list: List[dict], max_pages: int = FULL_PAGES_PER_ROUND) -> None:
@@ -548,10 +555,10 @@ def run_research(
             url = src.get("url", "")
             if not url or url in fetched_urls:
                 continue
-            text = _fetch_page(url)
+            text = _fetch_page(url)  # already sanitized inside _fetch_page
             if len(text) > 300:
                 fetched_urls.add(url)
-                all_snippets.append(f"FULL PAGE [{src['title']}]:\n{text}")
+                all_snippets.append(wrap_untrusted(f"FULL PAGE [{src['title']}]:\n{text}", url))
                 fetched += 1
 
     def _context_so_far() -> str:

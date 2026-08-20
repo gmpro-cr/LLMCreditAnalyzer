@@ -1,0 +1,27 @@
+{
+  "financials": {
+    "company_info": {"industry": "Specialty Chemicals", "name": "Healthy Chem Ltd"},
+    "profit_loss": {
+      "years": ["Mar 2024", "Mar 2025"],
+      "revenue": [500.0, 560.0],
+      "ebitda": [90.0, 105.0],
+      "pbt": [60.0, 72.0],
+      "pat": [45.0, 54.0],
+      "interest": [8.0, 7.0],
+      "depreciation": [12.0, 13.0]
+    },
+    "balance_sheet": {
+      "years": ["Mar 2024", "Mar 2025"],
+      "total_assets": [420.0, 470.0],
+      "borrowings": [90.0, 85.0],
+      "total_equity": [260.0, 305.0],
+      "other_liabilities": [70.0, 80.0]
+    }
+  },
+  "ratios": {
+    "dscr": 2.1, "current_ratio": 1.8, "debt_equity": 0.28,
+    "interest_coverage": 5.5, "net_margin": 9.6, "ebitda_margin": 18.8,
+    "roce": 17.2, "roe": 19.4
+  },
+  "company_name": "Healthy Chem Ltd"
+}

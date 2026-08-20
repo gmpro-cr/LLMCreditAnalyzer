@@ -1,0 +1,27 @@
+{
+  "financials": {
+    "company_info": {"industry": "Textiles", "name": "Distressed Textiles Ltd"},
+    "profit_loss": {
+      "years": ["Mar 2024", "Mar 2025"],
+      "revenue": [300.0, 260.0],
+      "ebitda": [15.0, 8.0],
+      "pbt": [-5.0, -18.0],
+      "pat": [-6.0, -20.0],
+      "interest": [22.0, 24.0],
+      "depreciation": [10.0, 11.0]
+    },
+    "balance_sheet": {
+      "years": ["Mar 2024", "Mar 2025"],
+      "total_assets": [350.0, 330.0],
+      "borrowings": [220.0, 240.0],
+      "total_equity": [60.0, 40.0],
+      "other_liabilities": [70.0, 50.0]
+    }
+  },
+  "ratios": {
+    "dscr": 0.7, "current_ratio": 0.85, "debt_equity": 6.0,
+    "interest_coverage": 0.6, "net_margin": -7.7, "ebitda_margin": 3.1,
+    "roce": -1.2, "roe": -50.0
+  },
+  "company_name": "Distressed Textiles Ltd"
+}
