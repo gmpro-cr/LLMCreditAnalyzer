@@ -86,6 +86,17 @@ router.post("/:id/generate", async (req, res) => {
 
   const peers = (extracted?.peers as unknown[]) || [];
 
+  // Refuse to draft a memo from an empty case — without real financials the
+  // engine can only produce a shell of N/A placeholders. Fetch/upload must
+  // happen first; fail fast here rather than waking the engine for nothing.
+  const hasScreenerFin = Array.isArray((screenerFin?.profit_loss as Record<string, unknown>)?.years);
+  if (!hasMulitYear && !hasScreenerFin) {
+    return res.status(400).json({
+      error: "No financial data found for this case. Run \"Fetch Reports\" or upload financial statements in the Data Room before generating the memo.",
+      code: "no_financial_data",
+    });
+  }
+
   // Maps Python section keys → UI section keys.
   // No two Python keys may map to the same UI key (the second write would silently overwrite the first).
   const KEY_MAP: Record<string, string> = {
