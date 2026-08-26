@@ -47,11 +47,19 @@ router.get("/:id/data-room", async (req, res) => {
 });
 
 // ── POST /api/cases/:id/data-room/fetch-reports ───────────────────────────
+// Sources financials from Screener.in (via the Python engine's /public-data/fetch),
+// not BSE's filed-PDF API — BSE's AnnualReports endpoint now 302s to an error page
+// (confirmed 2026-08-26: it's moved/deprecated), so every fetch failed regardless of
+// company. Screener's company page already has structured multi-year P&L/BS/CF data,
+// no PDF download or LLM extraction needed.
 router.post("/:id/data-room/fetch-reports", async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
   const { symbol, companyName } = req.body;
   if (!symbol) return res.status(400).json({ error: "symbol is required" });
+
+  const c = await getCase(id).catch(nullIfMissing);
+  if (!c) return res.status(404).json({ error: "Case not found" });
 
   if (!await wakePython()) {
     return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds." });
@@ -59,11 +67,11 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
 
   let pyRes: Response;
   try {
-    pyRes = await fetch(`${PYTHON_URL()}/fetch-annual-reports`, {
+    pyRes = await fetch(`${PYTHON_URL()}/public-data/fetch`, {
       method: "POST",
       headers: internalHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ symbol, company_name: companyName || "" }),
-      signal: AbortSignal.timeout(300_000),
+      body: JSON.stringify({ symbol, company_name: companyName || "", industry: c.sector || "Manufacturing" }),
+      signal: AbortSignal.timeout(120_000),
     });
   } catch (e: unknown) {
     return res.status(502).json({ error: `Python service unreachable: ${(e as Error).message}` });
@@ -71,42 +79,31 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
 
   if (!pyRes.ok) {
     const err = await pyRes.text();
-    return res.status(502).json({ error: `Annual report fetch failed: ${err}` });
+    return res.status(502).json({ error: `Financial data fetch failed: ${err}` });
   }
 
-  const pyData = await pyRes.json() as { reports: Record<string, unknown>[]; merged_financials: Record<string, unknown> };
-  const { reports, merged_financials } = pyData;
+  const pyData = await pyRes.json() as {
+    screener_financials?: { profit_loss?: { years?: string[] }; screener_url?: string };
+    peers?: unknown[];
+  };
+  const screenerFinancials = pyData.screener_financials;
+  const yearsFound = screenerFinancials?.profit_loss?.years || [];
+
+  if (!screenerFinancials || yearsFound.length === 0) {
+    return res.status(404).json({
+      error: `No financial data found on Screener for "${companyName || symbol}". Try a different ticker or upload financial statements manually.`,
+      code: "no_screener_data",
+    });
+  }
 
   try {
-    // Idempotency: a retry (e.g. after a cold-start timeout) must not duplicate
-    // annual-report rows. Skip fiscal years already stored for this case.
-    const existing = await listCaseDocuments(id);
-    const haveYears = new Set(
-      existing
-        .filter((d: Record<string, unknown>) => d.doc_type === "annual_report")
-        .map((d: Record<string, unknown>) => String(d.fiscal_year)),
-    );
-    for (const rpt of reports) {
-      if (rpt.error) continue;
-      if (haveYears.has(String(rpt.fiscal_year))) continue;
-      await insertCaseDocument({
-        case_id: id,
-        doc_type: "annual_report",
-        filename: `Annual Report ${rpt.fiscal_year}.pdf`,
-        storage_path: `case-${id}/annual-reports/${rpt.fiscal_year}.pdf`,
-        fiscal_year: rpt.fiscal_year,
-        extracted_data: rpt.financials || null,
-        source: rpt.source || "bse",
-      });
-      haveYears.add(String(rpt.fiscal_year));
-    }
-    await upsertCaseExtractedData(id, { financials: merged_financials });
+    await upsertCaseExtractedData(id, { financials: screenerFinancials, peers: pyData.peers || [] });
   } catch (e) {
     console.error("[fetch-reports] DB error:", e);
-    // still return what Python found, even if DB write partially failed
+    return res.status(500).json({ error: "Financial data fetched but failed to save. Please retry." });
   }
 
-  return res.json({ ok: true, reportsFound: reports.length, reports });
+  return res.json({ ok: true, source: "screener", yearsFound, screenerUrl: screenerFinancials.screener_url });
 });
 
 // ── POST /api/cases/:id/data-room/run-research ────────────────────────────
