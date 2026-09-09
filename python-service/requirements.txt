@@ -1,6 +1,7 @@
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.1
+beautifulsoup4==4.14.3
 certifi==2026.2.25
 cffi==2.0.0
 charset-normalizer==3.4.4
@@ -37,4 +38,5 @@ typing_extensions==4.15.0
 typing-inspection==0.4.2
 uvicorn==0.41.0
 weasyprint==68.1
+yfinance==1.2.0
 pytest>=8.0.0
