@@ -28,6 +28,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Optional
 
 from credit_score import compute_scorecard, format_scorecard_md
+from ews_checklist import format_ews_checklist_md
 from validators import audit_memo_figures, audit_recommendation_consistency
 
 logger = logging.getLogger(__name__)
@@ -90,7 +91,14 @@ SECTION_PROMPTS = {
         "Identify 4-6 key credit issues and risks specific to this borrower: "
         "financial risks (leverage, coverage), operational risks, industry risks, "
         "management/governance risks, and any specific red flags from the data. "
-        "Format each as: **Issue N: [Title]** — [2-3 sentence explanation with evidence]."
+        "Output ONLY a markdown table with this exact header row and no other text "
+        "before or after it:\n"
+        "| Key Risk | Mitigant |\n"
+        "|---|---|\n"
+        "One row per issue. Each risk cell: a short title plus 1-2 sentence "
+        "explanation with evidence. Each mitigant cell: a concrete, specific "
+        "mitigating factor or covenant grounded in the data provided — never a "
+        "generic placeholder like 'will be monitored.'"
     ),
     "recommendation": (
         "Write a credit recommendation: state whether to recommend approval/decline/further review, "
@@ -772,6 +780,8 @@ SECTION_CONFIDENCE: Dict[str, tuple] = {
     "key_issues":           ("medium", "Synthesised from ratios and research; RM judgement required"),
     "recommendation":       ("low",    "AI scaffold only — recommendation MUST be authored by RM"),
     "executive_summary":    ("medium", "Synthesised from all other sections; review each source section"),
+    "ews_checklist":        ("low",    "Standard EWS parameters — trigger status unknown at appraisal time, RM to monitor post-sanction"),
+    "reference_check":      ("low",    "Manual scaffold — RM must conduct and record third-party reference checks"),
 }
 
 
@@ -990,5 +1000,41 @@ def generate_cam_sections(
             sections["_recommendation_conflicts"] = rec_issues
     except Exception as e:
         logger.warning(f"[CAM] Recommendation consistency check failed: {e}")
+
+    # Deterministic scaffolds — never LLM-narrated. Nothing here is knowable from
+    # financial statements at appraisal time (EWS trigger status depends on live
+    # post-sanction account conduct; reference checks are a human due-diligence
+    # task), so these are static templates for the RM to complete, not generated
+    # content that could hallucinate company-specific claims.
+    ews_conf, ews_reason = SECTION_CONFIDENCE["ews_checklist"]
+    sections["ews_checklist"] = {
+        "content":           format_ews_checklist_md(),
+        "user_edited":       False,
+        "ai_generated":      False,
+        "confidence":        ews_conf,
+        "confidence_reason": ews_reason,
+        "reviewed":          False,
+        "low_verified":      False,
+        "locked":            False,
+    }
+    ref_conf, ref_reason = SECTION_CONFIDENCE["reference_check"]
+    sections["reference_check"] = {
+        "content": (
+            "## Reference Check\n\n"
+            "_To be completed by the RM as part of due diligence._\n\n"
+            "| Counterparty | Relationship | Contact Person | Date of Check | Key Feedback |\n"
+            "|---|---|---|---|---|\n"
+            "| | Banker | | | |\n"
+            "| | Supplier | | | |\n"
+            "| | Customer | | | |\n"
+        ),
+        "user_edited":       False,
+        "ai_generated":      False,
+        "confidence":        ref_conf,
+        "confidence_reason": ref_reason,
+        "reviewed":          False,
+        "low_verified":      False,
+        "locked":            False,
+    }
 
     return sections

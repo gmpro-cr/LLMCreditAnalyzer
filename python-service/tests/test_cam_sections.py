@@ -36,3 +36,25 @@ def test_generate_cam_sections_flags_recommendation_conflict(monkeypatch, tatast
         tatasteel_financials, bad_ratios, "Test Co", research_brief=""
     )
     assert "Recommendation Consistency Check" in sections["recommendation"]["content"]
+
+
+def test_generate_cam_sections_includes_deterministic_scaffolds(monkeypatch, tatasteel_financials):
+    monkeypatch.setenv("MEMO_PROVIDER", "ollama")
+    monkeypatch.setattr(cam_sections, "_llm", lambda prompt: "Placeholder text.")
+
+    sections = cam_sections.generate_cam_sections(
+        tatasteel_financials, {}, "Test Co", research_brief=""
+    )
+
+    assert sections["ews_checklist"]["ai_generated"] is False
+    assert sections["ews_checklist"]["confidence"] == "low"
+    assert "Early Warning Signal" in sections["ews_checklist"]["content"]
+
+    assert sections["reference_check"]["ai_generated"] is False
+    assert sections["reference_check"]["confidence"] == "low"
+    assert "Reference Check" in sections["reference_check"]["content"]
+
+
+def test_key_issues_prompt_requires_risk_mitigant_table():
+    prompt = cam_sections.SECTION_PROMPTS["key_issues"]
+    assert "| Key Risk | Mitigant |" in prompt

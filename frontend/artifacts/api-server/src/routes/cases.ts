@@ -17,6 +17,8 @@ const MEMO_SECTIONS = [
   { key: "peer_comparison", title: "Peer Comparison" },
   { key: "risk_summary", title: "Risk Summary" },
   { key: "recommendation", title: "Recommendation" },
+  { key: "ews_checklist", title: "EWS Checklist" },
+  { key: "reference_check", title: "Reference Check" },
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

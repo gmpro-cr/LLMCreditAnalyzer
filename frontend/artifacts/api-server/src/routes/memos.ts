@@ -113,6 +113,8 @@ router.post("/:id/generate", async (req, res) => {
     key_issues:          "risk_summary",
     recommendation:      "recommendation",
     executive_summary:   "executive_summary",
+    ews_checklist:       "ews_checklist",
+    reference_check:     "reference_check",
   };
 
   // Wake-up: Render free tier sleeps after 15 min idle. wakePython holds each
