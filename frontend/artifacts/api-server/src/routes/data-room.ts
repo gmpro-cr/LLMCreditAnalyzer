@@ -4,6 +4,7 @@ import multer from "multer";
 import {
   listCaseDocuments,
   insertCaseDocument,
+  updateCaseDocument,
   deleteCaseDocument,
   getCaseExtractedData,
   upsertCaseExtractedData,
@@ -37,6 +38,8 @@ router.get("/:id/data-room", async (req, res) => {
       docs.some((d: Record<string, unknown>) => d.doc_type === "organogram"),
       docs.some((d: Record<string, unknown>) => d.doc_type === "security"),
       docs.some((d: Record<string, unknown>) => d.doc_type === "industry_report"),
+      docs.some((d: Record<string, unknown>) => d.doc_type === "annual_report" && !!(d.extracted_data as Record<string, unknown> | null)?.topics),
+      docs.some((d: Record<string, unknown>) => d.doc_type === "rm_inputs"),
     ];
     const completeness = Math.round((checks.filter(Boolean).length / checks.length) * 100);
 
@@ -133,6 +136,123 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
   }
 
   return res.json({ ok: true, source: "screener", yearsFound, reportsLinked, screenerUrl: screenerFinancials.screener_url });
+});
+
+// ── POST /api/cases/:id/data-room/analyse-annual-report ──────────────────
+// Reads the latest linked BSE annual report and extracts credit facts (ratings,
+// borrowings, contingent liabilities, related parties, auditor, board, business,
+// industry) plus the group structure for the organogram. Results live on the
+// annual-report document row; the group structure goes to `organogram` unless the
+// RM has already verified one.
+router.post("/:id/data-room/analyse-annual-report", async (req, res) => {
+  const id = Number(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
+  const c = await getCase(id).catch(nullIfMissing);
+  if (!c) return res.status(404).json({ error: "Case not found" });
+
+  const docs = await listCaseDocuments(id);
+  const reports = docs
+    .filter((d: Record<string, unknown>) => d.doc_type === "annual_report" && /^https:\/\//.test(String(d.storage_path)))
+    .sort((a: Record<string, unknown>, b: Record<string, unknown>) => String(b.fiscal_year ?? "").localeCompare(String(a.fiscal_year ?? "")));
+  const target = reports[0];
+  if (!target) {
+    return res.status(404).json({ error: "No annual-report filing linked. Run \"Fetch Reports\" first.", code: "no_annual_report" });
+  }
+  if (!await wakePython()) {
+    return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds.", code: "upstream_unavailable" });
+  }
+  const extracted = await getCaseExtractedData(id);
+  const fin = (extracted?.financials as Record<string, unknown>) || {};
+  const promoterPct = Number(((fin.shareholding as Record<string, unknown>) || {}).promoter_holding_pct) || null;
+
+  let pyRes: Response;
+  try {
+    pyRes = await fetch(`${PYTHON_URL()}/annual-report/analyse`, {
+      method: "POST",
+      headers: internalHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ url: target.storage_path, company_name: c.borrower_name, promoter_holding_pct: promoterPct }),
+      signal: AbortSignal.timeout(300_000),
+    });
+  } catch (e: unknown) {
+    return res.status(502).json({ error: `Annual-report analysis failed: ${(e as Error).message}` });
+  }
+  if (!pyRes.ok) {
+    return res.status(502).json({ error: `Annual-report analysis failed: ${(await pyRes.text()).slice(0, 200)}` });
+  }
+  const py = await pyRes.json() as { annual_report?: Record<string, unknown>; group_structure?: Record<string, unknown> };
+  const ar = py.annual_report || {};
+  try {
+    await updateCaseDocument(Number(target.id), { extracted_data: ar });
+    const org = (extracted?.organogram as Record<string, unknown>) || {};
+    const current = org.group_structure as Record<string, unknown> | undefined;
+    if (py.group_structure && !current?.verified) {
+      await upsertCaseExtractedData(id, { organogram: { ...org, group_structure: py.group_structure } });
+    }
+  } catch (e) {
+    console.error("[analyse-annual-report] save failed:", e);
+    return res.status(500).json({ error: "Analysis done but could not be saved. Please retry." });
+  }
+  const topics = Object.keys((ar.topics as Record<string, unknown>) || {});
+  const entities = ((py.group_structure?.entities as unknown[]) || []).length;
+  return res.json({ ok: true, fiscalYear: ar.fiscal_year ?? target.fiscal_year, pages: ar.pages, topics, entities });
+});
+
+// ── GET / PUT /api/cases/:id/data-room/rm-inputs ─────────────────────────
+// Information only the RM has (facility terms, security, lenders, customers,
+// due-diligence results). Stored as its own Data Room document row.
+router.get("/:id/data-room/rm-inputs", async (req, res) => {
+  const id = Number(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
+  const docs = await listCaseDocuments(id);
+  const doc = docs.find((d: Record<string, unknown>) => d.doc_type === "rm_inputs");
+  return res.json({ inputs: (doc?.extracted_data as Record<string, unknown>) || {}, updatedAt: doc?.created_at ?? null });
+});
+
+router.put("/:id/data-room/rm-inputs", async (req, res) => {
+  const id = Number(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
+  const inputs = req.body?.inputs;
+  if (!inputs || typeof inputs !== "object" || Array.isArray(inputs)) {
+    return res.status(400).json({ error: "inputs must be an object" });
+  }
+  if (JSON.stringify(inputs).length > 200_000) return res.status(413).json({ error: "inputs too large" });
+  try {
+    const docs = await listCaseDocuments(id);
+    const doc = docs.find((d: Record<string, unknown>) => d.doc_type === "rm_inputs");
+    if (doc) {
+      await updateCaseDocument(Number(doc.id), { extracted_data: inputs });
+    } else {
+      await insertCaseDocument({
+        case_id: id, doc_type: "rm_inputs", filename: "RM inputs", storage_path: "",
+        fiscal_year: null, extracted_data: inputs, source: "manual",
+      });
+    }
+  } catch (e) {
+    console.error("[rm-inputs] save failed:", e);
+    return res.status(500).json({ error: "Failed to save RM inputs" });
+  }
+  return res.json({ ok: true });
+});
+
+// ── PUT /api/cases/:id/data-room/group-structure ─────────────────────────
+// The RM's reviewed group structure (organogram source). Saving marks it verified.
+router.put("/:id/data-room/group-structure", async (req, res) => {
+  const id = Number(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
+  const gs = req.body?.groupStructure as Record<string, unknown> | undefined;
+  if (!gs || !Array.isArray(gs.entities)) return res.status(400).json({ error: "groupStructure.entities must be an array" });
+  if ((gs.entities as unknown[]).length > 300) return res.status(413).json({ error: "too many entities" });
+  try {
+    const existing = await getCaseExtractedData(id);
+    const org = (existing?.organogram as Record<string, unknown>) || {};
+    await upsertCaseExtractedData(id, {
+      organogram: { ...org, group_structure: { ...gs, verified: true, verified_at: new Date().toISOString(), source: gs.source || "rm" } },
+    });
+  } catch (e) {
+    console.error("[group-structure] save failed:", e);
+    return res.status(500).json({ error: "Failed to save group structure" });
+  }
+  return res.json({ ok: true });
 });
 
 // ── POST /api/cases/:id/data-room/run-research ────────────────────────────

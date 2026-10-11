@@ -183,7 +183,7 @@ function EditorSection({
 const GENERATION_STAGES = [
   { at: 0, label: "Validating financial data" },
   { at: 2, label: "Computing ratios and risk flags" },
-  { at: 5, label: "Drafting the 12 memo sections in parallel" },
+  { at: 5, label: "Drafting the detailed CAM sections in parallel" },
   { at: 16, label: "Formatting tables and citations" },
 ];
 
@@ -475,7 +475,7 @@ export default function CaseDetail() {
 
       <div className="flex-1 overflow-hidden">
         {mainTab === "dataroom" ? (
-          <DataRoomTab caseId={id} companyName={caseData.borrowerName} />
+          <DataRoomTab caseId={id} companyName={caseData.borrowerName} facilityType={caseData?.facilityType} />
         ) : (
         <div className="h-full flex flex-col lg:flex-row">
           {/* Main Editor Area */}
@@ -527,7 +527,7 @@ export default function CaseDetail() {
                   <div>
                     <p className="font-medium text-foreground">No memo drafted yet</p>
                     <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                      Generate a full 12-section CAM draft from the case financials and data room, then review and edit each section.
+                      Generate a detailed CAM draft from the case financials and data room, then review and edit each section.
                     </p>
                   </div>
                   {!generating && (

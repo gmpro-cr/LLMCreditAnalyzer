@@ -119,6 +119,17 @@ class DraftSectionsRequest(BaseModel):
     # {"type": "term_loan", "amount_inr": 10000000} — the case's own facility, so
     # the memo can't drift to a different type or scale (it did: ₹1 Cr → "₹1,000 Cr").
     facility: dict = Field(default_factory=dict)
+    # Detailed CAM (v2) inputs — used when financials carries the deep spread.
+    rm_inputs: dict = Field(default_factory=dict)
+    annual_report: dict = Field(default_factory=dict)
+    group_structure: dict = Field(default_factory=dict)
+    sector: str = Field(default="", max_length=100)
+
+
+class AnalyseAnnualReportRequest(BaseModel):
+    url: str = Field(max_length=1000)
+    company_name: str = Field(default="", max_length=200)
+    promoter_holding_pct: Optional[float] = None
 
 
 class ExportDocxRequest(BaseModel):
@@ -900,6 +911,26 @@ async def export_pdf_endpoint(data: ExportPdfRequest):
                     i += 1
                     continue
 
+                # Group organogram diagram (```organogram JSON``` from cam_v2)
+                if stripped.startswith("```organogram"):
+                    block = []
+                    i += 1
+                    while i < len(lines) and not lines[i].strip().startswith("```"):
+                        block.append(lines[i])
+                        i += 1
+                    i += 1
+                    try:
+                        import organogram as _og
+                        story.append(Spacer(1, 0.2*cm))
+                        story.append(_og.to_reportlab(json.loads("\n".join(block)), PAGE_W))
+                        story.append(Spacer(1, 0.3*cm))
+                    except Exception as _e:
+                        logger.warning(f"[export-pdf] organogram render failed: {_e}")
+                    continue
+                if stripped.startswith("```"):  # other fenced blocks: skip the fence lines
+                    i += 1
+                    continue
+
                 # Markdown table: collect all consecutive table lines
                 if stripped.startswith('|'):
                     tbl_lines = []
@@ -1026,6 +1057,26 @@ async def export_pdf_endpoint(data: ExportPdfRequest):
         raise HTTPException(500, "PDF export failed. Please try again.")
 
 
+@app.post("/annual-report/analyse")
+def analyse_annual_report_endpoint(data: AnalyseAnnualReportRequest):
+    """Download a filed annual report (BSE PDF) and extract credit facts per topic,
+    plus the group structure for the organogram. Sync on purpose (threadpool)."""
+    import annual_report as ar_mod
+    if not data.url.startswith(("https://www.bseindia.com/", "https://www.nseindia.com/", "https://nsearchives.nseindia.com/")):
+        raise HTTPException(400, "Only BSE / NSE filing URLs are accepted")
+    try:
+        result = ar_mod.analyse(data.url, data.company_name, _llm)
+    except Exception as e:
+        logger.error(f"[AR] analysis failed for {data.url}: {e}", exc_info=True)
+        raise HTTPException(502, "Could not download or read the annual report.")
+    board = ((result.get("topics") or {}).get("board") or {}).get("directors") or []
+    promoters = [d.get("name") for d in board if "promoter" in str(d.get("category") or "").lower() and d.get("name")]
+    group = ar_mod.group_structure_from(
+        result, data.company_name, data.promoter_holding_pct,
+        ("Promoter group (" + ", ".join(promoters) + ")") if promoters else None)
+    return {"annual_report": result, "group_structure": group}
+
+
 @app.post("/cam/draft-sections")
 def draft_cam_sections_endpoint(data: DraftSectionsRequest):
     """
@@ -1053,6 +1104,23 @@ def draft_cam_sections_endpoint(data: DraftSectionsRequest):
         financials["peers"] = data.peers
     if data.facility:
         financials["facility"] = data.facility
+
+    # Detailed CAM when the deep Screener spread is available (listed borrowers).
+    if (financials.get("deep") or {}).get("years"):
+        import cam_v2
+        try:
+            logger.info(f"[CAMv2] Drafting detailed CAM for {company_name}, regenerate={regenerate!r}")
+            sections = cam_v2.generate(
+                financials, company_name, research_brief, data.rm_inputs, data.annual_report,
+                data.group_structure, llm=_llm, sector=data.sector, only=regenerate,
+            )
+        except Exception as e:
+            logger.error(f"CAM v2 generation failed: {e}", exc_info=True)
+            raise HTTPException(500, "CAM section generation failed. Please try again.")
+        drafted = sum(1 for k, v in sections.items() if isinstance(v, dict) and v.get("ai_generated") and v.get("drafted"))
+        if drafted == 0 and not regenerate:
+            raise HTTPException(502, "AI drafting failed: the provider returned no content. Please try again.")
+        return {"sections": sections, "company_name": company_name, "sections_drafted": drafted, "version": 2}
 
     # Callers (e.g. the api-server) may not pre-compute ratios; do it here so the
     # ratio-covenant table and ratio-aware narrative are populated.

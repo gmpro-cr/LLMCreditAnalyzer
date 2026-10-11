@@ -9,13 +9,17 @@ import {
   useDeleteDocument,
   useUpdatePeers,
   useSaveOrganogramTree,
+  useAnalyseAnnualReport,
   searchCompanies,
   getDataRoomQueryKey,
   getPeersQueryKey,
   type DataRoomState,
   type Peer,
   type CaseDocument,
+  type GroupStructure,
 } from "@workspace/api-client-react";
+import GroupStructurePanel from "./GroupStructurePanel";
+import RmInputsPanel from "./RmInputsPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,6 +48,9 @@ import {
   PiReceiptLight,
   PiScrollLight,
   PiShieldCheckLight,
+  PiTreeStructureLight,
+  PiClipboardTextLight,
+  PiBookOpenTextLight,
 } from "react-icons/pi";
 
 // ── StatusBadge ────────────────────────────────────────────────────────────
@@ -180,10 +187,23 @@ function FinancialsPanel({ caseId, companyName, documents, financials, onRefresh
   const [symbol, setSymbol] = useState("");
   const [suggestedTicker, setSuggestedTicker] = useState("");
   const fetchReports = useFetchAnnualReports();
+  const analyseAr = useAnalyseAnnualReport();
   const deleteDoc = useDeleteDocument();
   const { toast } = useToast();
 
   const annualReports = documents.filter(d => d.doc_type === "annual_report");
+  const analysed = annualReports.find(d => (d.extracted_data as { topics?: Record<string, unknown> } | null)?.topics);
+  const analysedTopics = Object.keys(((analysed?.extracted_data as { topics?: Record<string, unknown> } | null)?.topics) || {});
+
+  const runAnalysis = async () => {
+    try {
+      const r = await analyseAr.mutateAsync({ caseId });
+      toast({ title: `Annual report analysed (${r.fiscalYear ?? "latest"})`, description: `${r.topics.length} topics and ${r.entities} group entities extracted for the CAM.` });
+      onRefresh();
+    } catch (e) {
+      toast({ title: "Annual-report analysis failed", description: extractApiError(e, "Could not read the annual report. You can retry."), variant: "destructive" });
+    }
+  };
 
   useEffect(() => {
     if (annualReports.length > 0 || hasFetched || !companyName) return;
@@ -204,9 +224,12 @@ function FinancialsPanel({ caseId, companyName, documents, financials, onRefresh
       const res = await fetchReports.mutateAsync({ caseId, symbol: symbol.trim(), companyName });
       const n = res.yearsFound?.length ?? 0;
       const linked = res.reportsLinked ? ` and ${res.reportsLinked} annual report${res.reportsLinked === 1 ? "" : "s"} linked` : "";
-      toast({ title: `Financials fetched · ${n} year${n === 1 ? "" : "s"}`, description: `Peers and filings saved${linked}. You can now generate the memo.` });
+      toast({ title: `Financials fetched · ${n} year${n === 1 ? "" : "s"}`, description: `Peers and filings saved${linked}. Reading the latest annual report next…` });
       setSuggestedTicker("");
       onRefresh();
+      // The detailed CAM needs the annual report's ratings, borrowings, contingent
+      // liabilities, auditor notes and group structure — read it right away.
+      if (res.reportsLinked || annualReports.length > 0) await runAnalysis();
     } catch (e) {
       toast({ title: "Fetch failed", description: extractApiError(e, "Could not find annual reports. Try uploading manually."), variant: "destructive" });
     }
@@ -215,6 +238,27 @@ function FinancialsPanel({ caseId, companyName, documents, financials, onRefresh
   return (
     <div className="space-y-4">
       {hasFetched && financials && <FetchedFinancialsCard financials={financials} />}
+
+      {annualReports.some(d => d.storage_path?.startsWith("http")) && (
+        <div className="flex items-start gap-3 p-4 rounded-lg border bg-background">
+          <PiBookOpenTextLight className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">
+              {analyseAr.isPending ? "Reading the annual report…" : analysed ? `Annual report ${analysed.fiscal_year ?? ""} analysed` : "Annual report not analysed yet"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {analyseAr.isPending
+                ? "Extracting ratings, borrowings, contingent liabilities, related parties, auditor notes and the group structure — 20–40 seconds."
+                : analysed
+                  ? `Extracted: ${analysedTopics.join(", ").replace(/_/g, " ")}.`
+                  : "The detailed CAM uses it for ratings, debt terms, contingent liabilities, audit observations and the organogram."}
+            </p>
+          </div>
+          <Button size="sm" variant={analysed ? "outline" : "default"} onClick={runAnalysis} disabled={analyseAr.isPending}>
+            {analyseAr.isPending ? <PiSpinnerLight className="h-4 w-4 animate-spin" /> : analysed ? "Re-analyse" : "Analyse"}
+          </Button>
+        </div>
+      )}
 
       {annualReports.length === 0 && !hasFetched && suggestedTicker && !fetchReports.isPending && (
         <div className="flex items-start gap-3 p-4 bg-primary/5 border border-primary/20 rounded-lg">
@@ -625,9 +669,11 @@ function SummaryPanel({ completeness, documents, extractedData }: {
 
 // ── Main DataRoomTab ───────────────────────────────────────────────────────
 
-type DataRoomPanel = "financials" | "research" | "documents" | "summary";
+type DataRoomPanel = "financials" | "research" | "group" | "rm" | "documents" | "summary";
 
-export default function DataRoomTab({ caseId, companyName }: { caseId: number; companyName: string }) {
+const WC_TYPES = ["working_capital", "cash_credit", "overdraft", "wc", "cc", "od"];
+
+export default function DataRoomTab({ caseId, companyName, facilityType }: { caseId: number; companyName: string; facilityType?: string }) {
   const [activePanel, setActivePanel] = useState<DataRoomPanel>("financials");
   const queryClient = useQueryClient();
   const { data, isLoading, refetch } = useGetDataRoom(caseId);
@@ -649,6 +695,8 @@ export default function DataRoomTab({ caseId, companyName }: { caseId: number; c
   const panels = [
     { key: "financials" as const, label: "Financials", icon: PiBuildingsLight },
     { key: "research" as const, label: "Research & News", icon: PiNewspaperLight },
+    { key: "group" as const, label: "Group Structure", icon: PiTreeStructureLight },
+    { key: "rm" as const, label: "RM Inputs", icon: PiClipboardTextLight },
     { key: "documents" as const, label: "Documents", icon: PiFolderOpenLight },
     { key: "summary" as const, label: `Summary · ${completeness}%`, icon: PiCheckCircleLight },
   ];
@@ -672,6 +720,11 @@ export default function DataRoomTab({ caseId, companyName }: { caseId: number; c
       <div className="flex-1 overflow-y-auto p-6">
         {activePanel === "financials" && <FinancialsPanel caseId={caseId} companyName={companyName} documents={documents} financials={extractedData?.financials as FetchedFinancials | undefined} onRefresh={handleRefresh} />}
         {activePanel === "research" && <ResearchPanel caseId={caseId} extractedData={extractedData} onRefresh={handleRefresh} />}
+        {activePanel === "group" && (
+          <GroupStructurePanel caseId={caseId} companyName={companyName} documents={documents} onRefresh={handleRefresh}
+            groupStructure={(extractedData?.organogram as { group_structure?: GroupStructure } | undefined)?.group_structure} />
+        )}
+        {activePanel === "rm" && <RmInputsPanel caseId={caseId} isWc={WC_TYPES.includes(String(facilityType || "").toLowerCase())} />}
         {activePanel === "documents" && <DocumentsPanel caseId={caseId} companyName={companyName} documents={documents} onRefresh={handleRefresh} />}
         {activePanel === "summary" && <SummaryPanel completeness={completeness} documents={documents} extractedData={extractedData} />}
       </div>

@@ -139,3 +139,68 @@ export const useSaveOrganogramTree = () =>
         headers: { "Content-Type": "application/json" },
       }),
   });
+
+// ── Detailed CAM: annual-report analysis, group structure, RM inputs ──────
+
+export interface GroupEntity {
+  name: string;
+  relation: string; // subsidiary | joint venture | associate
+  country?: string | null;
+  currency?: string | null;
+  holding_pct?: number | null;
+  turnover_cr?: number | null;
+  pat_cr?: number | null;
+  net_worth_cr?: number | null;
+  business?: string | null;
+}
+
+export interface GroupStructure {
+  borrower?: string;
+  promoter_group?: string | null;
+  promoter_holding_pct?: number | null;
+  entities: GroupEntity[];
+  verified?: boolean;
+  source?: string;
+  source_url?: string;
+  pages?: number[];
+}
+
+export type RmInputs = Record<string, unknown>;
+
+export const getRmInputsQueryKey = (caseId: number) => ["rmInputs", caseId] as const;
+
+export const useAnalyseAnnualReport = () =>
+  useMutation({
+    mutationFn: ({ caseId }: { caseId: number }) =>
+      customFetch<{ ok: boolean; fiscalYear?: string; pages?: number; topics: string[]; entities: number }>(
+        `/api/cases/${caseId}/data-room/analyse-annual-report`,
+        { method: "POST", headers: { "Content-Type": "application/json" } },
+      ),
+  });
+
+export const useGetRmInputs = (caseId: number) =>
+  useQuery({
+    queryKey: getRmInputsQueryKey(caseId),
+    queryFn: () => customFetch<{ inputs: RmInputs; updatedAt: string | null }>(`/api/cases/${caseId}/data-room/rm-inputs`),
+    enabled: !!caseId,
+  });
+
+export const useSaveRmInputs = () =>
+  useMutation({
+    mutationFn: ({ caseId, inputs }: { caseId: number; inputs: RmInputs }) =>
+      customFetch<{ ok: boolean }>(`/api/cases/${caseId}/data-room/rm-inputs`, {
+        method: "PUT",
+        body: JSON.stringify({ inputs }),
+        headers: { "Content-Type": "application/json" },
+      }),
+  });
+
+export const useSaveGroupStructure = () =>
+  useMutation({
+    mutationFn: ({ caseId, groupStructure }: { caseId: number; groupStructure: GroupStructure }) =>
+      customFetch<{ ok: boolean }>(`/api/cases/${caseId}/data-room/group-structure`, {
+        method: "PUT",
+        body: JSON.stringify({ groupStructure }),
+        headers: { "Content-Type": "application/json" },
+      }),
+  });

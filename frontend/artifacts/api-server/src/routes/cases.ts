@@ -1,25 +1,11 @@
 import { Router } from "express";
 import { listCases, getCase, createCase, updateCase, deleteCase, insertSections, insertActivity, nullIfMissing } from "../lib/supabase-db.js";
+import { blankSectionRows } from "../lib/sections.js";
 import { ListCasesQueryParams, CreateCaseBody, GetCaseParams, UpdateCaseParams, UpdateCaseBody, DeleteCaseParams } from "@workspace/api-zod";
 
 const router = Router();
 
-const MEMO_SECTIONS = [
-  { key: "executive_summary", title: "Executive Summary" },
-  { key: "group_organogram", title: "Group Organogram" },
-  { key: "promoter_background", title: "Promoter Background" },
-  { key: "business_profile", title: "Business Profile" },
-  { key: "industry_analysis", title: "Industry Analysis" },
-  { key: "financial_analysis", title: "Financial Analysis" },
-  { key: "working_capital_analysis", title: "Working Capital Analysis" },
-  { key: "banking_arrangement", title: "Banking Arrangement" },
-  { key: "proposed_structure", title: "Proposed Structure" },
-  { key: "peer_comparison", title: "Peer Comparison" },
-  { key: "risk_summary", title: "Risk Summary" },
-  { key: "recommendation", title: "Recommendation" },
-  { key: "ews_checklist", title: "EWS Checklist" },
-  { key: "reference_check", title: "Reference Check" },
-];
+
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function formatCase(c: any) {
@@ -55,15 +41,7 @@ router.post("/", async (req, res) => {
     memo_progress: 0,
   });
 
-  await insertSections(MEMO_SECTIONS.map((s) => ({
-    case_id: newCase.id,
-    section_key: s.key,
-    section_title: s.title,
-    content: "",
-    confidence: "pending",
-    is_reviewed: false,
-    is_locked: false,
-  })));
+  await insertSections(blankSectionRows(newCase.id));
 
   await insertActivity({ case_id: newCase.id, borrower_name: newCase.borrower_name, action: "Case created", actor: newCase.rm_name });
   res.status(201).json(formatCase(newCase));

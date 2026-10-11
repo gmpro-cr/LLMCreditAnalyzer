@@ -460,6 +460,14 @@ def fetch_screener_financials(symbol: str, company_name: str = "") -> dict:
         if len(t) > 20:
             recent_announcements.append(t)
 
+    # ── Deep spread (consolidated + schedules + quarters) for the detailed CAM ─
+    deep: Dict[str, Any] = {}
+    try:
+        from screener_deep import fetch_deep
+        deep = fetch_deep(slug)
+    except Exception as e:  # noqa: BLE001 — enrichment only
+        logger.warning(f"[Screener] deep fetch failed for {slug}: {e}")
+
     # ── Peer comparison + annual-report links ──────────────────────────────
     peers = fetch_screener_peers(soup, slug)
     annual_reports = screener_annual_reports(soup)
@@ -625,6 +633,7 @@ def fetch_screener_financials(symbol: str, company_name: str = "") -> dict:
 
         "peers": peers,
         "annual_reports": annual_reports,
+        "deep": deep,
     }
 
 

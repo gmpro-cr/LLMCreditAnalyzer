@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { listSections, updateSection, bulkUpdateSections, listRiskFlags, replaceRiskFlags, insertActivity, updateCase, getCase, getCaseExtractedData, nullIfMissing } from "../lib/supabase-db.js";
+import { listSections, updateSection, bulkUpdateSections, insertSections, listRiskFlags, replaceRiskFlags, insertActivity, updateCase, getCase, getCaseExtractedData, listCaseDocuments, nullIfMissing } from "../lib/supabase-db.js";
+import { MEMO_SECTIONS, sortSections, blankSectionRows } from "../lib/sections.js";
 import { PYTHON_URL, internalHeaders, wakePython } from "../lib/python.js";
 import { ListSectionsParams, UpdateSectionBody, GenerateMemoParams, ListRiskFlagsParams } from "@workspace/api-zod";
 
@@ -21,7 +22,7 @@ function formatSection(s: any) {
 router.get("/:id/sections", async (req, res) => {
   const { id } = ListSectionsParams.parse({ id: Number(req.params.id) });
   const sections = await listSections(id);
-  res.json(sections.map(formatSection));
+  res.json(sortSections(sections).map(formatSection));
 });
 
 router.patch("/:id/sections/:sectionKey", async (req, res) => {
@@ -88,6 +89,15 @@ router.post("/:id/generate", async (req, res) => {
 
   const peers = (extracted?.peers as unknown[]) || [];
 
+  // Detailed-CAM inputs: the analysed annual report (on its Data Room document),
+  // the RM's inputs (their own document row) and the group structure (organogram).
+  const docs = await listCaseDocuments(id).catch(() => [] as Record<string, unknown>[]);
+  const arDoc = docs
+    .filter((d) => d.doc_type === "annual_report" && (d.extracted_data as Record<string, unknown> | null)?.topics)
+    .sort((a, b) => String(b.fiscal_year ?? "").localeCompare(String(a.fiscal_year ?? "")))[0];
+  const rmDoc = docs.find((d) => d.doc_type === "rm_inputs");
+  const organogram = (extracted?.organogram as Record<string, unknown>) || {};
+
   // Refuse to draft a memo from an empty case — without real financials the
   // engine can only produce a shell of N/A placeholders. Fetch/upload must
   // happen first; fail fast here rather than waking the engine for nothing.
@@ -141,6 +151,10 @@ router.post("/:id/generate", async (req, res) => {
         research_brief: researchBrief,
         peers,
         facility: { type: c.facility_type, amount_inr: Number(c.facility_amount) },
+        rm_inputs: (rmDoc?.extracted_data as Record<string, unknown>) || {},
+        annual_report: (arDoc?.extracted_data as Record<string, unknown>) || {},
+        group_structure: (organogram.group_structure as Record<string, unknown>) || {},
+        sector: c.sector || "",
       }),
       signal: AbortSignal.timeout(900_000),
     });
@@ -153,6 +167,33 @@ router.post("/:id/generate", async (req, res) => {
 
     const pyData = await pyRes.json() as Record<string, unknown>;
     const camSections = (pyData.cam_sections || pyData.sections || pyData || {}) as Record<string, unknown>;
+
+    if (pyData.version === 2) {
+      // Detailed CAM: keys are already UI keys. Create rows a pre-v2 case lacks,
+      // refresh titles, and never overwrite a section the RM has locked.
+      const existing = await listSections(id);
+      const have = new Map(existing.map((s) => [s.section_key as string, s]));
+      const missing = MEMO_SECTIONS.map((s) => s.key).filter((k) => !have.has(k) && camSections[k]);
+      if (missing.length) await insertSections(blankSectionRows(id, missing));
+      const v2Updates: { sectionKey: string; values: Record<string, unknown> }[] = [];
+      for (const s of MEMO_SECTIONS) {
+        const sec = camSections[s.key] as { content?: string; confidence?: string } | undefined;
+        if (!sec?.content?.trim() || have.get(s.key)?.is_locked) continue;
+        v2Updates.push({ sectionKey: s.key, values: { content: sec.content, confidence: sec.confidence || "medium", section_title: s.title } });
+      }
+      if (v2Updates.length) await bulkUpdateSections(id, v2Updates);
+      failedSections = MEMO_SECTIONS.map((s) => s.key).filter((k) => {
+        const sec = camSections[k] as { ai_generated?: boolean; drafted?: boolean } | undefined;
+        return !!sec?.ai_generated && !sec.drafted;
+      });
+      const flags = Array.isArray(camSections["_risk_flags"]) ? camSections["_risk_flags"] as Record<string, unknown>[] : [];
+      await replaceRiskFlags(id, flags.map((f) => ({
+        case_id: id,
+        risk_type: String(f.title ?? f.ratio_key ?? "Risk"),
+        severity: ["high", "medium", "low"].includes(String(f.severity)) ? String(f.severity) : "medium",
+        description: String(f.description ?? ""),
+      })));
+    } else {
     const updates: { sectionKey: string; values: Record<string, unknown> }[] = [];
 
     // Collect content for each UI section key (handle merges)
@@ -202,6 +243,7 @@ router.post("/:id/generate", async (req, res) => {
       severity: ["high", "medium", "low"].includes(String(f.severity)) ? String(f.severity) : "medium",
       description: String(f.description ?? ""),
     })));
+    }
   } catch (e) {
     console.error("[generate] Python service error:", e);
     return res.status(502).json({ error: "AI engine request failed. Please try again." });
@@ -213,7 +255,7 @@ router.post("/:id/generate", async (req, res) => {
     ? Math.round((allSections.filter((s) => s.is_reviewed).length / allSections.length) * 100)
     : 0;
   await updateCase(id, { memo_progress: Math.max(progress, 10), updated_at: new Date().toISOString() });
-  await insertActivity({ case_id: id, borrower_name: c.borrower_name, action: "AI generation completed — all 12 sections drafted", actor: "CreditGuard AI" });
+  await insertActivity({ case_id: id, borrower_name: c.borrower_name, action: failedSections.length ? `AI generation completed — ${failedSections.length} section(s) not drafted` : "AI generation completed — all sections drafted", actor: "CreditGuard AI" });
 
   return res.json({ message: "Memo generated successfully", caseId: id, failedSections });
 });
@@ -238,11 +280,7 @@ router.get("/:id/export-pdf", async (req, res) => {
   const pythonUrl = PYTHON_URL();
 
   // Assemble memo_content from all sections with content
-  const SECTION_ORDER = [
-    "executive_summary", "group_organogram", "promoter_background", "business_profile",
-    "industry_analysis", "financial_analysis", "working_capital_analysis",
-    "banking_arrangement", "proposed_structure", "peer_comparison", "risk_summary", "recommendation",
-  ];
+  const SECTION_ORDER = MEMO_SECTIONS.map((x) => x.key);
   const sectionMap = Object.fromEntries(sections.map((s) => [s.section_key, s]));
 
   const memoContent = [
