@@ -101,3 +101,15 @@ def test_amounts_whole_crore_in_context():
     ctx = _build_context_text(FIN, calculate_ratios(FIN), "BFL", "")
     assert "8,969.00" not in ctx and "8,969" in ctx
     assert "Current Ratio >= 1.33x (not computable" in ctx
+
+
+def test_audit_skips_percentage_point_changes():
+    r = calculate_ratios(FIN)
+    assert not audit_memo_figures("an EBITDA margin drop of -5 pp is severe. The EBITDA margin of 27.5% held", r)
+
+
+def test_rating_line_is_data_only():
+    fin = {**FIN, "company_info": {"credit_ratings": ["Rating update | 22 Sep from icra | 19 Dec 2025 from care"]}}
+    ctx = _build_context_text(fin, {}, "BFL", "")
+    line = next(l for l in ctx.splitlines() if l.startswith("CREDIT RATING ACTIONS"))
+    assert "ICRA: rating update 22 Sep" in line and "never" not in line

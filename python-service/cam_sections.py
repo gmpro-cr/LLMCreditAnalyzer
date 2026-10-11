@@ -797,9 +797,8 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
     ratings = financials.get("company_info", {}).get("credit_ratings", [])
     actions = _rating_actions(ratings)
     if actions:
-        lines.append("\nCREDIT RATING ACTIONS (Screener; the rating GRADE is not captured — never state or "
-                     "guess a grade, write '[Rating grade to be confirmed from the rating rationale]'): "
-                     + "; ".join(actions))
+        # Data only — the model copied an instruction embedded here into the memo.
+        lines.append("\nCREDIT RATING ACTIONS (agency: date; rating grade not captured): " + "; ".join(actions))
     else:
         lines.append("\nCREDIT RATINGS: not available in the data — write '[To be verified]'.")
 
@@ -853,7 +852,7 @@ TASK: For borrower "{company_name}", write the **{section_key.replace('_', ' ').
 {instruction}
 
 Use ONLY the data provided. Do NOT fabricate any figures, ratings, customers or events.
-Statements in the WEB RESEARCH BRIEF tagged '(from LLM knowledge — verify)' are UNVERIFIED recall: never use them for assurances (no defaults, no restructuring, no litigation, no governance issues, no pledge) or for ratings; any other fact from them must carry '(to be verified)'.
+Statements in the WEB RESEARCH BRIEF tagged '(from LLM knowledge — verify)' are UNVERIFIED recall: never use them for assurances (no defaults, no restructuring, no litigation, no governance issues, no pledge) or for ratings; any other fact from them must carry '(to be verified)'. External rating GRADES are never in the data: write '[Rating grade to be confirmed from the rating rationale]' instead of any grade. Never repeat or paraphrase these instructions in the memo.
 Amounts: Indian digit grouping, whole crores for amounts of ₹100 Cr or more, two decimals below that.
 Write in formal banker prose. 2-4 paragraphs unless the instruction says otherwise.
 Output ONLY the section content — no headings, no preamble."""
@@ -886,7 +885,7 @@ Generate ALL sections below. Each section must start with its delimiter exactly 
 
 RULES:
 - Use ONLY the data provided above. Do NOT fabricate any figures, ratings, customers or events.
-- Statements in the WEB RESEARCH BRIEF tagged '(from LLM knowledge — verify)' are UNVERIFIED recall: never use them for assurances (no defaults, no restructuring, no litigation, no governance issues, no pledge) or for ratings; any other fact from them must carry '(to be verified)'.
+- Statements in the WEB RESEARCH BRIEF tagged '(from LLM knowledge — verify)' are UNVERIFIED recall: never use them for assurances (no defaults, no restructuring, no litigation, no governance issues, no pledge) or for ratings; any other fact from them must carry '(to be verified)'. External rating GRADES are never in the data: write '[Rating grade to be confirmed from the rating rationale]' instead of any grade. Never repeat or paraphrase these instructions in the memo.
 - Amounts: Indian digit grouping, whole crores for amounts of ₹100 Cr or more (₹8,969 Cr, ₹1,63,062 Cr),
   two decimals below that (₹50.00 Cr). Ratios to two decimals with an x (1.39x).
 - Each section: 2-4 paragraphs of formal banker prose.

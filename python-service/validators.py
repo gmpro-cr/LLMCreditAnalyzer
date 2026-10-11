@@ -121,14 +121,17 @@ def audit_memo_figures(memo_text: str, ratios: dict, alternates: dict = None) ->
         if computed is None:
             continue
         for label in labels:
-            idx = low.find(label)
-            if idx == -1:
+            stated = None
+            for occ in re.finditer(re.escape(label), low):
+                window = low[occ.end(): occ.end() + 28]
+                m = re.search(r"[-+]?\d+(?:\.\d+)?", window)
+                # "EBITDA margin drop of -5 pp" is a change, not a level — skip it
+                # and keep looking for a stated level.
+                if m and not re.match(r"\s*(?:pp\b|percentage point|bps\b|basis point)", window[m.end():]):
+                    stated = float(m.group())
+                    break
+            if stated is None:
                 continue
-            window = low[idx + len(label): idx + len(label) + 28]
-            m = re.search(r"[-+]?\d+(?:\.\d+)?", window)
-            if not m:
-                continue
-            stated = float(m.group())
             accepted = [computed] + [a for a in (alternates or {}).get(key, []) if a is not None]
             if all(abs(stated - a) > max(abs(a) * 0.10, 0.15) for a in accepted):  # 10% or 0.15 abs
                 issues.append({"ratio": key, "label": label,
