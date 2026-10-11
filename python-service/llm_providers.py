@@ -33,7 +33,7 @@ PROVIDERS: Dict[str, Dict[str, str]] = {
         "url": "https://integrate.api.nvidia.com/v1/chat/completions",
         "key_env": "NVIDIA_API_KEY",
         "models_env": "NVIDIA_MODELS",
-        "default_models": "deepseek-ai/deepseek-v4.1-flash,moonshotai/kimi-k2.6,nvidia/nemotron-3-super-120b-a12b",
+        "default_models": "deepseek-ai/deepseek-v4.1-flash,nvidia/nemotron-3-super-120b-a12b,nvidia/nemotron-3-ultra-550b-a55b",
     },
     "openrouter": {
         "url": "https://openrouter.ai/api/v1/chat/completions",
