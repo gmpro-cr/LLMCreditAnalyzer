@@ -837,7 +837,7 @@ async def export_pdf_endpoint(data: ExportPdfRequest):
             plain = [[_re.sub(r"[*_`]", "", str(c)) for c in (r + [""] * (n_cols - len(r)))] for r in rows]
             longest = [max(len(r[j]) for r in plain) for j in range(n_cols)]
             head_word = [max((len(w) for w in plain[0][j].split()), default=0) for j in range(n_cols)]
-            weights = [max(min(l, 46 if j == 0 else 34), head_word[j] + 2, 5) for j, l in enumerate(longest)]
+            weights = [max(min(l + 1, 46 if j == 0 else 34), head_word[j] + 2, 6) for j, l in enumerate(longest)]
             total = sum(weights) or 1
             col_w = [PAGE_W * w / total for w in weights]
             wide = n_cols >= 8
