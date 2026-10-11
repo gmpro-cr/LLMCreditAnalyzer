@@ -55,3 +55,11 @@ def test_projections_use_the_case_facility_not_a_hardcoded_500cr_loan():
     ctx = _build_context_text(fin, {}, "X", "")
     assert "₹500 Cr" not in ctx and "₹100 Cr" not in ctx
     assert "₹1.00 Cr repaid over 5 years (₹0.20 Cr/yr" in ctx
+
+
+def test_facility_guard_ignores_metric_lists():
+    from validators import audit_facility_amounts
+    listed = ("operating cash flows (Mar 2024: ₹39,142.00 Cr, Mar 2025: ₹40,816.00 Cr, Mar 2026: ₹45,597.00 Cr) "
+              "provide a cushion for debt service on the proposed Term Loan")
+    assert audit_facility_amounts(listed, 1.0) == []
+    assert audit_facility_amounts("cash flows are strong; the term loan repayment of ₹5 Cr p.a.", 1.0)[0]["stated_cr"] == 5.0

@@ -261,9 +261,13 @@ def audit_facility_amounts(text: str, facility_cr: float) -> list:
         lo = max(text.rfind(sep, 0, m.start()) for sep in (". ", "\n", "|"))
         his = [i for i in (text.find(sep, m.end()) for sep in (". ", "\n", "|")) if i != -1]
         window = text[max(lo + 1, m.start() - 120): min(his) if his else len(text)]
-        # "operating cash flows of ₹45,597 Cr" is a company metric, not the loan.
-        lead = text[max(0, m.start() - 45): m.start()]
-        if re.search(_COMPANY_METRICS, lead, flags=re.IGNORECASE):
+        # "operating cash flows of ₹45,597 Cr" — or a list "(Mar 24: ₹x Cr, Mar 25: ₹y Cr)"
+        # after it — is a company metric. Whichever term is nearer before the
+        # amount decides: a metric word, or a facility word.
+        lead = text[max(lo + 1, m.start() - 200): m.start()]
+        last_metric = max((x.end() for x in re.finditer(_COMPANY_METRICS, lead, flags=re.IGNORECASE)), default=-1)
+        last_facility = max((x.end() for x in re.finditer(_FACILITY_WORDS, lead, flags=re.IGNORECASE)), default=-1)
+        if last_metric > last_facility:
             continue
         if re.search(_FACILITY_WORDS, window, flags=re.IGNORECASE):
             seen.add(val)
