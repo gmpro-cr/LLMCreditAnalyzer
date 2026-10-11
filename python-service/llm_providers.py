@@ -50,7 +50,9 @@ PROVIDERS: Dict[str, Dict[str, str]] = {
 }
 
 BENCH_SECONDS = 60
-TIMEOUT = httpx.Timeout(150.0, connect=10.0)
+# A healthy 3-section batch returns in ~30-70s; a stalled call should hand over
+# to the next model quickly rather than hold the whole CAM.
+TIMEOUT = httpx.Timeout(95.0, connect=10.0)
 _benched: Dict[str, float] = {}
 _lock = threading.Lock()
 
