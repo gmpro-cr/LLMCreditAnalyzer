@@ -228,3 +228,45 @@ def apply_recommendation_audit(memo: str, scorecard: dict, risk_flags: list) -> 
     for i in issues:
         lines.append(f"- {i['message']}")
     return memo + "\n".join(lines)
+
+
+# Facility-scale guard. Prompting alone didn't hold: with the exact amount in
+# the context the model still wrote "₹1.00 Cr (₹1,00,000,000)" and "annual
+# repayments of ₹100 Cr" on a ₹1 Cr term loan (2026-10-11).
+_FACILITY_WORDS = r"(?:repay\w*|instal+ment\w*|EMI|facility|term loan|limit|disburs\w*|sanction\w*|tranche\w*|principal)"
+_COMPANY_METRICS = (r"(?:cash ?flows?|revenue|sales|turnover|profit|PAT|EBITDA|net ?worth|market cap\w*|"
+                    r"accruals|reserves|cash (?:and|&) (?:cash )?equivalents|assets|borrowings|income|expenses)")
+_CR_AMOUNT = r"₹\s*([\d,]+(?:\.\d+)?)\s*(?:Cr\b|crores?\b)"
+
+
+def strip_rupee_restatements(text: str) -> str:
+    """Drop the '(₹1,00,000,000)' style parenthetical the model mis-copies
+    after a crore figure; the crore figure itself is kept."""
+    return re.sub(r"(₹\s*[\d,]+(?:\.\d+)?\s*Cr)\s*\(₹\s*[\d,]+(?:\.\d+)?\)", r"\1", text)
+
+
+def audit_facility_amounts(text: str, facility_cr: float) -> list:
+    """Crore amounts tied to the facility (within ~80 chars of a facility word)
+    that exceed the facility itself. Company-scale figures (revenue, market cap)
+    aren't near those words, so they don't trip it."""
+    if not facility_cr or facility_cr <= 0:
+        return []
+    issues, seen = [], set()
+    for m in re.finditer(_CR_AMOUNT, text, flags=re.IGNORECASE):
+        val = as_number(m.group(1).replace(",", ""))
+        if val is None or val <= facility_cr * 1.001 or val in seen:
+            continue
+        # Same sentence / table cell only — a facility word in the next sentence
+        # must not implicate a company-scale figure in this one.
+        lo = max(text.rfind(sep, 0, m.start()) for sep in (". ", "\n", "|"))
+        his = [i for i in (text.find(sep, m.end()) for sep in (". ", "\n", "|")) if i != -1]
+        window = text[max(lo + 1, m.start() - 120): min(his) if his else len(text)]
+        # "operating cash flows of ₹45,597 Cr" is a company metric, not the loan.
+        lead = text[max(0, m.start() - 45): m.start()]
+        if re.search(_COMPANY_METRICS, lead, flags=re.IGNORECASE):
+            continue
+        if re.search(_FACILITY_WORDS, window, flags=re.IGNORECASE):
+            seen.add(val)
+            issues.append({"stated_cr": val, "facility_cr": facility_cr,
+                           "excerpt": " ".join(window.split())})
+    return issues

@@ -30,7 +30,8 @@ from typing import Dict, Any, Optional
 from credit_score import compute_scorecard, format_scorecard_md
 from cam_tables import _inr
 from ews_checklist import format_ews_checklist_md
-from validators import audit_memo_figures, audit_recommendation_consistency
+from validators import (audit_memo_figures, audit_recommendation_consistency,
+                        audit_facility_amounts, strip_rupee_restatements)
 
 logger = logging.getLogger(__name__)
 
@@ -397,7 +398,8 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
         amt = float(fac["amount_inr"])
         lines.append(
             f"PROPOSED FACILITY (use exactly this type and amount everywhere): "
-            f"{fac['type'].replace('_', ' ').title()} of ₹{amt / 1e7:,.2f} Cr (₹{_inr(amt)})"
+            f"{fac['type'].replace('_', ' ').title()} of ₹{amt / 1e7:,.2f} Cr. Every repayment, "
+            f"instalment or limit you mention must be within this amount"
         )
 
     ci = financials.get("company_info", {})
@@ -1021,6 +1023,24 @@ def generate_cam_sections(
             sections["_figure_mismatches"] = mismatches
     except Exception as e:
         logger.warning(f"[CAM] Figure audit failed: {e}")
+
+    # Facility-scale check: the model must not restate the loan at a different
+    # scale. Strip mis-copied rupee parentheticals; flag over-sized amounts in place.
+    fac = financials.get("facility") or {}
+    facility_cr = (float(fac["amount_inr"]) / 1e7) if fac.get("amount_inr") else 0.0
+    for key, sec in sections.items():
+        if not (isinstance(sec, dict) and sec.get("ai_generated") and sec.get("content")):
+            continue
+        sec["content"] = strip_rupee_restatements(sec["content"])
+        issues = audit_facility_amounts(sec["content"], facility_cr)
+        if issues:
+            amounts = ", ".join(f"₹{i['stated_cr']:,.2f} Cr" for i in issues)
+            sec["content"] += (
+                f"\n\n**Automated check:** this section cites {amounts} in connection with the "
+                f"facility, but the proposed facility is ₹{facility_cr:,.2f} Cr. Correct before reliance."
+            )
+            sec.setdefault("confidence", "low")
+            sec["confidence"] = "low"
 
     # Recommendation-consistency check — flag if the narrative leans "approve"
     # while the deterministic grade/risk flags say otherwise. Reads the grade back
