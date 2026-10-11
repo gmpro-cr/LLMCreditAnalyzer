@@ -113,9 +113,70 @@ function FileUploadZone({
 
 // ── FinancialsPanel ─────────────────────────────────────────────────────────
 
-function FinancialsPanel({ caseId, companyName, documents, onRefresh }: {
-  caseId: number; companyName: string; documents: CaseDocument[]; onRefresh: () => void;
+type FetchedFinancials = {
+  source?: string;
+  screener_url?: string;
+  profit_loss?: { years?: string[]; revenue?: number[]; ebitda?: number[]; pat?: number[] };
+};
+
+/** True when the case has financials the memo generator can use — mirrors the
+ *  server's `no_financial_data` precondition in routes/memos.ts. */
+export function hasFinancialData(data: DataRoomState | undefined): boolean {
+  if (!data) return false;
+  const fin = data.extractedData?.financials as FetchedFinancials | undefined;
+  if (Array.isArray(fin?.profit_loss?.years) && fin.profit_loss.years.length > 0) return true;
+  return data.documents.some(d => (d.doc_type === "annual_report" || d.doc_type === "cma") && !!d.extracted_data);
+}
+
+const formatCr = (v: number | undefined) =>
+  typeof v === "number" ? `₹${v.toLocaleString("en-IN")} Cr` : "—";
+
+function FetchedFinancialsCard({ financials }: { financials: FetchedFinancials }) {
+  const pl = financials.profit_loss;
+  const years = pl?.years ?? [];
+  if (years.length === 0) return null;
+  const rows: { label: string; values?: number[] }[] = [
+    { label: "Revenue", values: pl?.revenue },
+    { label: "EBITDA", values: pl?.ebitda },
+    { label: "PAT", values: pl?.pat },
+  ];
+  return (
+    <div className="rounded-lg border bg-background">
+      <div className="flex items-center justify-between px-4 py-3 border-b">
+        <div className="flex items-center gap-2">
+          <PiCheckCircleLight className="h-4 w-4 text-emerald-600" />
+          <p className="text-sm font-medium">Financials ready · {years.length} years</p>
+        </div>
+        {financials.screener_url && (
+          <a href={financials.screener_url} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
+            Source: Screener.in
+          </a>
+        )}
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-xs text-muted-foreground">
+            <th className="text-left font-normal px-4 py-2" />
+            {years.map(y => <th key={y} className="text-right font-normal px-4 py-2">{y}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.label} className="border-t">
+              <td className="px-4 py-2 text-muted-foreground">{r.label}</td>
+              {years.map((y, i) => <td key={y} className="px-4 py-2 text-right tabular-nums">{formatCr(r.values?.[i])}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FinancialsPanel({ caseId, companyName, documents, financials, onRefresh }: {
+  caseId: number; companyName: string; documents: CaseDocument[]; financials?: FetchedFinancials; onRefresh: () => void;
 }) {
+  const hasFetched = (financials?.profit_loss?.years?.length ?? 0) > 0;
   const [symbol, setSymbol] = useState("");
   const [suggestedTicker, setSuggestedTicker] = useState("");
   const fetchReports = useFetchAnnualReports();
@@ -125,7 +186,7 @@ function FinancialsPanel({ caseId, companyName, documents, onRefresh }: {
   const annualReports = documents.filter(d => d.doc_type === "annual_report");
 
   useEffect(() => {
-    if (annualReports.length > 0 || !companyName) return;
+    if (annualReports.length > 0 || hasFetched || !companyName) return;
     searchCompanies({ q: companyName })
       .then((results: { ticker: string }[]) => {
         if (results && results.length > 0) {
@@ -135,13 +196,14 @@ function FinancialsPanel({ caseId, companyName, documents, onRefresh }: {
         }
       })
       .catch(() => {});
-  }, [companyName]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [companyName, hasFetched]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFetch = async () => {
     if (!symbol.trim()) { toast({ title: "Enter BSE/NSE symbol", variant: "destructive" }); return; }
     try {
       const res = await fetchReports.mutateAsync({ caseId, symbol: symbol.trim(), companyName });
-      toast({ title: `${res.reportsFound} report(s) fetched`, description: "Financials extracted and saved." });
+      const n = res.yearsFound?.length ?? 0;
+      toast({ title: `Financials fetched · ${n} year${n === 1 ? "" : "s"}`, description: "You can now generate the memo." });
       setSuggestedTicker("");
       onRefresh();
     } catch (e) {
@@ -151,12 +213,14 @@ function FinancialsPanel({ caseId, companyName, documents, onRefresh }: {
 
   return (
     <div className="space-y-4">
-      {annualReports.length === 0 && suggestedTicker && !fetchReports.isPending && (
+      {hasFetched && financials && <FetchedFinancialsCard financials={financials} />}
+
+      {annualReports.length === 0 && !hasFetched && suggestedTicker && !fetchReports.isPending && (
         <div className="flex items-start gap-3 p-4 bg-primary/5 border border-primary/20 rounded-lg">
           <PiBuildingsLight className="h-5 w-5 text-primary shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium">Listed company detected — {suggestedTicker}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Fetch the last 3 annual reports from BSE/NSE automatically.</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Pull the last 3 years of financials automatically.</p>
           </div>
           <Button size="sm" onClick={handleFetch}>
             <PiMagnifyingGlassLight className="mr-2 h-3.5 w-3.5" /> Fetch Now
@@ -168,25 +232,25 @@ function FinancialsPanel({ caseId, companyName, documents, onRefresh }: {
         <div className="flex items-center gap-3 p-4 bg-muted/30 border rounded-lg">
           <PiSpinnerLight className="h-5 w-5 animate-spin text-primary shrink-0" />
           <div>
-            <p className="text-sm font-medium">Fetching annual reports from BSE/NSE…</p>
-            <p className="text-xs text-muted-foreground">Downloading and extracting financials from PDFs. This may take 1–3 minutes.</p>
+            <p className="text-sm font-medium">Fetching financials for {symbol || companyName}…</p>
+            <p className="text-xs text-muted-foreground">Usually a few seconds. If the AI engine was asleep, the first fetch can take up to a minute.</p>
           </div>
         </div>
       )}
 
       <div>
-        <h4 className="text-sm font-semibold mb-2">Fetch Annual Reports (BSE/NSE)</h4>
+        <h4 className="text-sm font-semibold mb-2">{hasFetched ? "Refetch financials" : "Fetch financials (listed companies)"}</h4>
         <div className="flex gap-2">
           <Input placeholder="BSE/NSE Symbol (e.g. RELIANCE)" value={symbol}
             onChange={e => setSymbol(e.target.value.toUpperCase())} className="max-w-xs"
             onKeyDown={e => e.key === "Enter" && handleFetch()} />
-          <Button onClick={handleFetch} disabled={fetchReports.isPending} variant={suggestedTicker ? "default" : "outline"}>
+          <Button onClick={handleFetch} disabled={fetchReports.isPending} variant={suggestedTicker && !hasFetched ? "default" : "outline"}>
             {fetchReports.isPending
               ? <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" /> Fetching…</>
-              : <><PiMagnifyingGlassLight className="mr-2 h-4 w-4" /> Fetch Annual Reports</>}
+              : <><PiMagnifyingGlassLight className="mr-2 h-4 w-4" /> {hasFetched ? "Refetch" : "Fetch"}</>}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground mt-1">Fetches last 3 years from BSE filings portal. Falls back to investor relations page if not found.</p>
+        <p className="text-xs text-muted-foreground mt-1">Pulls 3 years of P&amp;L, balance sheet and cash flow by NSE/BSE symbol. Unlisted borrower? Upload statements below.</p>
       </div>
 
       {annualReports.length > 0 && (
@@ -599,7 +663,7 @@ export default function DataRoomTab({ caseId, companyName }: { caseId: number; c
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
-        {activePanel === "financials" && <FinancialsPanel caseId={caseId} companyName={companyName} documents={documents} onRefresh={handleRefresh} />}
+        {activePanel === "financials" && <FinancialsPanel caseId={caseId} companyName={companyName} documents={documents} financials={extractedData?.financials as FetchedFinancials | undefined} onRefresh={handleRefresh} />}
         {activePanel === "research" && <ResearchPanel caseId={caseId} extractedData={extractedData} onRefresh={handleRefresh} />}
         {activePanel === "documents" && <DocumentsPanel caseId={caseId} companyName={companyName} documents={documents} onRefresh={handleRefresh} />}
         {activePanel === "summary" && <SummaryPanel completeness={completeness} documents={documents} extractedData={extractedData} />}

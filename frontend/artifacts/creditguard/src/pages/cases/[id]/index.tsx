@@ -7,13 +7,15 @@ import {
   useUpdateSection,
   useListRiskFlags,
   useGenerateMemo,
+  useGetDataRoom,
   getGetCaseQueryKey,
   getListSectionsQueryKey,
   getListRiskFlagsQueryKey,
+  getDataRoomQueryKey,
   MemoSection
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import DataRoomTab from "./DataRoomTab";
+import DataRoomTab, { hasFinancialData } from "./DataRoomTab";
 import DrawingPowerCalculator from "./DrawingPowerCalculator";
 import {
   PiArrowLeftLight,
@@ -185,23 +187,27 @@ const GENERATION_STAGES = [
   { at: 16, label: "Formatting tables and citations" },
 ];
 
-function GenerationProgress() {
-  const [elapsed, setElapsed] = useState(0);
+function GenerationProgress({ startedAt }: { startedAt: number }) {
+  // Derived from a start time owned by the parent, so switching to the Data
+  // Room tab and back doesn't reset the clock to 0:00.
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const timer = setInterval(() => setElapsed((e) => e + 1), 1000);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
 
   const stage = [...GENERATION_STAGES].reverse().find((s) => elapsed >= s.at) ?? GENERATION_STAGES[0];
   const minutes = Math.floor(elapsed / 60);
   const seconds = String(elapsed % 60).padStart(2, "0");
 
-  // The engine may be cold-starting; the API client retries underneath, so this
-  // can run longer than usual on the first request after idle.
-  const label = elapsed > 25 ? "Waking the AI engine" : stage.label;
-  const helper = elapsed > 25
-    ? "The engine sleeps when idle — the first run can take up to a minute. Hang tight…"
+  // We can't tell a cold start from a slow model call from here, so don't
+  // claim either — just be honest that it's taking longer than usual.
+  const label = elapsed > 30 ? "Still drafting" : stage.label;
+  const helper = elapsed > 30
+    ? "Taking longer than usual — the AI engine may have been asleep. This can take up to 2 minutes."
     : "A full draft is usually ready in under half a minute.";
 
   return (
@@ -258,14 +264,29 @@ export default function CaseDetail() {
   const updateCase = useUpdateCase();
   const generateMemo = useGenerateMemo();
   const [generating, setGenerating] = useState(false);
+  const [generationStartedAt, setGenerationStartedAt] = useState(0);
   const [mainTab, setMainTab] = useState<"memo" | "dataroom">("memo");
 
   const hasContent = sections?.some(s => s.content && s.content.trim().length > 0);
+
+  // Same query the Data Room tab uses, so a successful fetch there updates this.
+  // `undefined` while loading → don't block; the server check is authoritative.
+  const { data: dataRoom } = useGetDataRoom(id);
+  const missingFinancials = dataRoom !== undefined && !hasFinancialData(dataRoom);
 
   const handleGenerate = async () => {
     // Cold-start 502/503/network errors are retried transparently inside the
     // API client (customFetch), so a single call here is enough — it just takes
     // longer while the free-tier engine wakes.
+    if (missingFinancials) {
+      // Generation would fail with `no_financial_data` — take the user to the
+      // step they actually need instead of a toast that vanishes.
+      setMainTab("dataroom");
+      return;
+    }
+    // Progress UI lives on the memo tab — show it even if started from the Data Room.
+    setMainTab("memo");
+    setGenerationStartedAt(Date.now());
     setGenerating(true);
     try {
       await generateMemo.mutateAsync({ id });
@@ -277,6 +298,11 @@ export default function CaseDetail() {
         (e && typeof e === "object" && "data" in e && (e as {data?: {error?: string}}).data?.error)
         || (e instanceof Error ? e.message : "Could not reach the AI service. Try again.")
       );
+      const code = e && typeof e === "object" && "data" in e ? (e as {data?: {code?: string}}).data?.code : undefined;
+      if (code === "no_financial_data") {
+        await queryClient.invalidateQueries({ queryKey: getDataRoomQueryKey(id) });
+        setMainTab("dataroom");
+      }
       toast({ title: "Generation failed", description: msg, variant: "destructive" });
     } finally {
       setGenerating(false);
@@ -380,6 +406,8 @@ export default function CaseDetail() {
                 <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" /> Generating…</>
               ) : hasContent ? (
                 <><PiArrowClockwiseLight className="mr-2 h-4 w-4" /> Re-generate</>
+              ) : missingFinancials ? (
+                <><PiSparkleLight className="mr-2 h-4 w-4" /> Add Financials First</>
               ) : (
                 <><PiSparkleLight className="mr-2 h-4 w-4" /> Generate AI Draft</>
               )}
@@ -437,7 +465,19 @@ export default function CaseDetail() {
           {/* Main Editor Area */}
           <div className="flex-1 overflow-y-auto p-8 lg:pr-4 relative scroll-smooth" id="editor-container">
             <div className="max-w-4xl mx-auto space-y-8 pb-20">
-              {generating && <GenerationProgress />}
+              {missingFinancials && !hasContent && (
+                <div className="flex items-start gap-4 rounded-lg border border-amber-200 bg-amber-50 p-5 dark:border-amber-900/50 dark:bg-amber-950/30">
+                  <PiWarningLight className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">Add financials before generating the memo</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      The draft is built from the borrower's numbers. Fetch them for a listed company, or upload annual reports / CMA data, in the Data Room.
+                    </p>
+                  </div>
+                  <Button size="sm" onClick={() => setMainTab("dataroom")}>Open Data Room</Button>
+                </div>
+              )}
+              {generating && <GenerationProgress startedAt={generationStartedAt} />}
               {sectionsLoading ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <Skeleton key={i} className="h-64 w-full" />

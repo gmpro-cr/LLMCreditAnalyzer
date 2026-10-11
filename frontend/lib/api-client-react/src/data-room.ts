@@ -58,7 +58,7 @@ export const useGetDataRoom = (caseId: number) =>
 export const useFetchAnnualReports = () =>
   useMutation({
     mutationFn: ({ caseId, symbol, companyName }: { caseId: number; symbol: string; companyName?: string }) =>
-      customFetch<{ ok: boolean; reportsFound: number; reports: unknown[] }>(`/api/cases/${caseId}/data-room/fetch-reports`, {
+      customFetch<{ ok: boolean; source: string; yearsFound: string[]; screenerUrl?: string }>(`/api/cases/${caseId}/data-room/fetch-reports`, {
         method: "POST",
         body: JSON.stringify({ symbol, companyName }),
         headers: { "Content-Type": "application/json" },

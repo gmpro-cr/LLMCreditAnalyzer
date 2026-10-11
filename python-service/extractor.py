@@ -216,7 +216,7 @@ def _call_gemini(text: str, prompt: str, label: str) -> dict:
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             return {}
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(api_key=api_key, http_options=genai.types.HttpOptions(timeout=120_000))  # SDK default: no timeout
         full_prompt = prompt + "\n\nTEXT:\n" + text
         response = client.models.generate_content(
             model="models/gemini-flash-lite-latest",

@@ -8,7 +8,6 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
-import Landing from "@/pages/landing";
 
 // Dashboard is the first authed route — keep it eager so it paints immediately.
 import Dashboard from "@/pages/dashboard";
@@ -16,6 +15,9 @@ import Dashboard from "@/pages/dashboard";
 // Heavy/secondary routes are code-split so they don't bloat the initial bundle
 // (react-markdown, charts, data-room, bank-statement load on demand). This
 // shrinks the JS the dashboard needs on first load.
+// Landing pulls in framer-motion (~120KB) and is never shown to a returning
+// demo user, so keep it out of the entry chunk too.
+const Landing = lazy(() => import("@/pages/landing"));
 const CasesList = lazy(() => import("@/pages/cases/index"));
 const NewCase = lazy(() => import("@/pages/cases/new"));
 const CaseDetail = lazy(() => import("@/pages/cases/[id]/index"));
@@ -46,10 +48,12 @@ function Router() {
 
   if (!isAuthenticated) {
     return (
-      <Switch>
-        <Route path="/" component={Landing} />
-        <Route><Redirect to="/" /></Route>
-      </Switch>
+      <Suspense fallback={null}>
+        <Switch>
+          <Route path="/" component={Landing} />
+          <Route><Redirect to="/" /></Route>
+        </Switch>
+      </Suspense>
     );
   }
 

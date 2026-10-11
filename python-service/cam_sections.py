@@ -284,7 +284,10 @@ def _gemini_call(prompt: str) -> str:
             return ""
         # Client is thread-safe; reuse it across (parallel) section calls.
         if _genai_client is None:
-            _genai_client = genai.Client(api_key=api_key)
+            # The SDK's default is no timeout: one stalled request froze the whole
+            # memo for minutes (2026-10-11). A healthy 4-section batch takes ~10s;
+            # on timeout the section is re-drafted individually / falls back to Groq.
+            _genai_client = genai.Client(api_key=api_key, http_options=genai.types.HttpOptions(timeout=45_000))
         response = _genai_client.models.generate_content(
             model="models/gemini-flash-lite-latest",
             contents=prompt,
