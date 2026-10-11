@@ -67,7 +67,11 @@ def _call_llm(prompt: str) -> str:
         result = _gemini_call(prompt)
         if result:
             return result
-        logger.warning("Gemini failed, falling back to Ollama")
+        logger.warning("Gemini failed, trying free fallback providers")
+        from llm_providers import fallback
+        result = fallback(prompt)
+        if result:
+            return result
     return _ollama_call(prompt)
 
 

@@ -135,8 +135,9 @@ def _llm_call(prompt: str) -> Optional[str]:
         result = _gemini_call(prompt)
         if result:
             return result
-        logger.warning("[Research] Gemini failed, trying Groq fallback")
-        return _groq_call(prompt)
+        logger.warning("[Research] Gemini failed, trying free fallback providers")
+        from llm_providers import fallback
+        return fallback(prompt) or None
 
     result = _ollama_call(prompt)
     if result:

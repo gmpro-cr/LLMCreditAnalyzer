@@ -203,10 +203,15 @@ def _call_llm(text: str, prompt: str, label: str) -> dict:
         result = _call_gemini(text, prompt, label)
         if result:
             return result
-        logger.warning(f"[{label}] Gemini failed, falling back to Groq")
-        result = _call_groq(text, prompt, label)
-        if result:
-            return result
+        logger.warning(f"[{label}] Gemini failed, trying free fallback providers")
+        from llm_providers import fallback
+        raw = fallback(prompt + "\n\nTEXT:\n" + text)
+        m = re.search(r"\{.*\}", raw or "", re.S)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except json.JSONDecodeError:
+                logger.warning(f"[{label}] fallback returned invalid JSON")
     return _call_ollama(text, prompt, label)
 
 

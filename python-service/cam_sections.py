@@ -391,13 +391,13 @@ def _llm(prompt: str) -> str:
         result = _gemini_call(prompt)
         if result:
             return result
-        # Gemini quota/outage → fall back to Groq's free tier (if GROQ_API_KEY
-        # is set), then Ollama as a last resort for local dev.
-        logger.warning("Gemini failed, falling back to Groq")
-        result = _groq_call(prompt)
+        # Gemini quota/outage → free fallbacks (NVIDIA NIM, OpenRouter free
+        # models, Groq — whichever have keys), then Ollama for local dev.
+        logger.warning("Gemini failed, trying free fallback providers")
+        from llm_providers import fallback
+        result = fallback(prompt)
         if result:
             return result
-        logger.warning("Groq failed, falling back to Ollama")
         return _ollama_call(prompt)
     # Unknown provider — try Ollama then Gemini
     result = _ollama_call(prompt)

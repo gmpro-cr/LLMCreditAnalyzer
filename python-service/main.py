@@ -158,7 +158,9 @@ def health():
     extraction = os.getenv("EXTRACTION_PROVIDER", "gemini")
     memo = os.getenv("MEMO_PROVIDER", "gemini")
     model = os.getenv("OLLAMA_MODEL", "")
-    return {"status": "healthy", "extraction_provider": extraction, "memo_provider": memo, "ollama_model": model}
+    from llm_providers import configured
+    return {"status": "healthy", "extraction_provider": extraction, "memo_provider": memo, "ollama_model": model,
+            "fallback_providers": configured()}
 
 
 @app.post("/extract")
