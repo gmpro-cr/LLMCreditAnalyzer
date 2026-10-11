@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 import tempfile
 import os
+import re as _re_mod
 import asyncio
 import json
 import logging
@@ -729,9 +730,13 @@ async def export_docx_endpoint(data: ExportDocxRequest):
 @app.post("/export-pdf")
 async def export_pdf_endpoint(data: ExportPdfRequest):
     """Export memo text to PDF and return the file."""
-    memo_content = data.memo_content
+    # The built-in PDF fonts have no ₹ glyph (it printed as a black box), and
+    # the Render image ships no TTF that does — "Rs" is the CAM convention.
+    def _rs(t):
+        return _re_mod.sub(r"₹\s*", "Rs ", t) if isinstance(t, str) else t
+    memo_content = _rs(data.memo_content)
     company_name = data.company_name
-    sections = data.sections   # optional: dict of {title: content}
+    sections = {k: _rs(v) for k, v in (data.sections or {}).items()}   # optional: {key: content}
     if not memo_content and not sections:
         raise HTTPException(400, "memo_content or sections is required")
 
@@ -791,8 +796,9 @@ async def export_pdf_endpoint(data: ExportPdfRequest):
             text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             # Restore bold: **word** → <b>word</b>
             text = _re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
-            # Restore italic: *word* or _word_
+            # Restore italic: *word* or _word_ (not snake_case inside words)
             text = _re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
+            text = _re.sub(r'(?<![\w])_(.+?)_(?![\w])', r'<i>\1</i>', text)
             return text
 
         def parse_md_table(lines: list[str]):
@@ -813,6 +819,14 @@ async def export_pdf_endpoint(data: ExportPdfRequest):
             n_cols = max(len(r) for r in rows)
             # First column wider, rest equal
             col_w = [PAGE_W * 0.38] + [(PAGE_W * 0.62) / max(n_cols - 1, 1)] * (n_cols - 1)
+            # Right-align only numeric columns; text columns (Mitigant, Remarks,
+            # Facility Type) were right-aligned too and read badly.
+            num_re = _re.compile(r'^(?:[<>]=?\s*)?[-+]?(?:Rs\s*)?[\d,]+(?:\.\d+)?\s*(?:x|%|Cr)?$|^[—-]$')
+            body = [r + [''] * (n_cols - len(r)) for r in rows[1:]]
+            numeric_col = [
+                j > 0 and sum(bool(num_re.match(r[j].replace('*', '').strip())) for r in body) * 2 >= len(body)
+                for j in range(n_cols)
+            ]
             pdf_rows = []
             for i, row in enumerate(rows):
                 # Pad short rows
@@ -822,7 +836,7 @@ async def export_pdf_endpoint(data: ExportPdfRequest):
                 else:
                     cells = []
                     for j, c in enumerate(row):
-                        style = s_tbl_cell_r if j > 0 else s_tbl_cell
+                        style = s_tbl_cell_r if numeric_col[j] else s_tbl_cell
                         cells.append(Paragraph(safe_xml(c), style))
                     pdf_rows.append(cells)
 
@@ -872,7 +886,11 @@ async def export_pdf_endpoint(data: ExportPdfRequest):
                     i += 1
                     continue
 
-                # Heading ## or ###
+                # Heading #, ## or ###
+                if stripped.startswith('# '):
+                    story.append(Paragraph(safe_xml(stripped[2:]), s_h1))
+                    i += 1
+                    continue
                 if stripped.startswith('### '):
                     story.append(Paragraph(safe_xml(stripped[4:]), s_h2))
                     i += 1

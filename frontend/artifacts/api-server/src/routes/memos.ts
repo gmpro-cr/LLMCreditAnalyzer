@@ -247,7 +247,7 @@ router.get("/:id/export-pdf", async (req, res) => {
 
   const memoContent = [
     `# Credit Appraisal Memorandum\n## ${c.borrower_name}\n`,
-    `**Facility:** ${c.facility_type.replace(/_/g, " ")} | **Amount:** ₹${(Number(c.facility_amount) / 1e7).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr | **Sector:** ${c.sector} | **RM:** ${c.rm_name}\n\n---\n`,
+    `**Facility:** ${c.facility_type.replace(/_/g, " ").replace(/\b\w/g, (ch: string) => ch.toUpperCase())} | **Amount:** ₹${(Number(c.facility_amount) / 1e7).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr | **Sector:** ${c.sector} | **RM:** ${c.rm_name}\n\n---\n`,
     ...SECTION_ORDER.map((key) => {
       const s = sectionMap[key];
       if (!s?.content) return "";
