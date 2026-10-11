@@ -130,3 +130,10 @@ def test_unsupported_conduct_claims_are_scrubbed():
     t = "reflecting strong ratings and unblemished banking conduct."
     assert "[RM to provide: account conduct]" in cam_v2.scrub_assurances(t, False)
     assert cam_v2.scrub_assurances(t, True) == t
+
+
+def test_figure_audit_ignores_numbers_of_other_ratios():
+    from validators import audit_memo_figures
+    r = {"debt_equity": 0.76, "dscr": 2.9}
+    assert audit_memo_figures("covenants on TOL/TNW, Debt/Equity, DSCR (2.90x) and ICR", r) == []
+    assert audit_memo_figures("Debt/Equity stood at 1.90x", r)  # a real mismatch still flags

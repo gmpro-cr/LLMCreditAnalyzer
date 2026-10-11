@@ -123,12 +123,19 @@ def audit_memo_figures(memo_text: str, ratios: dict, alternates: dict = None) ->
         for label in labels:
             stated = None
             for occ in re.finditer(re.escape(label), low):
-                window = low[occ.end(): occ.end() + 28]
-                m = re.search(r"[-+]?\d+(?:\.\d+)?", window)
+                window = low[occ.end(): occ.end() + 40]
+                # The figure must belong to THIS label: it follows directly or after a
+                # connector ("of", "at", "stood at", "improved from"...). A comma, pipe
+                # or another ratio in between means the number is someone else's
+                # ("Debt/Equity, DSCR (2.90x)" is not a D/E of 2.90).
+                m = re.match(r"\s*(?:ratio\s*)?(?:\((?:x|%|ebitda[^)]*)\)\s*)?"
+                             r"(?:(?:of|at|was|is|stood at|stands at|came in at|improved from|declined from|"
+                             r"rose from|fell from|moved from|increased from|decreased from|from|to|:|=|-)\s*)?"
+                             r"(?:approximately\s+|about\s+|~\s*)?([-+]?\d+(?:\.\d+)?)", window)
                 # "EBITDA margin drop of -5 pp" is a change, not a level — skip it
                 # and keep looking for a stated level.
                 if m and not re.match(r"\s*(?:pp\b|percentage point|bps\b|basis point)", window[m.end():]):
-                    stated = float(m.group())
+                    stated = float(m.group(1))
                     break
             if stated is None:
                 continue
