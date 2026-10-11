@@ -841,6 +841,23 @@ async def export_pdf_endpoint(data: ExportPdfRequest):
             total = sum(weights) or 1
             col_w = [PAGE_W * w / total for w in weights]
             wide = n_cols >= 8
+            # Hard floor: the longest single word in a column must fit on one line
+            # ("FY27E" wrapped to "FY27 / E"); take the space from wider columns.
+            per_char = 3.75 if wide else 4.9
+            longest_word = [max((len(w) for r in plain for w in r[j].split()), default=1) for j in range(n_cols)]
+            floor = [min(longest_word[j] * per_char + (8 if wide else 12), PAGE_W * 0.45) for j in range(n_cols)]
+            if sum(floor) < PAGE_W:
+                for _ in range(3):
+                    short = [j for j in range(n_cols) if col_w[j] < floor[j]]
+                    if not short:
+                        break
+                    need = sum(floor[j] - col_w[j] for j in short)
+                    for j in short:
+                        col_w[j] = floor[j]
+                    spare = [j for j in range(n_cols) if j not in short and col_w[j] > floor[j]]
+                    room = sum(col_w[j] - floor[j] for j in spare) or 1
+                    for j in spare:
+                        col_w[j] -= need * (col_w[j] - floor[j]) / room
             # Right-align only numeric columns; text columns (Mitigant, Remarks,
             # Facility Type) were right-aligned too and read badly.
             num_re = _re.compile(r'^(?:[<>]=?\s*)?[-+]?(?:Rs\s*)?[\d,]+(?:\.\d+)?\s*(?:x|%|Cr)?$|^[—-]$')
