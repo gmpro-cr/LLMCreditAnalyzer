@@ -236,7 +236,9 @@ def apply_recommendation_audit(memo: str, scorecard: dict, risk_flags: list) -> 
 # repayments of ₹100 Cr" on a ₹1 Cr term loan (2026-10-11).
 _FACILITY_WORDS = r"(?:repay\w*|instal+ment\w*|EMI|facility|term loan|limit|disburs\w*|sanction\w*|tranche\w*|principal)"
 _COMPANY_METRICS = (r"(?:cash ?flows?|revenue|sales|turnover|profit|PAT|EBITDA|net ?worth|market cap\w*|"
-                    r"accruals|reserves|cash (?:and|&) (?:cash )?equivalents|assets|borrowings|income|expenses)")
+                    r"accruals|reserves|cash (?:and|&) (?:cash )?equivalents|assets|borrowings|income|expenses|"
+                    # "existing borrowings plus the facility, bringing aggregate exposure to ₹4,310 Cr"
+                    r"exposure|aggregate|total debt|indebtedness)")
 _CR_AMOUNT = r"₹\s*([\d,]+(?:\.\d+)?)\s*(?:Cr\b|crores?\b)"
 
 

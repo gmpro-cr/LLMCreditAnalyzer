@@ -95,7 +95,9 @@ SECTION_PROMPTS = {
         "Identify 4-6 key credit issues and risks specific to this borrower, from a LENDER's "
         "perspective: financial risks (profit decline, DSCR headroom, leverage, coverage), "
         "working-capital, operational, industry and management/governance risks, and red flags. "
-        "Any material YoY decline in revenue or PAT and any thin DSCR headroom in the data MUST appear. "
+        "Any material YoY decline in revenue or PAT and any thin DSCR headroom in the data MUST appear; "
+        "attribute a PAT decline only to what the data shows (compare EBITDA margin vs the Other Income line). "
+        "If FACR on all debt is below 1.25x, include security cover as a risk. "
         "Do NOT list equity-market risks (share price, P/E, price-to-book, valuation) — they do "
         "not affect debt repayment. "
         "Output ONLY a markdown table with this exact header row and no other text "
@@ -110,7 +112,8 @@ SECTION_PROMPTS = {
     "recommendation": (
         "Write a credit recommendation: state whether to recommend approval/decline/further review, "
         "suggested loan amount (if applicable), key conditions precedent, "
-        "financial covenants to impose (use EXACTLY the STANDARD FINANCIAL COVENANTS from the context), "
+        "financial covenants to impose (use EXACTLY the STANDARD FINANCIAL COVENANTS from the context; omit any "
+        "covenant whose ratio cannot be computed from the data and say it will be set after review), "
         "and monitoring requirements. If the DSCR headroom is thin or profits are falling, say so and make "
         "approval conditional on the specific items to be verified. "
         "Base the recommendation strictly on the financial and qualitative data provided."
@@ -124,7 +127,8 @@ SECTION_PROMPTS = {
         "3. DSCR analysis: cite the 'DSCR (pro forma)' values for actuals and projections from the CMA table — "
         "this is the ONLY DSCR in the memo. State its basis in one sentence (existing borrowings assumed to "
         "amortise over 5 years plus the proposed term loan principal; an estimate pending the repayment "
-        "schedule) and whether it clears 1.25x and by how much headroom.\n"
+        "schedule) and whether it clears 1.25x and by how much headroom. Headroom under 0.25x is THIN — "
+        "never call it comfortable.\n"
         "4. TOL/TNW and FACR: cite values from the CMA table. "
         "TOL/TNW benchmark is <3.0x; FACR benchmark is >1.25x. Comment on adequacy.\n"
         "5. Stress scenario: cite the STRESS TEST line's DSCR figures exactly and say whether each clears 1.25x.\n"
@@ -165,7 +169,8 @@ SECTION_PROMPTS = {
     "proposed_structure": (
         "Generate the Proposed Credit Facility Structure section. Include:\n"
         "1. Facility details: Type and Amount EXACTLY as given under PROPOSED FACILITY in the context "
-        "(never change, round or rescale the amount), Tenor, Purpose, Disbursement mode.\n"
+        "(never change, round or rescale the amount), Tenor, Purpose, Disbursement mode. The purpose / end-use "
+        "is NOT in the data: write '[End-use to be specified by RM]' — never invent one.\n"
         "2. Cover view. If the facility is Working Capital, Cash Credit or Overdraft: a Drawing Power markdown "
         "table (Tandon Committee Method II: current assets, less current liabilities excl. bank borrowings, "
         "working capital gap, 75% bank finance, DP), flagging '[Requires stock statement]' where data is missing. "
@@ -173,6 +178,8 @@ SECTION_PROMPTS = {
         "and the pro forma DSCR from the CMA table.\n"
         "3. Security structure:\n"
         "   - Primary: for WC — hypothecation of current assets (stock, book debts); for term loans — charge on the assets financed\n"
+        "   - If FACR on all debt is below 1.25x, state that existing charge-holders on fixed assets must be "
+        "ascertained (ROC charge search) and the charge structure (exclusive / pari passu with NOC) confirmed.\n"
         "   - Collateral: [as applicable]\n"
         "   - Guarantee: Corporate/personal guarantee if applicable\n"
         "4. Pricing: Interest rate (Base Rate / MCLR + spread), processing fee, review frequency.\n"
@@ -461,8 +468,15 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
         sep = "-" * (28 + col_w * len(years))
         table_rows = ["\nFINANCIALS (₹ Crore):", sep, header, sep]
 
+        def _cell(v):
+            # Amounts >= ₹100 Cr as whole crores with Indian grouping (the model
+            # copies the table's format into prose: "₹8,969.00 Cr"); ratios keep 2 dp.
+            if isinstance(v, (int, float)) and abs(v) >= 100:
+                return _inr(v)
+            return _fmt(v)
+
         def row(label, arr):
-            return label.ljust(28) + "".join(_fmt(arr[i] if i < len(arr) else None).rjust(col_w) for i in range(len(years)))
+            return label.ljust(28) + "".join(_cell(arr[i] if i < len(arr) else None).rjust(col_w) for i in range(len(years)))
 
         table_rows.append(row("Revenue from Operations", rev))
         table_rows.append(row("EBITDA", ebitda))
@@ -628,7 +642,7 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
             p_facr = [round(p_nfa[i] / p_borr[i], 2) if p_borr[i] > 0 else None for i in range(2)]
 
             def prow(label, arr):
-                return label.ljust(28) + "".join(_fmt(v).rjust(14) for v in arr)
+                return label.ljust(28) + "".join(_cell(v).rjust(14) for v in arr)
 
             proj_lines.append(prow("Revenue from Operations", p_rev))
             proj_lines.append(prow("EBITDA", p_ebitda))
@@ -695,7 +709,7 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
         cfo_vals = cf.get("operating", [])
         if cfo_years and cfo_vals:
             lines.append("Operating Cash Flow (₹ Cr): " +
-                         ", ".join(f"{y}: {_fmt(v)}" for y, v in zip(cfo_years, cfo_vals)))
+                         ", ".join(f"{y}: {_cell(v)}" for y, v in zip(cfo_years, cfo_vals)))
 
     else:
         # Single-year fallback
@@ -745,7 +759,10 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
 
     # One covenant set for every section — the recommendation used to invent its
     # own (D/E <= 0.50x) while the covenant table said <= 2.00x.
-    cov = "; ".join(f"{label} {op} {thr:.2f}{unit}" for _k, label, op, thr, unit in COVENANTS)
+    cov = "; ".join(
+        f"{label} {op} {thr:.2f}{unit}" + ("" if ratios.get(k) is not None else
+                                           " (not computable from available data — to be set after review)")
+        for k, label, op, thr, unit in COVENANTS)
     lines.append(f"\nSTANDARD FINANCIAL COVENANTS (quote exactly these thresholds wherever covenants are mentioned): {cov}")
 
     # Shareholding
@@ -836,6 +853,7 @@ TASK: For borrower "{company_name}", write the **{section_key.replace('_', ' ').
 {instruction}
 
 Use ONLY the data provided. Do NOT fabricate any figures, ratings, customers or events.
+Statements in the WEB RESEARCH BRIEF tagged '(from LLM knowledge — verify)' are UNVERIFIED recall: never use them for assurances (no defaults, no restructuring, no litigation, no governance issues, no pledge) or for ratings; any other fact from them must carry '(to be verified)'.
 Amounts: Indian digit grouping, whole crores for amounts of ₹100 Cr or more, two decimals below that.
 Write in formal banker prose. 2-4 paragraphs unless the instruction says otherwise.
 Output ONLY the section content — no headings, no preamble."""
@@ -868,6 +886,7 @@ Generate ALL sections below. Each section must start with its delimiter exactly 
 
 RULES:
 - Use ONLY the data provided above. Do NOT fabricate any figures, ratings, customers or events.
+- Statements in the WEB RESEARCH BRIEF tagged '(from LLM knowledge — verify)' are UNVERIFIED recall: never use them for assurances (no defaults, no restructuring, no litigation, no governance issues, no pledge) or for ratings; any other fact from them must carry '(to be verified)'.
 - Amounts: Indian digit grouping, whole crores for amounts of ₹100 Cr or more (₹8,969 Cr, ₹1,63,062 Cr),
   two decimals below that (₹50.00 Cr). Ratios to two decimals with an x (1.39x).
 - Each section: 2-4 paragraphs of formal banker prose.
@@ -925,7 +944,11 @@ def _resolve_confidence(section_key: str, financials: Dict) -> tuple:
     return (confidence, reason)
 
 
-def _reported_alternates(financials: Dict, ratios: Dict) -> Dict[str, list]:
+_CONTEXT_ROWS = {"DSCR (pro forma": "dscr", "Interest Coverage": "interest_coverage",
+                 "Debt / Equity": "debt_equity", "EBITDA Margin": "ebitda_margin"}
+
+
+def _reported_alternates(financials: Dict, ratios: Dict, context_text: str = "") -> Dict[str, list]:
     """Values a memo may legitimately cite for a ratio besides the latest
     computed one: earlier years' figures and Screener's own (often multi-year)
     numbers. Without these the audit flagged D/E 0.56 — FY2024's correct value."""
@@ -952,6 +975,14 @@ def _reported_alternates(financials: Dict, ratios: Dict) -> Dict[str, list]:
         m = re.search(r"return on equity of ([\d.]+)", str(kp), re.I)
         if m:
             alt["roe"].append(float(m.group(1)))
+    # Every figure the CMA / projection / stress rows gave the model (e.g. the
+    # projected DSCR 1.76x was flagged against the latest-year 1.39x).
+    for line in (context_text or "").splitlines():
+        for prefix, key in _CONTEXT_ROWS.items():
+            if line.startswith(prefix):
+                alt[key] += [float(x) for x in re.findall(r"(?<![\w.])\d+\.\d+", line[28:])]
+        if line.startswith("STRESS TEST"):
+            alt["dscr"] += [float(x) for x in re.findall(r"(\d+\.\d+)x", line)]
     return alt
 
 
@@ -1164,7 +1195,7 @@ def generate_cam_sections(
         combined = "\n".join(
             s.get("content", "") for s in sections.values() if isinstance(s, dict)
         )
-        mismatches = audit_memo_figures(combined, ratios, _reported_alternates(financials, ratios))
+        mismatches = audit_memo_figures(combined, ratios, _reported_alternates(financials, ratios, context_text))
         if mismatches and "key_issues" in sections:
             lines = ["", "", "**Figure Verification (automated):**", ""]
             for m in mismatches:

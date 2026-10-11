@@ -59,15 +59,19 @@ def generate_risk_flags(ratios: Dict[str, float], financials: Dict[str, Any]) ->
     """
     flags: List[Dict[str, Any]] = []
     seen_titles: set = set()
+    # Rules are ordered most-severe first per ratio; one flag per ratio, or 180
+    # debtor days raised both "High" and "Elevated" Debtor Days.
+    seen_keys: set = set()
 
     for (ratio_key, operator, threshold, severity, title, desc_template) in RATIO_RISK_RULES:
         val = ratios.get(ratio_key)
         if val is None:
             continue
         if _check(val, operator, threshold):
-            if title in seen_titles:
+            if title in seen_titles or ratio_key in seen_keys:
                 continue
             seen_titles.add(title)
+            seen_keys.add(ratio_key)
             flags.append({
                 "severity":    severity,
                 "title":       title,
@@ -76,8 +80,24 @@ def generate_risk_flags(ratios: Dict[str, float], financials: Dict[str, Any]) ->
                 "value":       round(val, 3),
             })
 
-    # Check YoY revenue decline (multi-year data)
     pl = financials.get("profit_loss", {})
+
+    # YoY PAT decline — the biggest credit signal in a falling-profit year was
+    # never flagged (Bharat Forge FY26: PAT -38%).
+    pat = pl.get("pat", [])
+    if isinstance(pat, list) and len(pat) >= 2 and isinstance(pat[-2], (int, float)) \
+            and isinstance(pat[-1], (int, float)) and pat[-2] > 0:
+        chg = (pat[-1] - pat[-2]) / pat[-2] * 100
+        if chg < -10:
+            flags.append({
+                "severity":    "high" if chg < -25 else "medium",
+                "title":       "Profit Decline",
+                "description": f"PAT fell {abs(chg):.1f}% YoY — establish whether the drop is exceptional or recurring.",
+                "ratio_key":   "pat_growth",
+                "value":       round(chg, 1),
+            })
+
+    # Check YoY revenue decline (multi-year data)
     revenue = pl.get("revenue", [])
     if isinstance(revenue, list) and len(revenue) >= 2:
         latest = revenue[-1]

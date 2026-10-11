@@ -73,3 +73,31 @@ def test_figure_audit_accepts_earlier_years():
     text = "Debt/Equity improved from 0.56x to 0.37x."
     assert audit_memo_figures(text, r) and not audit_memo_figures(text, r, alt)
     assert audit_memo_figures("Debt/Equity of 1.90x", r, alt)   # genuinely wrong still flagged
+
+
+def test_audit_accepts_projected_and_stress_dscr():
+    r = calculate_ratios(FIN)
+    ctx = _build_context_text(FIN, r, "BFL", "")
+    alt = _reported_alternates(FIN, r, ctx)
+    assert not audit_memo_figures("projected DSCR of 1.76x in FY2027E", r, alt)
+
+
+def test_one_flag_per_ratio_and_pat_decline_flagged():
+    from risk_flags import generate_risk_flags
+    flags = generate_risk_flags(calculate_ratios(FIN), FIN)
+    titles = [f["title"] for f in flags]
+    assert titles.count("High Debtor Days") == 1 and "Elevated Debtor Days" not in titles
+    assert any(f["title"] == "Profit Decline" and f["severity"] == "high" for f in flags)
+
+
+def test_aggregate_exposure_is_not_a_facility_amount():
+    from validators import audit_facility_amounts
+    txt = ("existing borrowings of ₹4,060 Cr plus the proposed Term Loan facility of ₹250.00 Cr, "
+           "bringing the aggregate debt exposure to ₹4,310 Cr.")
+    assert audit_facility_amounts(txt, 250.0) == []
+
+
+def test_amounts_whole_crore_in_context():
+    ctx = _build_context_text(FIN, calculate_ratios(FIN), "BFL", "")
+    assert "8,969.00" not in ctx and "8,969" in ctx
+    assert "Current Ratio >= 1.33x (not computable" in ctx
