@@ -28,7 +28,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Optional
 
 from credit_score import compute_scorecard, format_scorecard_md
-from cam_tables import _inr
+from cam_tables import _inr, COVENANTS
+from finance_utils import (dscr as _dscr, proposed_term_principal,
+                           EXISTING_DEBT_AMORT_YEARS, TL_TENOR_YEARS as _TL_TENOR_YEARS)
 from ews_checklist import format_ews_checklist_md
 from validators import (audit_memo_figures, audit_recommendation_consistency,
                         audit_facility_amounts, strip_rupee_restatements)
@@ -90,9 +92,12 @@ SECTION_PROMPTS = {
         "and tailwinds/headwinds for the borrower's specific industry segment."
     ),
     "key_issues": (
-        "Identify 4-6 key credit issues and risks specific to this borrower: "
-        "financial risks (leverage, coverage), operational risks, industry risks, "
-        "management/governance risks, and any specific red flags from the data. "
+        "Identify 4-6 key credit issues and risks specific to this borrower, from a LENDER's "
+        "perspective: financial risks (profit decline, DSCR headroom, leverage, coverage), "
+        "working-capital, operational, industry and management/governance risks, and red flags. "
+        "Any material YoY decline in revenue or PAT and any thin DSCR headroom in the data MUST appear. "
+        "Do NOT list equity-market risks (share price, P/E, price-to-book, valuation) — they do "
+        "not affect debt repayment. "
         "Output ONLY a markdown table with this exact header row and no other text "
         "before or after it:\n"
         "| Key Risk | Mitigant |\n"
@@ -105,7 +110,9 @@ SECTION_PROMPTS = {
     "recommendation": (
         "Write a credit recommendation: state whether to recommend approval/decline/further review, "
         "suggested loan amount (if applicable), key conditions precedent, "
-        "financial covenants to impose, and monitoring requirements. "
+        "financial covenants to impose (use EXACTLY the STANDARD FINANCIAL COVENANTS from the context), "
+        "and monitoring requirements. If the DSCR headroom is thin or profits are falling, say so and make "
+        "approval conditional on the specific items to be verified. "
         "Base the recommendation strictly on the financial and qualitative data provided."
     ),
     "financial_analysis": (
@@ -114,20 +121,23 @@ SECTION_PROMPTS = {
         "EBITDA margin expansion/contraction, PAT trajectory. Flag any anomalous jumps and request audit confirmation.\n"
         "2. Leverage & coverage: cite Debt/Equity, Debt/EBITDA, and Interest Coverage ratio for each year from the CMA table. "
         "State whether coverage meets the bank benchmark (ICR > 1.5x minimum, > 3.0x comfortable).\n"
-        "3. DSCR analysis: cite the computed DSCR values for actuals and projections from the CMA table. "
-        "State clearly whether DSCR exceeds the minimum threshold of 1.25x for term loan eligibility. "
-        "Explain the components (PAT + Dep + Interest) / (Principal + Interest).\n"
+        "3. DSCR analysis: cite the 'DSCR (pro forma)' values for actuals and projections from the CMA table — "
+        "this is the ONLY DSCR in the memo. State its basis in one sentence (existing borrowings assumed to "
+        "amortise over 5 years plus the proposed term loan principal; an estimate pending the repayment "
+        "schedule) and whether it clears 1.25x and by how much headroom.\n"
         "4. TOL/TNW and FACR: cite values from the CMA table. "
         "TOL/TNW benchmark is <3.0x; FACR benchmark is >1.25x. Comment on adequacy.\n"
-        "5. Stress scenario: briefly describe what happens to DSCR if revenue falls 15% or EBITDA margin compresses 5 pp.\n"
+        "5. Stress scenario: cite the STRESS TEST line's DSCR figures exactly and say whether each clears 1.25x.\n"
+        "Explain any sharp PAT movement using the Other Income line if present (e.g. an exceptional loss).\n"
         "Use exact figures from the FINANCIALS table and CMA PROJECTED FINANCIALS table in the context. "
         "Reference specific numbers — do not use vague language like 'strong' without citing the figure."
     ),
     "working_capital": (
-        "Analyse the working capital position: describe the operating cycle length, "
-        "key components (inventory days, debtor days, creditor days), adequacy of working capital limits, "
-        "drawing power assessment based on current assets, and any concerns around WC utilisation patterns. "
-        "Use only data available; flag areas requiring stock statement verification."
+        "Analyse the working capital position: inventory, debtor and creditor days and the cash conversion "
+        "cycle exactly as given in the context (never compute a different cycle figure), what drives them, "
+        "and concerns around receivables or WC utilisation. Existing WC limits and their utilisation are NOT "
+        "in the data — say they are to be obtained; never call them adequate or sufficient. "
+        "Flag areas requiring stock statement verification."
     ),
     "executive_summary": (
         "Write a concise executive summary (maximum 1 page) covering: borrower name and proposed facility, "
@@ -141,9 +151,14 @@ SECTION_PROMPTS = {
         "1. A markdown table of the borrower's existing credit facilities with ALL banks, with columns: "
         "Bank Name | Facility Type | Sanctioned Limit (₹ Cr) | Outstanding (₹ Cr) | Security | Remarks. "
         "If specific details are not available in the data, use '[To be obtained]' as placeholder — DO NOT fabricate figures.\n"
-        "2. Account conduct summary: any instances of irregularity, bounced instruments, overutilisation.\n"
-        "3. CIBIL/CMR score and status (use '[To be verified]' if not available).\n"
-        "4. Total banking system exposure (sum across all lenders).\n"
+        "   The balance sheet gives only TOTAL borrowings (term + working capital, all lenders): show it as one "
+        "row 'Existing borrowings — all lenders (per balance sheet)', facility type '[Break-up to be obtained]'.\n"
+        "2. Account conduct: the data contains NO account-conduct information. Write that conduct, irregularities, "
+        "devolvements and bounced instruments are '[To be verified from bank statements and lender references]'. "
+        "Never assert that conduct was satisfactory or that there were no defaults.\n"
+        "3. CIBIL/CMR score and status: '[To be verified]'. External ratings: cite only the CREDIT RATING ACTIONS "
+        "line (agency and date); never state or guess a rating grade.\n"
+        "4. Total banking system exposure (existing borrowings plus the proposed facility).\n"
         "5. One paragraph on the proposed bank's relationship with the borrower if any.\n"
         "Use a professional formal tone. Flag clearly what information is pending."
     ),
@@ -151,22 +166,11 @@ SECTION_PROMPTS = {
         "Generate the Proposed Credit Facility Structure section. Include:\n"
         "1. Facility details: Type and Amount EXACTLY as given under PROPOSED FACILITY in the context "
         "(never change, round or rescale the amount), Tenor, Purpose, Disbursement mode.\n"
-        "2. ONLY if the facility is Working Capital, Cash Credit or Overdraft — Drawing Power (DP) "
-        "Calculation using Indian banking norms (Tandon Committee Method II). For a Term Loan, LC or BG, "
-        "skip the DP table and instead give a repayment / cash-flow cover view (DSCR) for the term facility:\n"
-        "   Present a markdown table:\n"
-        "   | Item | Amount (₹ Cr) |\n"
-        "   | Inventory (at cost) | [value or 'As per stock statement'] |\n"
-        "   | Trade Receivables (< 90 days) | [value or 'As per debtor ageing'] |\n"
-        "   | Other Current Assets | [value] |\n"
-        "   | **Total Current Assets (A)** | [total] |\n"
-        "   | Less: Trade Creditors | [value] |\n"
-        "   | Less: Other Current Liabilities | [value] |\n"
-        "   | **Total Current Liabilities excl. Bank Borrowings (B)** | [total] |\n"
-        "   | **Working Capital Gap (A-B)** | [gap] |\n"
-        "   | Bank Financing (75% of WCG — Method II) | [75% of gap] |\n"
-        "   | **Drawing Power (min of Bank Financing & Limit)** | [DP] |\n"
-        "   Use actual balance sheet figures where available. Flag '[Requires stock statement]' where live data is needed.\n"
+        "2. Cover view. If the facility is Working Capital, Cash Credit or Overdraft: a Drawing Power markdown "
+        "table (Tandon Committee Method II: current assets, less current liabilities excl. bank borrowings, "
+        "working capital gap, 75% bank finance, DP), flagging '[Requires stock statement]' where data is missing. "
+        "If it is a Term Loan, LC or BG: NO drawing power table at all — instead state the repayment schedule "
+        "and the pro forma DSCR from the CMA table.\n"
         "3. Security structure:\n"
         "   - Primary: for WC — hypothecation of current assets (stock, book debts); for term loans — charge on the assets financed\n"
         "   - Collateral: [as applicable]\n"
@@ -484,6 +488,11 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
         table_rows.append(row("PAT Margin %", pat_margins))
         table_rows.append(row("Finance Costs", interest))
         table_rows.append(row("Depreciation", dep))
+        # Other income moves PAT without touching EBITDA (Bharat Forge FY26:
+        # -₹405 Cr), so the model needs it to explain a PAT drop.
+        other_inc = _to_list(pl.get("other_income", []))
+        if any(isinstance(v, (int, float)) and v for v in other_inc):
+            table_rows.append(row("Other Income (incl. exceptional)", other_inc))
         table_rows.append(sep)
         table_rows.append(row("Total Assets", total_assets))
         table_rows.append(row("Total Borrowings", borrowings))
@@ -527,24 +536,24 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
         # hard-coded to a ₹500 Cr term loan at ₹100 Cr/yr, so every memo's DSCR,
         # FACR and projections — and the narrative — used ₹100 Cr repayments
         # regardless of the actual loan (a ₹1 Cr TL showed "₹100 Cr" repayments).
-        _fac = financials.get("facility") or {}
-        _fac_cr = (float(_fac.get("amount_inr") or 0) / 1e7)
-        _is_term = _fac.get("type") in ("term_loan", None, "")
-        proposed_tl = _fac_cr if _is_term else 0.0          # WC/LC/BG: no scheduled principal
-        TL_TENOR_YEARS = 5                                   # indicative; adjust per deal
-        proposed_principal_repayment = round(proposed_tl / TL_TENOR_YEARS, 2) if proposed_tl else 0.0
+        # One DSCR basis for the whole CAM (finance_utils.dscr): debt service =
+        # interest + existing borrowings amortised over 5 years (est.; no repayment
+        # schedule available) + the proposed term loan's principal. The narrative
+        # previously counted only the new loan (6-7x) while the covenant table
+        # counted only existing debt (1.0x), and the memo printed both.
+        proposed_tl, proposed_principal_repayment = proposed_term_principal(financials)
+        TL_TENOR_YEARS = _TL_TENOR_YEARS
         dscr_series = []
         for i in range(len(years)):
             p = pat_approx[i]
             d = dep[i] if i < len(dep) else None
             fi = interest[i] if i < len(interest) else None
+            b = borrowings[i] if i < len(borrowings) else None
             if p is not None and d is not None and fi is not None:
-                tds = proposed_principal_repayment + fi
-                dscr_val = round((p + d + fi) / tds, 2) if tds > 0 else None
-                dscr_series.append(dscr_val)
+                dscr_series.append(_dscr(p, d, fi, b, proposed_principal_repayment))
             else:
                 dscr_series.append(None)
-        table_rows.append(row("DSCR (proposed TL, est.)", dscr_series))
+        table_rows.append(row("DSCR (pro forma, est.)", dscr_series))
 
         # TOL/TNW = (Total Liabilities – Total Equity) / Total Equity
         tol_tnw_series = []
@@ -558,18 +567,17 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
                 tol_tnw_series.append(None)
         table_rows.append(row("TOL / TNW (x)", tol_tnw_series))
 
-        # FACR = Net Fixed Assets / Term Loan Outstanding (at end of each year)
+        # FACR = Net Fixed Assets / (existing borrowings + proposed TL). Dividing by
+        # the new loan alone gave 20x while ₹4,000+ Cr of existing debt sat on the
+        # same assets. Borrowings include WC (secured on current assets), so this
+        # is conservative until the term/WC break-up is obtained.
         fixed_assets_list = _to_list(bs.get("fixed_assets", []))
         facr_series = []
-        outstanding_tl = proposed_tl  # proposed at inception
         for i in range(len(years)):
             nfa = fixed_assets_list[i] if i < len(fixed_assets_list) else None
-            if nfa is not None and outstanding_tl > 0:
-                facr_series.append(round(nfa / outstanding_tl, 2))
-            else:
-                facr_series.append(None)
-            outstanding_tl = max(0.0, outstanding_tl - proposed_principal_repayment)
-        table_rows.append(row("FACR (NFA / TL Outst.)", facr_series))
+            debt_i = (borrowings[i] if i < len(borrowings) and borrowings[i] else 0) + proposed_tl
+            facr_series.append(round(nfa / debt_i, 2) if nfa is not None and debt_i > 0 else None)
+        table_rows.append(row("FACR (NFA / all debt, pro forma)", facr_series))
 
         table_rows.append(sep)
         lines.extend(table_rows)
@@ -591,9 +599,10 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
 
             proj_lines = ["\nCMA FORMAT — PROJECTED FINANCIALS (Conservative, indicative only):"]
             proj_sep = "-" * (28 + 14 * 2)
-            last_yr_str = years[-1] if years else "FY2025"
-            proj_years = [f"P1 ({last_yr_str[:2]}{int(last_yr_str[-2:])+1}E)",
-                          f"P2 ({last_yr_str[:2]}{int(last_yr_str[-2:])+2}E)"]
+            # "Mar 2026" -> FY2027E / FY2028E (was sliced into "Ma27E").
+            _m = re.search(r"(\d{4})", str(years[-1] if years else ""))
+            _base = int(_m.group(1)) if _m else 2025
+            proj_years = [f"P1 (FY{_base + 1}E)", f"P2 (FY{_base + 2}E)"]
             proj_header = "Metric".ljust(28) + "".join(y.rjust(14) for y in proj_years)
             proj_lines.append(proj_sep)
             proj_lines.append(proj_header)
@@ -613,11 +622,10 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
             p_nfa = [round(last_nfa * 1.05, 1), round(last_nfa * 1.08, 1)]
             p_de = [round(p_borr[i] / p_equity[i], 3) for i in range(2)]
             p_icr = [round(p_ebitda[i] / p_int[i], 2) if p_int[i] > 0 else None for i in range(2)]
-            p_tds = [proposed_principal_repayment + p_int[i] for i in range(2)]
-            p_dscr = [round((p_pat[i] + p_dep[i] + p_int[i]) / p_tds[i], 2) if p_tds[i] > 0 else None for i in range(2)]
+            p_dscr = [_dscr(p_pat[i], p_dep[i], p_int[i], last_borr, proposed_principal_repayment)
+                      for i in range(2)]
             p_tol = [round((p_assets[i] - p_equity[i]) / p_equity[i], 2) for i in range(2)]
-            p_facr_outstd = [proposed_tl - proposed_principal_repayment * (i + 1) for i in range(2)]
-            p_facr = [round(p_nfa[i] / p_facr_outstd[i], 2) if p_facr_outstd[i] > 0 else None for i in range(2)]
+            p_facr = [round(p_nfa[i] / p_borr[i], 2) if p_borr[i] > 0 else None for i in range(2)]
 
             def prow(label, arr):
                 return label.ljust(28) + "".join(_fmt(v).rjust(14) for v in arr)
@@ -636,16 +644,24 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
             proj_lines.append(proj_sep)
             proj_lines.append(prow("Debt / Equity (x)", p_de))
             proj_lines.append(prow("Interest Coverage (x)", p_icr))
-            proj_lines.append(prow("DSCR (proposed TL)", p_dscr))
+            proj_lines.append(prow("DSCR (pro forma)", p_dscr))
             proj_lines.append(prow("TOL / TNW (x)", p_tol))
-            proj_lines.append(prow("FACR (NFA / TL Outst.)", p_facr))
+            proj_lines.append(prow("FACR (NFA / all debt)", p_facr))
             proj_lines.append(proj_sep)
-            proj_lines.append(f"Note: Projections assume {round(proj_g*100,1)}% revenue growth (50% of {round(hist_rev_cagr*100,1)}% historical CAGR).")
+            proj_lines.append(f"Note: Projections assume {round(proj_g*100,1)}% revenue growth (50% of {round(hist_rev_cagr*100,1)}% historical CAGR)")
+            proj_lines.append("      and exclude other income / exceptional items, so projected PAT is not comparable "
+                              "with a year that had a large exceptional item.")
+            proj_lines.append("      FACR basis: net fixed assets / (all borrowings + proposed TL) — conservative, since "
+                              "borrowings include WC limits secured on current assets; obtain the term-debt break-up.")
             if proposed_tl:
                 proj_lines.append(f"      Proposed term loan ₹{proposed_tl:,.2f} Cr repaid over {TL_TENOR_YEARS} years "
                                   f"(₹{proposed_principal_repayment:,.2f} Cr/yr principal, indicative).")
             else:
                 proj_lines.append("      Proposed facility is a non-amortising limit — no scheduled principal in DSCR.")
+            proj_lines.append(f"      DSCR basis (all years): (PAT + Dep + Interest) / (Interest + existing borrowings "
+                              f"amortised over {EXISTING_DEBT_AMORT_YEARS} years + proposed TL principal). Existing-debt "
+                              f"amortisation is an ESTIMATE — no repayment schedule is on file; WC limits that roll "
+                              f"over would raise DSCR. Obtain the term-debt repayment schedule.")
             proj_lines.append("      DSCR benchmark: >1.25x. FACR benchmark: >1.25x. TOL/TNW benchmark: <3.0x.")
             lines.extend(proj_lines)
 
@@ -658,6 +674,21 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
             if pat_approx and pat_approx[0] and pat_approx[-1] and pat_approx[0] > 0 and pat_approx[-1] > 0:
                 cagr = round(((pat_approx[-1] / pat_approx[0]) ** (1 / n) - 1) * 100, 1)
                 lines.append(f"PAT CAGR ({n}yr): {cagr}%")
+
+        # Deterministic stress test on the latest year (pro forma DSCR basis), so
+        # the narrative cites numbers instead of asserting "remains safely above".
+        if rev and ebitda and pat_approx and rev[-1] and ebitda[-1] and pat_approx[-1] is not None:
+            _r, _e, _p = rev[-1], ebitda[-1], pat_approx[-1]
+            _d = dep[-1] if dep else 0
+            _i = interest[-1] if interest else 0
+            _b = borrowings[-1] if borrowings else 0
+            def _stressed(ebitda_drop):
+                return _dscr(_p - ebitda_drop * 0.75, _d, _i, _b, proposed_principal_repayment)
+            s1 = _stressed(_e * 0.15)                 # revenue -15% at constant margin
+            s2 = _stressed(_r * 0.05)                 # EBITDA margin -5 pp
+            lines.append(f"STRESS TEST ({years[-1]}, pro forma DSCR basis, tax 25%): base DSCR "
+                         f"{_fmt(dscr_series[-1])}x; revenue -15% -> DSCR {_fmt(s1)}x; "
+                         f"EBITDA margin -5 pp -> DSCR {_fmt(s2)}x (benchmark 1.25x).")
 
         # Cash flow summary
         cfo_years = cf.get("years", [])
@@ -685,15 +716,23 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
     if screener_ratios:
         lines.append("\nKEY RATIOS (Screener):")
         for k, v in screener_ratios.items():
-            if v is not None and not isinstance(v, list):
+            # Screener's working_capital_days is NWC as days of sales — a different
+            # basis from inventory + debtor - creditor days, and the model "summed"
+            # 177 + 180 - 158 into 53. The cash conversion cycle is given below.
+            if v is not None and not isinstance(v, list) and k != "working_capital_days":
                 lines.append(f"  {k}: {v}")
+        inv_d, deb_d, cre_d = (screener_ratios.get("inventory_days"), screener_ratios.get("debtor_days"),
+                               screener_ratios.get("payable_days"))
+        if all(isinstance(x, (int, float)) for x in (inv_d, deb_d, cre_d)):
+            lines.append(f"  cash_conversion_cycle_days (inventory {inv_d} + debtor {deb_d} - creditor {cre_d}): "
+                         f"{round(inv_d + deb_d - cre_d)}")
 
     # Computed ratios
     key_ratios = {
         "Debt/Equity": ratios.get("debt_equity"),
         "Current Ratio": ratios.get("current_ratio"),
-        "Interest Coverage (x)": ratios.get("interest_coverage"),
-        "DSCR": ratios.get("dscr"),
+        "Interest Coverage (EBITDA / interest, x)": ratios.get("interest_coverage"),
+        "DSCR (pro forma, latest year, est.)": ratios.get("dscr"),
         "EBITDA Margin %": ratios.get("ebitda_margin"),
         "ROCE %": ratios.get("roce"),
         "Debtor Days": screener_ratios.get("debtor_days") or ratios.get("debtor_days"),
@@ -704,12 +743,18 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
     if kr_lines:
         lines.append("\nCOMPUTED RATIOS:\n" + "\n".join(kr_lines))
 
+    # One covenant set for every section — the recommendation used to invent its
+    # own (D/E <= 0.50x) while the covenant table said <= 2.00x.
+    cov = "; ".join(f"{label} {op} {thr:.2f}{unit}" for _k, label, op, thr, unit in COVENANTS)
+    lines.append(f"\nSTANDARD FINANCIAL COVENANTS (quote exactly these thresholds wherever covenants are mentioned): {cov}")
+
     # Shareholding
     sh = financials.get("shareholding", {})
     prom = sh.get("promoter_holding_pct") or financials.get("company_info", {}).get("promoter_holding")
     if prom:
         lines.append(f"\nPROMOTER HOLDING: {prom}%")
-        trend = sh.get("promoter_trend", [])
+        trend = sorted((t for t in sh.get("promoter_trend", []) if isinstance(t, dict) and t.get("period")),
+                       key=lambda t: _period_key(t["period"]))
         if trend:
             lines.append("Promoter trend: " + ", ".join(f"{t['period']}: {t['pct']}%" for t in trend[-4:]))
 
@@ -721,17 +766,25 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
         rows += [(p.get("name", "?"), p.get("screenerData") or {}) for p in peers[:5]]
         for name, m in rows:
             if m:
+                # Pre-formatted exactly as the peer table prints them, so the
+                # commentary can't mangle digit grouping ("₹1,63062.08 Cr").
                 lines.append(
-                    f"- {name}: MCap {m.get('market_cap_cr')}, P/E {m.get('pe')}, ROCE {m.get('roce_pct')}%, "
-                    f"qtr sales {m.get('sales_qtr_cr')} (YoY {m.get('sales_qtr_var_pct')}%), qtr PAT {m.get('np_qtr_cr')}"
+                    f"- {name}: MCap ₹{_inr(m.get('market_cap_cr'))} Cr, P/E {_fmt(m.get('pe'), 1)}, "
+                    f"ROCE {_fmt(m.get('roce_pct'), 1)}%, qtr sales ₹{_inr(m.get('sales_qtr_cr'))} Cr "
+                    f"(YoY {_fmt(m.get('sales_qtr_var_pct'), 1)}%), qtr PAT ₹{_inr(m.get('np_qtr_cr'))} Cr"
                 )
             else:
                 lines.append(f"- {name}: no figures available")
 
     # Credit ratings
     ratings = financials.get("company_info", {}).get("credit_ratings", [])
-    if ratings:
-        lines.append("\nCREDIT RATINGS: " + " | ".join(str(r) for r in ratings[:3]))
+    actions = _rating_actions(ratings)
+    if actions:
+        lines.append("\nCREDIT RATING ACTIONS (Screener; the rating GRADE is not captured — never state or "
+                     "guess a grade, write '[Rating grade to be confirmed from the rating rationale]'): "
+                     + "; ".join(actions))
+    else:
+        lines.append("\nCREDIT RATINGS: not available in the data — write '[To be verified]'.")
 
     if research_brief:
         lines.append(f"\nWEB RESEARCH BRIEF:\n{research_brief[:4000]}")
@@ -740,6 +793,28 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
     if max_chars and len(text) > max_chars:
         text = text[:max_chars] + "\n[Context truncated for local model]"
     return text
+
+
+_MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun",
+                                         "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
+
+
+def _period_key(period: str) -> tuple:
+    """'Sep 2025' -> (2025, 9) for chronological sorting; unknown sorts first."""
+    m = re.match(r"(\w{3})\w*\s+(\d{4})", str(period))
+    return (int(m.group(2)), _MONTHS.get(m.group(1).lower(), 0)) if m else (0, 0)
+
+
+def _rating_actions(raw: list) -> list:
+    """'Rating update | 22 Sep from icra | ...' scrape noise -> ['ICRA: 22 Sep', ...]."""
+    seen, out = set(), []
+    for chunk in raw or []:
+        for date, agency in re.findall(r"(\d{1,2} \w{3}(?: \d{4})?) from (\w+)", str(chunk)):
+            key = (date, agency.lower())
+            if key not in seen:
+                seen.add(key)
+                out.append(f"{agency.upper()}: rating update {date}")
+    return out[:6]
 
 
 # ── Per-section generation ────────────────────────────────────────────────────
@@ -760,6 +835,8 @@ TASK: For borrower "{company_name}", write the **{section_key.replace('_', ' ').
 
 {instruction}
 
+Use ONLY the data provided. Do NOT fabricate any figures, ratings, customers or events.
+Amounts: Indian digit grouping, whole crores for amounts of ₹100 Cr or more, two decimals below that.
 Write in formal banker prose. 2-4 paragraphs unless the instruction says otherwise.
 Output ONLY the section content — no headings, no preamble."""
     return _llm(prompt)
@@ -790,7 +867,9 @@ Generate ALL sections below. Each section must start with its delimiter exactly 
 {section_list}
 
 RULES:
-- Use ONLY the data provided above. Do NOT fabricate any figures.
+- Use ONLY the data provided above. Do NOT fabricate any figures, ratings, customers or events.
+- Amounts: Indian digit grouping, whole crores for amounts of ₹100 Cr or more (₹8,969 Cr, ₹1,63,062 Cr),
+  two decimals below that (₹50.00 Cr). Ratios to two decimals with an x (1.39x).
 - Each section: 2-4 paragraphs of formal banker prose.
 - Do NOT add extra headings inside sections.
 - Do NOT output any <think> tags.
@@ -846,7 +925,50 @@ def _resolve_confidence(section_key: str, financials: Dict) -> tuple:
     return (confidence, reason)
 
 
+def _reported_alternates(financials: Dict, ratios: Dict) -> Dict[str, list]:
+    """Values a memo may legitimately cite for a ratio besides the latest
+    computed one: earlier years' figures and Screener's own (often multi-year)
+    numbers. Without these the audit flagged D/E 0.56 — FY2024's correct value."""
+    pl = financials.get("profit_loss", {}) or {}
+    bs = financials.get("balance_sheet", {}) or {}
+    sr = financials.get("key_ratios_from_screener", {}) or {}
+    alt: Dict[str, list] = {k: [] for k in ("debt_equity", "interest_coverage", "roe", "roce", "dscr",
+                                           "ebitda_margin", "net_margin")}
+    def series(x):
+        return [v for v in (x if isinstance(x, list) else []) if isinstance(v, (int, float))]
+    debt, eq = series(bs.get("borrowings")), series(bs.get("total_equity"))
+    alt["debt_equity"] += [round(d / e, 2) for d, e in zip(debt, eq) if e]
+    eb, it, rv, pt = series(pl.get("ebitda")), series(pl.get("interest")), series(pl.get("revenue")), series(pl.get("pat"))
+    alt["interest_coverage"] += [round(a / b, 2) for a, b in zip(eb, it) if b]
+    alt["ebitda_margin"] += [round(a / b * 100, 2) for a, b in zip(eb, rv) if b]
+    alt["net_margin"] += [round(a / b * 100, 2) for a, b in zip(pt, rv) if b]
+    for key, src in (("roe", "roe_pct"), ("roce", "roce_pct"), ("debt_equity", "debt_equity_ratio"),
+                     ("interest_coverage", "interest_coverage")):
+        if isinstance(sr.get(src), (int, float)):
+            alt[key].append(sr[src])
+    alt["roce"] += [r.get("roce") for r in sr.get("roce_series") or [] if isinstance(r.get("roce"), (int, float))]
+    # Screener "key points", e.g. "low return on equity of 13.3% over last 3 years".
+    for kp in (financials.get("company_info", {}) or {}).get("key_points") or []:
+        m = re.search(r"return on equity of ([\d.]+)", str(kp), re.I)
+        if m:
+            alt["roe"].append(float(m.group(1)))
+    return alt
+
+
 # ── Public entry point ────────────────────────────────────────────────────────
+
+_WC_TYPES = ("working_capital", "cash_credit", "overdraft", "wc", "cc", "od")
+
+
+def _strip_dp_table(content: str) -> str:
+    """Drop any markdown table mentioning Drawing Power. A DP table only applies
+    to WC limits; the model kept emitting a blank one under a Term Loan right
+    after writing that it was not applicable."""
+    blocks = re.split(r"(\n\s*\n)", content)
+    kept = [b for b in blocks
+            if not (b.lstrip().startswith("|") and re.search(r"drawing power|working capital gap", b, re.I))]
+    return re.sub(r"\n{3,}", "\n\n", "".join(kept)).strip()
+
 
 def _with_peer_table(content: str, financials: Dict) -> str:
     """Prepend the deterministic peer table; never let the LLM supply peer figures."""
@@ -975,6 +1097,10 @@ def generate_cam_sections(
             "locked":            False,
         }
 
+    fac_type = str((financials.get("facility") or {}).get("type") or "").lower()
+    if "proposed_structure" in sections and fac_type not in _WC_TYPES:
+        sections["proposed_structure"]["content"] = _strip_dp_table(sections["proposed_structure"]["content"])
+
     if "peer_comparison" in sections:
         sections["peer_comparison"]["content"] = _with_peer_table(
             sections["peer_comparison"]["content"], financials
@@ -1038,7 +1164,7 @@ def generate_cam_sections(
         combined = "\n".join(
             s.get("content", "") for s in sections.values() if isinstance(s, dict)
         )
-        mismatches = audit_memo_figures(combined, ratios)
+        mismatches = audit_memo_figures(combined, ratios, _reported_alternates(financials, ratios))
         if mismatches and "key_issues" in sections:
             lines = ["", "", "**Figure Verification (automated):**", ""]
             for m in mismatches:

@@ -108,9 +108,10 @@ _RATIO_LABELS = {
 }
 
 
-def audit_memo_figures(memo_text: str, ratios: dict) -> list:
+def audit_memo_figures(memo_text: str, ratios: dict, alternates: dict = None) -> list:
     """Return [{ratio,label,stated,computed}] where a memo-stated ratio differs
-    materially from the computed value."""
+    materially from the computed value and from every `alternates[ratio]` value
+    (other years / source-reported figures the memo may legitimately cite)."""
     import re
     issues = []
     ratios = ratios or {}
@@ -128,8 +129,8 @@ def audit_memo_figures(memo_text: str, ratios: dict) -> list:
             if not m:
                 continue
             stated = float(m.group())
-            tol = max(abs(computed) * 0.10, 0.15)  # 10% or 0.15 absolute
-            if abs(stated - computed) > tol:
+            accepted = [computed] + [a for a in (alternates or {}).get(key, []) if a is not None]
+            if all(abs(stated - a) > max(abs(a) * 0.10, 0.15) for a in accepted):  # 10% or 0.15 abs
                 issues.append({"ratio": key, "label": label,
                                "stated": stated, "computed": round(computed, 2)})
             break  # only the first label variant per ratio

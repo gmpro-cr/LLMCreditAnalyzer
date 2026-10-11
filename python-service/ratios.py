@@ -4,7 +4,7 @@ All ratios computed from structured extracted data — no LLM involved.
 """
 from typing import Dict, Any
 
-from finance_utils import free_cash_flow
+from finance_utils import free_cash_flow, proposed_term_principal, EXISTING_DEBT_AMORT_YEARS
 
 
 def _n(val, default=0.0) -> float:
@@ -37,10 +37,23 @@ def calculate_ratios(financials: Dict[str, Any]) -> Dict[str, float]:
 
 
 def _cy(d):
-    """Extract current-year value from {current: X, previous: Y} or plain value."""
+    """Extract current-year value from {current: X, previous: Y}, a year series
+    (latest last), or a plain value."""
     if isinstance(d, dict):
         return d.get("current") or d.get("value") or 0
+    if isinstance(d, list):
+        return next((v for v in reversed(d) if isinstance(v, (int, float))), 0)
     return d or 0
+
+
+def _first(*vals):
+    """First non-zero current-year value — Screener stores some P&L lines as
+    {current, previous} summaries and others only as year series."""
+    for v in vals:
+        c = _cy(v)
+        if c:
+            return c
+    return 0
 
 
 def _normalize_for_ratios(f: Dict) -> Dict:
@@ -91,14 +104,18 @@ def _normalize_for_ratios(f: Dict) -> Dict:
         },
         "profit_loss": {
             "revenue": {"total_income": rev_cy, "revenue_from_operations": rev_cy},
+            # EBITDA arrives as a year list and depreciation under a different key
+            # than _compute reads, so both were 0: DSCR came out at 1.01x and ICR /
+            # ROCE as N/A on every Screener case (Bharat Forge, 2026-10-11).
             "profit_metrics": {
-                "ebitda": _cy(pl_raw.get("ebitda")),
-                "profit_before_tax": _cy(pl_raw.get("profit_before_tax")),
-                "profit_after_tax": _cy(pl_raw.get("profit_after_tax")),
+                "ebitda": _first(pl_raw.get("ebitda_summary"), pl_raw.get("ebitda")),
+                "profit_before_tax": _first(pl_raw.get("profit_before_tax"), pl_raw.get("pbt")),
+                "profit_after_tax": _first(pl_raw.get("profit_after_tax"), pl_raw.get("pat")),
             },
             "expenses": {
-                "finance_costs": _cy(pl_raw.get("finance_costs")),
-                "depreciation": _cy(pl_raw.get("depreciation_amortization")),
+                "finance_costs": _first(pl_raw.get("finance_costs"), pl_raw.get("interest")),
+                "depreciation_amortization": _first(pl_raw.get("depreciation_amortization"),
+                                                    pl_raw.get("depreciation")),
             },
         },
         "cash_flow": {
@@ -116,6 +133,7 @@ def _compute(f: Dict[str, Any]) -> Dict[str, float]:
     ratios: Dict[str, float] = {}
 
     # Normalize Screener format if needed
+    f_raw = f
     f = _normalize_for_ratios(f)
 
     bs = f.get("balance_sheet", {}) or {}
@@ -183,6 +201,10 @@ def _compute(f: Dict[str, Any]) -> Dict[str, float]:
     capex_for_fcf = capex if capex > 0 else net_investing   # proxy when capex line is absent
 
     capital_employed = total_assets - current_liab
+    if current_liab <= 0 and equity > 0:
+        # No current-liability split (Screener): total assets would overstate
+        # capital employed, so use net worth + borrowings instead.
+        capital_employed = equity + total_debt
 
     # ── LIQUIDITY ──
     if current_liab > 0:
@@ -216,17 +238,24 @@ def _compute(f: Dict[str, Any]) -> Dict[str, float]:
         ratios["roce"] = round(_div(ebit, capital_employed) * 100, 2)
 
     # ── COVERAGE ──
-    if interest > 0 and ebit:
-        ratios["interest_coverage"] = round(_div(ebit, interest), 2)
+    # Banking ICR is PBDIT (EBITDA) / interest — the basis the CMA table and
+    # Screener use. The EBIT basis is kept separately so the two never mix.
     if interest > 0 and ebitda:
-        ratios["interest_coverage_ebitda"] = round(_div(ebitda, interest), 2)
+        ratios["interest_coverage"] = round(_div(ebitda, interest), 2)
+        ratios["interest_coverage_ebitda"] = ratios["interest_coverage"]
+    if interest > 0 and ebit:
+        ratios["interest_coverage_ebit"] = round(_div(ebit, interest), 2)
 
-    # DSCR — prefer banking numerator (PAT + Dep + Interest); disclose basis + estimates.
+    # DSCR — banking numerator (PAT + Dep + Interest). Debt service covers the
+    # existing debt AND the proposed term loan, the same basis as the CMA table
+    # (finance_utils.dscr); previously the narrative used the new loan only and
+    # this table used existing debt only, so the CAM showed 6x and 1x side by side.
     principal = cpltd
     estimated = False
     if principal <= 0 and total_debt > 0:
-        principal = total_debt / 5.0          # fallback: assume 5-yr amortisation
+        principal = total_debt / EXISTING_DEBT_AMORT_YEARS   # no repayment schedule available
         estimated = True
+    principal += proposed_term_principal(f_raw)[1]
     debt_service = interest + principal
     numerator = (pat + depreciation + interest) if pat > 0 else ocf   # cash-accrual basis
     if debt_service > 0 and numerator:
@@ -246,6 +275,13 @@ def _compute(f: Dict[str, Any]) -> Dict[str, float]:
         ratios["debtor_days"] = round((trade_rec / revenue) * 365, 1)
     if cogs > 0 and trade_pay > 0:
         ratios["creditor_days"] = round((trade_pay / cogs) * 365, 1)
+    # Screener gives no receivable/inventory/payable balances, only the day
+    # counts — use them so the WC risk flags (e.g. 180 debtor days) still fire.
+    sr = (f_raw.get("key_ratios_from_screener") or {}) if isinstance(f_raw, dict) else {}
+    for key, src in (("inventory_days", "inventory_days"), ("debtor_days", "debtor_days"),
+                     ("creditor_days", "payable_days")):
+        if key not in ratios and isinstance(sr.get(src), (int, float)):
+            ratios[key] = float(sr[src])
     if "inventory_days" in ratios and "debtor_days" in ratios:
         ratios["operating_cycle"] = round(ratios["inventory_days"] + ratios["debtor_days"], 1)
     if "operating_cycle" in ratios and "creditor_days" in ratios:

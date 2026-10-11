@@ -11,7 +11,7 @@ COVENANTS = [
     ("tol_tnw",                 "TOL/TNW",           "<=", 3.00, "x"),
     ("debt_equity",             "Debt/Equity",       "<=", 2.00, "x"),
     ("dscr",                    "DSCR",              ">=", 1.25, "x"),
-    ("interest_coverage_ratio", "Interest Coverage", ">=", 2.00, "x"),
+    ("interest_coverage",       "Interest Coverage", ">=", 2.00, "x"),
     ("current_ratio",           "Current Ratio",     ">=", 1.33, "x"),
 ]
 
@@ -69,7 +69,7 @@ def ratio_covenant_table(ratios: dict) -> str:
         if v is None:
             continue
         within = (v <= thr) if op == "<=" else (v >= thr)
-        est = " (est.)" if key == "dscr" and ratios.get("dscr_estimated") else ""
+        est = " (pro forma, est.)" if key == "dscr" and ratios.get("dscr_estimated") else ""
         status = "✓ Within" if within else "✗ Breach"
         rows.append(f"| {label} | {v:.2f}{unit}{est} | {op} {thr:.2f}{unit} | {status} |")
     if not rows:
