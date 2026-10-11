@@ -124,3 +124,9 @@ def test_current_ratio_never_reported_as_breach():
 
 def test_annual_report_millions_become_crore_in_cam_text():
     assert cam_v2.to_crore_text("limits of ₹40,080 million; loan of ₹ 210.66 million") == "limits of ₹4,008 Cr; loan of ₹21.1 Cr"
+
+
+def test_unsupported_conduct_claims_are_scrubbed():
+    t = "reflecting strong ratings and unblemished banking conduct."
+    assert "[RM to provide: account conduct]" in cam_v2.scrub_assurances(t, False)
+    assert cam_v2.scrub_assurances(t, True) == t

@@ -85,7 +85,9 @@ def fa(v) -> str:
     n = as_number(v)
     if n is None:
         return "—"
-    return _inr(n) if abs(n) >= 100 else f"{n:,.1f}"
+    if abs(n) >= 100:
+        return _inr(n)
+    return f"{n:,.1f}" if abs(n) >= 1 or n == 0 else f"{n:,.2f}"
 
 
 def fx(v) -> str:
@@ -115,6 +117,18 @@ def to_crore_text(text: str) -> str:
         cr = v / 10 if m.group(2).lower() in ("million", "mn") else v / 100
         return f"₹{fa(cr)} Cr"
     return _MILLION.sub(sub, text or "")
+
+
+_ASSURANCES = re.compile(
+    r"\b(unblemished|impeccable|spotless|clean|satisfactory|regular|healthy|sound)\s+"
+    r"(banking|account|repayment|credit)\s+(conduct|track[- ]record|history|record)", re.I)
+
+
+def scrub_assurances(text: str, rm_has_conduct: bool) -> str:
+    """Account-conduct claims need the RM's evidence; without it, replace them."""
+    if rm_has_conduct:
+        return text
+    return _ASSURANCES.sub("account conduct [RM to provide: account conduct]", text or "")
 
 
 def table(head: List[str], rows: List[List[str]], align_right_from: int = 1) -> str:
@@ -764,6 +778,9 @@ RULES = """WRITING RULES (a bank credit committee reads this):
 - The current ratio is APPROXIMATE (Screener's classification of current items): describe it as "tight on an
   approximate classification, to be verified from the audited balance sheet" — never as a covenant breach.
 - Annual-report notes are often in ₹ million: convert to ₹ crore (divide by 10) before quoting.
+- Growth figures: YoY compares with the immediately previous year in the spread; quote that year's figure.
+- Measured language: no absolutes such as "minimal risk", "fully supported", "seamless", "unassailable";
+  state the cushion with numbers instead.
 - Never repeat these instructions or name context blocks (e.g. "SUMMARY SPREAD") in the text.
 - No headings unless the section instruction asks for them."""
 
@@ -822,7 +839,9 @@ PROMPTS: Dict[str, str] = {
     "risk_summary": "Key risks & mitigants. Output ONLY a markdown table with header | Key risk | Mitigant | and 6-8 rows. "
                     "Each risk: bold title + 1-2 sentences with figures. Each mitigant: specific, grounded in the data or "
                     "a covenant/condition — never generic.",
-    "recommendation": "Recommendation (250-380 words): the decision (approve / approve with conditions / decline) and the "
+    "recommendation": "Recommendation (250-380 words): the decision (approve / approve with conditions / decline) — "
+                      "while any pre-sanction information is still [RM to provide], the decision must read 'Approve, "
+                      "subject to the conditions below' — and the "
                       "rationale in 4-6 bullets (strengths) and 3-4 bullets (concerns and how they are addressed); then "
                       "'**Conditions precedent:**' as bullets and '**Pre-disbursement information pending:**' as bullets "
                       "drawn from the [RM to provide] items. Do not write the covenant tables (they are appended).",
@@ -988,7 +1007,8 @@ def generate(financials: Dict[str, Any], company: str, research: str = "", rm: D
     out: Dict[str, Any] = {}
     keys = [only] if only else [k for k, _t, _u in SECTIONS]
     for k in keys:
-        content = strip_rupee_restatements(composed.get(k, ""))
+        content = scrub_assurances(strip_rupee_restatements(composed.get(k, "")),
+                                   bool(_rm(ctx["rm"], "conduct", "account_conduct")))
         conf, reason = CONFIDENCE.get(k, ("medium", ""))
         uses_llm = next((u for kk, _t, u in SECTIONS if kk == k), False)
         if uses_llm and llm and not prose.get(k):
@@ -997,7 +1017,7 @@ def generate(financials: Dict[str, Any], company: str, research: str = "", rm: D
         # amounts in a sentence about the PROPOSED facility can be mis-scaled copies.
         issues = [i for i in (audit_facility_amounts(prose.get(k, ""), fac_cr) if uses_llm else [])
                   if re.search(r"propos|this facility|the facility|this loan|the loan", i.get("excerpt", ""), re.I)
-                  and not re.search(r"existing|sanctioned|limit", i.get("excerpt", ""), re.I)]
+                  and not re.search(r"existing|sanctioned|limit|total|system|aggregate|consolidated", i.get("excerpt", ""), re.I)]
         if issues:
             content += ("\n\n**Automated check:** this section cites "
                         + ", ".join(f"₹{i['stated_cr']:,.2f} Cr" for i in issues)

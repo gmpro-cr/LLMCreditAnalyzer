@@ -797,6 +797,9 @@ async def export_pdf_endpoint(data: ExportPdfRequest):
             textColor=colors.black, alignment=TA_LEFT)
         s_tbl_cell_r = ParagraphStyle('TblCellR', fontSize=8, leading=11,
             textColor=colors.black, alignment=TA_RIGHT)
+        s_tbl_hdr_sm = ParagraphStyle('TblHdrSm', parent=s_tbl_hdr, fontSize=6.6, leading=8.5)
+        s_tbl_cell_sm = ParagraphStyle('TblCellSm', parent=s_tbl_cell, fontSize=6.6, leading=8.5)
+        s_tbl_cell_r_sm = ParagraphStyle('TblCellRSm', parent=s_tbl_cell_r, fontSize=6.6, leading=8.5)
         s_footer = ParagraphStyle('Footer', fontSize=7.5, textColor=colors.grey,
             spaceBefore=16, alignment=TA_CENTER)
         s_disclaimer = ParagraphStyle('Disc', fontSize=7, textColor=colors.HexColor('#888888'),
@@ -828,8 +831,16 @@ async def export_pdf_endpoint(data: ExportPdfRequest):
         def build_rl_table(rows: list[list[str]]) -> Table:
             """Build a styled ReportLab Table from a list-of-lists."""
             n_cols = max(len(r) for r in rows)
-            # First column wider, rest equal
-            col_w = [PAGE_W * 0.38] + [(PAGE_W * 0.62) / max(n_cols - 1, 1)] * (n_cols - 1)
+            # Widths from content: each column gets a share proportional to its
+            # longest cell (capped), so a 10-year spread keeps its numbers on one
+            # line instead of a 38%-wide label column squeezing them ("1,98 / 3").
+            plain = [[_re.sub(r"[*_`]", "", str(c)) for c in (r + [""] * (n_cols - len(r)))] for r in rows]
+            longest = [max(len(r[j]) for r in plain) for j in range(n_cols)]
+            head_word = [max((len(w) for w in plain[0][j].split()), default=0) for j in range(n_cols)]
+            weights = [max(min(l, 46 if j == 0 else 34), head_word[j] + 2, 5) for j, l in enumerate(longest)]
+            total = sum(weights) or 1
+            col_w = [PAGE_W * w / total for w in weights]
+            wide = n_cols >= 8
             # Right-align only numeric columns; text columns (Mitigant, Remarks,
             # Facility Type) were right-aligned too and read badly.
             num_re = _re.compile(r'^(?:[<>]=?\s*)?[-+]?(?:Rs\s*)?[\d,]+(?:\.\d+)?\s*(?:x|%|Cr)?$|^[—-]$')
@@ -843,11 +854,14 @@ async def export_pdf_endpoint(data: ExportPdfRequest):
                 # Pad short rows
                 row = row + [''] * (n_cols - len(row))
                 if i == 0:
-                    pdf_rows.append([Paragraph(safe_xml(c), s_tbl_hdr) for c in row])
+                    pdf_rows.append([Paragraph(safe_xml(c), s_tbl_hdr_sm if wide else s_tbl_hdr) for c in row])
                 else:
                     cells = []
                     for j, c in enumerate(row):
-                        style = s_tbl_cell_r if numeric_col[j] else s_tbl_cell
+                        if wide:
+                            style = s_tbl_cell_r_sm if numeric_col[j] else s_tbl_cell_sm
+                        else:
+                            style = s_tbl_cell_r if numeric_col[j] else s_tbl_cell
                         cells.append(Paragraph(safe_xml(c), style))
                     pdf_rows.append(cells)
 
@@ -860,10 +874,10 @@ async def export_pdf_endpoint(data: ExportPdfRequest):
                 ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, LGREY]),
                 ('GRID',       (0, 0), (-1, -1), 0.4, MGREY),
                 ('VALIGN',     (0, 0), (-1, -1), 'TOP'),
-                ('LEFTPADDING',  (0, 0), (-1, -1), 5),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-                ('TOPPADDING',   (0, 0), (-1, -1), 4),
-                ('BOTTOMPADDING',(0, 0), (-1, -1), 4),
+                ('LEFTPADDING',  (0, 0), (-1, -1), 3 if wide else 5),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 3 if wide else 5),
+                ('TOPPADDING',   (0, 0), (-1, -1), 2.5 if wide else 4),
+                ('BOTTOMPADDING',(0, 0), (-1, -1), 2.5 if wide else 4),
             ])
             tbl.setStyle(tbl_style)
             return tbl
