@@ -247,7 +247,7 @@ router.get("/:id/export-pdf", async (req, res) => {
 
   const memoContent = [
     `# Credit Appraisal Memorandum\n## ${c.borrower_name}\n`,
-    `**Facility:** ${c.facility_type.replace(/_/g, " ")} | **Amount:** ₹${Number(c.facility_amount).toLocaleString("en-IN")} | **Sector:** ${c.sector} | **RM:** ${c.rm_name}\n\n---\n`,
+    `**Facility:** ${c.facility_type.replace(/_/g, " ")} | **Amount:** ₹${(Number(c.facility_amount) / 1e7).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr | **Sector:** ${c.sector} | **RM:** ${c.rm_name}\n\n---\n`,
     ...SECTION_ORDER.map((key) => {
       const s = sectionMap[key];
       if (!s?.content) return "";
@@ -259,7 +259,17 @@ router.get("/:id/export-pdf", async (req, res) => {
     const pyRes = await fetch(`${pythonUrl}/export-pdf`, {
       method: "POST",
       headers: internalHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ memo_content: memoContent, company_name: c.borrower_name }),
+      // Cover-page fields: the engine read these but they were never sent, so
+      // every exported CAM showed "—" for Sector, Facility and RM.
+      body: JSON.stringify({
+        memo_content: memoContent,
+        company_name: c.borrower_name,
+        sections: {
+          _meta_sector: c.sector || "—",
+          _meta_facility: `${c.facility_type.replace(/_/g, " ").replace(/\b\w/g, (ch: string) => ch.toUpperCase())} — ₹${(Number(c.facility_amount) / 1e7).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr`,
+          _meta_rm: c.rm_name || "—",
+        },
+      }),
       signal: AbortSignal.timeout(60_000),
     });
 

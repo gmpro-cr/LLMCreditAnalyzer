@@ -969,9 +969,12 @@ async def export_pdf_endpoint(data: ExportPdfRequest):
         story.append(PageBreak())
 
         # ── Section content ───────────────────────────────────────────────────
-        if sections:
+        # `_meta_*` keys only feed the cover table; they must not switch the body
+        # to section mode (that renders an empty memo).
+        body_sections = {k: v for k, v in sections.items() if not k.startswith("_meta_")}
+        if body_sections:
             for sec_key, sec_title in SECTION_TITLES.items():
-                content = sections.get(sec_key, '')
+                content = body_sections.get(sec_key, '')
                 if not content or not content.strip():
                     continue
                 story.append(Paragraph(sec_title, s_h1))
