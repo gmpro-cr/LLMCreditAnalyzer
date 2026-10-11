@@ -276,30 +276,44 @@ def _ollama_call(prompt: str) -> str:
         return ""
 
 
-_genai_client = None
+
+
+# Tried in order. flash-lite returns 503 "high demand" at peak; the full flash
+# model is a separate capacity pool on the same key, so it's a free fallback.
+GEMINI_MODELS = [m.strip() for m in os.getenv(
+    "GEMINI_MODELS", "models/gemini-flash-lite-latest,models/gemini-flash-latest").split(",") if m.strip()]
 
 
 def _gemini_call(prompt: str) -> str:
-    global _genai_client
     try:
         from google import genai
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            return ""
-        # Client is thread-safe; reuse it across (parallel) section calls.
-        if _genai_client is None:
-            # The SDK's default is no timeout: one stalled request froze the whole
-            # memo for minutes (2026-10-11). A healthy 4-section batch takes ~10s;
-            # on timeout the section is re-drafted individually / falls back to Groq.
-            _genai_client = genai.Client(api_key=api_key, http_options=genai.types.HttpOptions(timeout=45_000))
-        response = _genai_client.models.generate_content(
-            model="models/gemini-flash-lite-latest",
-            contents=prompt,
-        )
-        return response.text.strip()
+        from google.genai import types
     except Exception as e:
-        logger.error(f"Gemini call error: {e}")
+        logger.error(f"google-genai unavailable: {e}")
         return ""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return ""
+    # A fresh client per call: a shared client ended up closed after a timed-out
+    # request, and every later call failed with "client has been closed" until
+    # the engine restarted (2026-10-11). Construction is cheap.
+    #   timeout — the SDK default is none; one stalled request froze the memo.
+    #   retry   — brief backoff on 429/5xx before trying the next model.
+    http_options = types.HttpOptions(
+        timeout=45_000,
+        retry_options=types.HttpRetryOptions(
+            attempts=2, initial_delay=2.0, max_delay=6.0, http_status_codes=[429, 500, 502, 503, 504]),
+    )
+    for model in GEMINI_MODELS:
+        try:
+            client = genai.Client(api_key=api_key, http_options=http_options)
+            response = client.models.generate_content(model=model, contents=prompt)
+            text = (response.text or "").strip()
+            if text:
+                return text
+        except Exception as e:
+            logger.error(f"Gemini call error ({model}): {e}")
+    return ""
 
 
 def _claude_call(prompt: str) -> str:
@@ -509,8 +523,16 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
             pat_approx.append(p)
         table_rows.append(row("PAT (approx.)", pat_approx))
 
-        # DSCR assuming proposed ₹500 Cr term loan / 5 years = ₹100 Cr annual principal
-        proposed_principal_repayment = 100.0  # ₹ Cr/year (conservative; adjust per deal)
+        # Proposed-facility debt service, from the case's own facility. This was
+        # hard-coded to a ₹500 Cr term loan at ₹100 Cr/yr, so every memo's DSCR,
+        # FACR and projections — and the narrative — used ₹100 Cr repayments
+        # regardless of the actual loan (a ₹1 Cr TL showed "₹100 Cr" repayments).
+        _fac = financials.get("facility") or {}
+        _fac_cr = (float(_fac.get("amount_inr") or 0) / 1e7)
+        _is_term = _fac.get("type") in ("term_loan", None, "")
+        proposed_tl = _fac_cr if _is_term else 0.0          # WC/LC/BG: no scheduled principal
+        TL_TENOR_YEARS = 5                                   # indicative; adjust per deal
+        proposed_principal_repayment = round(proposed_tl / TL_TENOR_YEARS, 2) if proposed_tl else 0.0
         dscr_series = []
         for i in range(len(years)):
             p = pat_approx[i]
@@ -539,7 +561,7 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
         # FACR = Net Fixed Assets / Term Loan Outstanding (at end of each year)
         fixed_assets_list = _to_list(bs.get("fixed_assets", []))
         facr_series = []
-        outstanding_tl = 500.0  # proposed at inception
+        outstanding_tl = proposed_tl  # proposed at inception
         for i in range(len(years)):
             nfa = fixed_assets_list[i] if i < len(fixed_assets_list) else None
             if nfa is not None and outstanding_tl > 0:
@@ -580,11 +602,12 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
             p_rev = [round(last_rev * (1 + proj_g), 1), round(last_rev * (1 + proj_g) ** 2, 1)]
             p_ebitda = [round(r * last_ebitda_margin, 1) for r in p_rev]
             p_dep = [round(last_dep * 1.05, 1), round(last_dep * 1.10, 1)]
-            p_int = [round(last_int + proposed_principal_repayment * 0.08, 1),
-                     round(last_int + proposed_principal_repayment * 0.06, 1)]
+            # ~9% on the average outstanding proposed TL in each projected year
+            p_int = [round(last_int + (proposed_tl - proposed_principal_repayment * (i + 0.5)) * 0.09, 1)
+                     for i in range(2)]
             p_pbt = [round(p_ebitda[i] - p_dep[i] - p_int[i], 1) for i in range(2)]
             p_pat = [round(x * 0.75, 1) for x in p_pbt]
-            p_borr = [round(last_borr + 500 - proposed_principal_repayment * (i + 1), 1) for i in range(2)]
+            p_borr = [round(last_borr + proposed_tl - proposed_principal_repayment * (i + 1), 1) for i in range(2)]
             p_equity = [round(last_equity + p_pat[0], 1), round(last_equity + p_pat[0] + p_pat[1], 1)]
             p_assets = [round(last_assets + p_pat[0], 1), round(last_assets + p_pat[0] + p_pat[1], 1)]
             p_nfa = [round(last_nfa * 1.05, 1), round(last_nfa * 1.08, 1)]
@@ -593,7 +616,7 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
             p_tds = [proposed_principal_repayment + p_int[i] for i in range(2)]
             p_dscr = [round((p_pat[i] + p_dep[i] + p_int[i]) / p_tds[i], 2) if p_tds[i] > 0 else None for i in range(2)]
             p_tol = [round((p_assets[i] - p_equity[i]) / p_equity[i], 2) for i in range(2)]
-            p_facr_outstd = [500 - proposed_principal_repayment * (i + 1) for i in range(2)]
+            p_facr_outstd = [proposed_tl - proposed_principal_repayment * (i + 1) for i in range(2)]
             p_facr = [round(p_nfa[i] / p_facr_outstd[i], 2) if p_facr_outstd[i] > 0 else None for i in range(2)]
 
             def prow(label, arr):
@@ -618,7 +641,11 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
             proj_lines.append(prow("FACR (NFA / TL Outst.)", p_facr))
             proj_lines.append(proj_sep)
             proj_lines.append(f"Note: Projections assume {round(proj_g*100,1)}% revenue growth (50% of {round(hist_rev_cagr*100,1)}% historical CAGR).")
-            proj_lines.append(f"      Annual TL principal repayment assumed at ₹{proposed_principal_repayment:.0f} Cr (₹500 Cr / 5 years).")
+            if proposed_tl:
+                proj_lines.append(f"      Proposed term loan ₹{proposed_tl:,.2f} Cr repaid over {TL_TENOR_YEARS} years "
+                                  f"(₹{proposed_principal_repayment:,.2f} Cr/yr principal, indicative).")
+            else:
+                proj_lines.append("      Proposed facility is a non-amortising limit — no scheduled principal in DSCR.")
             proj_lines.append("      DSCR benchmark: >1.25x. FACR benchmark: >1.25x. TOL/TNW benchmark: <3.0x.")
             lines.extend(proj_lines)
 

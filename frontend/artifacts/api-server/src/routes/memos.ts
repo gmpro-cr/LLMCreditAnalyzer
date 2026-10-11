@@ -119,6 +119,9 @@ router.post("/:id/generate", async (req, res) => {
     reference_check:     "reference_check",
   };
 
+  // UI sections the LLM drafts (ews_checklist / reference_check are templates).
+  const AI_UI_KEYS = new Set(Object.values(KEY_MAP).filter((k) => k !== "ews_checklist" && k !== "reference_check"));
+
   // Wake-up: Render free tier sleeps after 15 min idle. wakePython holds each
   // ping long enough for the cold start (~30-50s) to complete.
   if (!await wakePython()) {
@@ -126,6 +129,7 @@ router.post("/:id/generate", async (req, res) => {
     return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds.", code: "upstream_unavailable" });
   }
 
+  let failedSections: string[] = [];
   try {
     const pyRes = await fetch(`${pythonUrl}/cam/draft-sections`, {
       method: "POST",
@@ -184,6 +188,10 @@ router.post("/:id/generate", async (req, res) => {
       updates.push({ sectionKey: uiKey, values: { content, confidence } });
     }
     if (updates.length) await bulkUpdateSections(id, updates);
+    // Sections the engine returned empty keep their previous text — say so
+    // instead of reporting a clean success over a partly stale memo.
+    const drafted = new Set(updates.map((u) => u.sectionKey));
+    failedSections = Object.values(KEY_MAP).filter((k, i, a) => a.indexOf(k) === i && !drafted.has(k) && AI_UI_KEYS.has(k));
 
     // Persist the engine's deterministic risk flags. They were computed on every
     // run and discarded, so the Risk Flags panel always read 0.
@@ -207,7 +215,7 @@ router.post("/:id/generate", async (req, res) => {
   await updateCase(id, { memo_progress: Math.max(progress, 10), updated_at: new Date().toISOString() });
   await insertActivity({ case_id: id, borrower_name: c.borrower_name, action: "AI generation completed — all 12 sections drafted", actor: "CreditGuard AI" });
 
-  return res.json({ message: "Memo generated successfully", caseId: id });
+  return res.json({ message: "Memo generated successfully", caseId: id, failedSections });
 });
 
 router.get("/:id/risk-flags", async (req, res) => {

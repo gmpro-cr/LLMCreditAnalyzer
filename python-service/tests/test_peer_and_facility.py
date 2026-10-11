@@ -42,3 +42,16 @@ def test_facility_scale_guard():
     assert audit_facility_amounts(ok, 1.0) == []
     accruals = "debt service installments out of internal accruals, supported by operating cash flows of ₹45,597.00 Cr"
     assert audit_facility_amounts(accruals, 1.0) == []
+
+
+def test_projections_use_the_case_facility_not_a_hardcoded_500cr_loan():
+    fin = {
+        "facility": {"type": "term_loan", "amount_inr": 10_000_000},
+        "profit_loss": {"years": ["Mar 2024", "Mar 2025"], "revenue": [100.0, 110.0], "ebitda": [20.0, 22.0],
+                        "pat": [10.0, 11.0], "depreciation": [2.0, 2.0], "interest": [1.0, 1.0]},
+        "balance_sheet": {"total_assets": [80.0, 90.0], "total_equity": [50.0, 55.0],
+                          "fixed_assets": [30.0, 32.0], "borrowings": [10.0, 9.0]},
+    }
+    ctx = _build_context_text(fin, {}, "X", "")
+    assert "₹500 Cr" not in ctx and "₹100 Cr" not in ctx
+    assert "₹1.00 Cr repaid over 5 years (₹0.20 Cr/yr" in ctx

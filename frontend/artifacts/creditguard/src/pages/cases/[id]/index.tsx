@@ -296,10 +296,19 @@ export default function CaseDetail() {
     setGenerationStartedAt(Date.now());
     setGenerating(true);
     try {
-      await generateMemo.mutateAsync({ id });
+      const result = await generateMemo.mutateAsync({ id }) as unknown as { failedSections?: string[] };
       await queryClient.invalidateQueries({ queryKey: getListSectionsQueryKey(id) });
       await queryClient.invalidateQueries({ queryKey: getGetCaseQueryKey(id) });
-      toast({ title: "Memo generated", description: "All sections have been drafted by AI." });
+      const failed = result?.failedSections ?? [];
+      if (failed.length > 0) {
+        toast({
+          title: `Memo generated — ${failed.length} section${failed.length === 1 ? "" : "s"} not drafted`,
+          description: `The AI service was busy for: ${failed.map((k) => k.replace(/_/g, " ")).join(", ")}. These keep their previous text — click Re-generate in a minute.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Memo generated", description: "All sections have been drafted by AI." });
+      }
     } catch (e) {
       const msg: string = String(
         (e && typeof e === "object" && "data" in e && (e as {data?: {error?: string}}).data?.error)
