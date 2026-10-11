@@ -1026,7 +1026,8 @@ def generate(financials: Dict[str, Any], company: str, research: str = "", rm: D
         out[k] = {"content": content, "title": TITLES[k], "ai_generated": uses_llm, "confidence": conf,
                   "confidence_reason": reason, "drafted": bool(prose.get(k)) or not uses_llm}
     if not only:
-        combined = "\n".join(prose.values())
+        # Peer and industry text quote other companies' ratios (e.g. a peer's ROCE).
+        combined = "\n".join(v for k, v in prose.items() if k not in ("peer_comparison", "industry_analysis"))
         mism = audit_memo_figures(combined, ctx["ratios"], _alternates(ctx["cma"]))
         if mism and "risk_summary" in out:
             out["risk_summary"]["content"] += "\n\n**Figure verification (automated):**\n\n" + bullets(
