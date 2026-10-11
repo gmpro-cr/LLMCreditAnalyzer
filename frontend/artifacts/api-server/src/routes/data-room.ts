@@ -83,7 +83,11 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
   }
 
   const pyData = await pyRes.json() as {
-    screener_financials?: { profit_loss?: { years?: string[] }; screener_url?: string };
+    screener_financials?: {
+      profit_loss?: { years?: string[] };
+      screener_url?: string;
+      annual_reports?: { fiscal_year: string; title: string; url: string }[];
+    };
     peers?: unknown[];
   };
   const screenerFinancials = pyData.screener_financials;
@@ -97,13 +101,38 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
   }
 
   try {
-    await upsertCaseExtractedData(id, { financials: screenerFinancials, peers: pyData.peers || [] });
+    // Don't wipe peers the RM curated by hand when Screener returns none.
+    const fetchedPeers = pyData.peers || [];
+    await upsertCaseExtractedData(id, {
+      financials: screenerFinancials,
+      ...(fetchedPeers.length > 0 ? { peers: fetchedPeers } : {}),
+    });
   } catch (e) {
     console.error("[fetch-reports] DB error:", e);
     return res.status(500).json({ error: "Financial data fetched but failed to save. Please retry." });
   }
 
-  return res.json({ ok: true, source: "screener", yearsFound, screenerUrl: screenerFinancials.screener_url });
+  // Record the source filings (BSE-hosted annual-report PDFs linked from
+  // Screener) as Data Room documents. Links only — financials already come from
+  // Screener, and parsing 15-20MB PDFs on the free-tier engine isn't viable.
+  const reports = screenerFinancials.annual_reports || [];
+  let reportsLinked = 0;
+  try {
+    const existing = await listCaseDocuments(id);
+    const have = new Set(existing.filter((d) => d.doc_type === "annual_report").map((d) => d.fiscal_year));
+    for (const r of reports) {
+      if (have.has(r.fiscal_year)) continue;
+      await insertCaseDocument({
+        case_id: id, doc_type: "annual_report", filename: `${r.title} (BSE filing).pdf`,
+        storage_path: r.url, fiscal_year: r.fiscal_year, source: "bse",
+      });
+      reportsLinked++;
+    }
+  } catch (e) {
+    console.error("[fetch-reports] failed to record annual-report links:", e);
+  }
+
+  return res.json({ ok: true, source: "screener", yearsFound, reportsLinked, screenerUrl: screenerFinancials.screener_url });
 });
 
 // ── POST /api/cases/:id/data-room/run-research ────────────────────────────

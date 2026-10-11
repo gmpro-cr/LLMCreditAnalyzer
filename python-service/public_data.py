@@ -153,6 +153,83 @@ def fetch_screener_page(symbol: str, company_name: str = ""):
         return slug, None
 
 
+# Screener renders the peer table client-side from this endpoint, so the static
+# page's <section id="peers"> is always empty — scraping it returned no peers and
+# the memo fell back to LLM-recalled "approximate" figures.
+_PEER_COLUMNS = {
+    "CMP Rs.": "cmp", "P/E": "pe", "Mar Cap Rs.Cr.": "market_cap_cr",
+    "Div Yld %": "div_yield_pct", "NP Qtr Rs.Cr.": "np_qtr_cr",
+    "Qtr Profit Var %": "np_qtr_var_pct", "Sales Qtr Rs.Cr.": "sales_qtr_cr",
+    "Qtr Sales Var %": "sales_qtr_var_pct", "ROCE %": "roce_pct",
+}
+
+
+def _company_slug(href: str) -> str:
+    m = re.match(r"/company/([^/]+)/", href or "")
+    return m.group(1).upper() if m else ""
+
+
+def fetch_screener_peers(soup, borrower_slug: str = "", limit: int = 5) -> List[Dict[str, Any]]:
+    """Peers from Screener's peer API. Each: {name, symbol, is_borrower, metrics}.
+    The borrower's own row is kept (flagged) so tables compare like with like."""
+    from bs4 import BeautifulSoup
+    node = soup.find(attrs={"data-warehouse-id": True}) if soup else None
+    if not node:
+        return []
+    try:
+        resp = httpx.get(f"{SCREENER_BASE}/api/company/{node['data-warehouse-id']}/peers/",
+                         headers=HEADERS, timeout=15)
+        resp.raise_for_status()
+    except Exception as e:
+        logger.warning(f"[Screener] peer fetch failed: {e}")
+        return []
+    rows = BeautifulSoup(resp.text, "html.parser").find_all("tr")
+    if not rows:
+        return []
+    hdrs = [th.get_text(" ", strip=True) for th in rows[0].find_all("th")]
+    borrower = (borrower_slug or "").upper()
+    peers: List[Dict[str, Any]] = []
+    for row in rows[1:]:
+        cells = row.find_all("td")
+        if len(cells) != len(hdrs):
+            continue  # median/summary rows
+        rec = {h: c for h, c in zip(hdrs, cells)}
+        name_cell = rec.get("Name") or rec.get("Company")
+        if name_cell is None:
+            continue
+        link = name_cell.find("a")
+        symbol = _company_slug(link.get("href") if link else "")
+        metrics = {key: _parse_number(rec[h].get_text(strip=True))
+                   for h, key in _PEER_COLUMNS.items() if h in rec}
+        peers.append({
+            "name": name_cell.get_text(" ", strip=True),
+            "symbol": symbol,
+            "is_borrower": bool(borrower) and symbol == borrower,
+            "metrics": metrics,
+        })
+    others = [p for p in peers if not p["is_borrower"]][:limit]
+    return [p for p in peers if p["is_borrower"]] + others
+
+
+def screener_annual_reports(soup, n: int = 3) -> List[Dict[str, str]]:
+    """Latest annual-report filings linked from Screener's Documents section
+    (PDFs hosted on bseindia.com). [{fiscal_year, title, url}]"""
+    out: List[Dict[str, str]] = []
+    docs = soup.find("section", id="documents") if soup else None
+    if not docs:
+        return out
+    for a in docs.select(".annual-reports a"):
+        href = a.get("href") or ""
+        title = a.get_text(" ", strip=True)
+        m = re.search(r"(20\d{2})", title)
+        if not href.startswith("http") or not m:
+            continue
+        out.append({"fiscal_year": f"FY{m.group(1)}", "title": f"Annual Report {m.group(1)}", "url": href})
+        if len(out) >= n:
+            break
+    return out
+
+
 def fetch_screener_financials(symbol: str, company_name: str = "") -> dict:
     """
     Fetch 3-year financial statements from Screener.in.
@@ -383,20 +460,9 @@ def fetch_screener_financials(symbol: str, company_name: str = "") -> dict:
         if len(t) > 20:
             recent_announcements.append(t)
 
-    # ── Peer comparison ────────────────────────────────────────────────────
-    peers = []
-    peers_section = soup.find("section", id="peers")
-    if peers_section:
-        table = peers_section.find("table")
-        if table:
-            rows = table.find_all("tr")
-            if rows:
-                hdrs = [th.get_text(strip=True) for th in rows[0].find_all("th")]
-                for row in rows[1:6]:
-                    cells = [td.get_text(strip=True) for td in row.find_all("td")]
-                    if cells and len(cells) >= 3:
-                        peer = {hdrs[i]: cells[i] for i in range(min(len(hdrs), len(cells)))}
-                        peers.append(peer)
+    # ── Peer comparison + annual-report links ──────────────────────────────
+    peers = fetch_screener_peers(soup, slug)
+    annual_reports = screener_annual_reports(soup)
 
     # ── Build finalized schema ─────────────────────────────────────────────
     logger.info(
@@ -558,6 +624,7 @@ def fetch_screener_financials(symbol: str, company_name: str = "") -> dict:
         },
 
         "peers": peers,
+        "annual_reports": annual_reports,
     }
 
 
@@ -769,7 +836,18 @@ def fetch_all_public_data(symbol: str, company_name: str = "", industry: str = "
 
     screener_fin = fetch_screener_financials(symbol, company_name)
     if screener_fin:
-        peers = screener_fin.pop("peers", [])
+        raw_peers = screener_fin.pop("peers", [])
+        # Borrower's own row → kept with its financials so the memo's peer table
+        # compares like-for-like figures; the rest become Data Room peer chips
+        # (pre-confirmed, the RM can untick them).
+        self_row = next((p for p in raw_peers if p.get("is_borrower")), None)
+        if self_row:
+            screener_fin["peer_self_metrics"] = self_row.get("metrics", {})
+        peers = [
+            {"name": p["name"], "symbol": p.get("symbol"), "confirmed": True,
+             "suggested": False, "screenerData": p.get("metrics", {})}
+            for p in raw_peers if not p.get("is_borrower")
+        ]
         result["screener"] = {
             "screener_url": screener_fin.get("screener_url"),
             "promoter_holding": screener_fin.get("company_info", {}).get("promoter_holding"),

@@ -39,4 +39,5 @@ typing-inspection==0.4.2
 uvicorn==0.41.0
 weasyprint==68.1
 yfinance==1.2.0
+ddgs==9.12.0  # researcher.py web search — was missing, so research on Render always returned 0 sources
 pytest>=8.0.0

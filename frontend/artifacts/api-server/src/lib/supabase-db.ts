@@ -109,6 +109,16 @@ export async function listRiskFlags(caseId: number) {
   return data ?? [];
 }
 
+/** Replace a case's flags with a fresh engine run. Acknowledgements reset —
+ *  the flags are recomputed from the latest financials. */
+export async function replaceRiskFlags(caseId: number, rows: Record<string, unknown>[]) {
+  const del = await supabase.from("risk_flags").delete().eq("case_id", caseId);
+  if (del.error) throw del.error;
+  if (rows.length === 0) return;
+  const { error } = await supabase.from("risk_flags").insert(rows);
+  if (error) throw error;
+}
+
 // ── Activity Log ──────────────────────────────────────────────────────────
 
 export async function insertActivity(values: Record<string, unknown>) {

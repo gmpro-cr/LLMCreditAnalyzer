@@ -272,6 +272,13 @@ export default function CaseDetail() {
   // Same query the Data Room tab uses, so a successful fetch there updates this.
   // `undefined` while loading → don't block; the server check is authoritative.
   const { data: dataRoom } = useGetDataRoom(id);
+
+  // Start waking the free-tier AI engine as soon as a case is opened (cold
+  // start ~50s+). By the time the RM reviews the Data Room and clicks Generate
+  // it is usually warm. Fire-and-forget; the generate call still waits for it.
+  useEffect(() => {
+    fetch(`${import.meta.env.VITE_API_URL || ""}/api/python-wake`).catch(() => {});
+  }, []);
   const missingFinancials = dataRoom !== undefined && !hasFinancialData(dataRoom);
 
   const handleGenerate = async () => {

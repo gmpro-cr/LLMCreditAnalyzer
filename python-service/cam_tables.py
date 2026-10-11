@@ -104,3 +104,32 @@ def inject_into_memo(memo: str, fin: dict, ratios: dict) -> str:
         idx = m.end()
         return memo[:idx] + "\n\n" + block + "\n" + memo[idx:]
     return memo.rstrip() + "\n\n## Annexure — Financial Spread & Ratios\n\n" + block + "\n"
+
+
+def _num(v, decimals: int = 1) -> str:
+    n = as_number(v)
+    return "—" if n is None else f"{n:,.{decimals}f}"
+
+
+def peer_table(fin: dict) -> str:
+    """Borrower vs listed peers, from Screener's peer data only. Returns "" when
+    there are no peers — callers must say so rather than let the LLM fill in."""
+    peers = [p for p in (fin.get("peers") or [])
+             if isinstance(p, dict) and p.get("confirmed", True)]
+    if not peers:
+        return ""
+    company = (fin.get("company_info") or {}).get("name") or "Borrower"
+    rows = [(f"**{company}**", fin.get("peer_self_metrics") or {})]
+    rows += [(p.get("name", "—"), p.get("screenerData") or {}) for p in peers]
+    out = [
+        "| Company | Mkt Cap (₹ Cr) | P/E | ROCE % | Sales, latest qtr (₹ Cr) | Sales YoY % | PAT, latest qtr (₹ Cr) | PAT margin % |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for name, m in rows:
+        sales, pat = as_number(m.get("sales_qtr_cr")), as_number(m.get("np_qtr_cr"))
+        margin = (pat / sales * 100) if sales and pat is not None else None
+        out.append(
+            f"| {name} | {_inr(m.get('market_cap_cr'))} | {_num(m.get('pe'))} | {_num(m.get('roce_pct'))} "
+            f"| {_inr(sales)} | {_num(m.get('sales_qtr_var_pct'))} | {_inr(pat)} | {_num(margin)} |"
+        )
+    return "\n".join(out)

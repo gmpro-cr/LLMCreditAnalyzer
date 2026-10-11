@@ -203,7 +203,8 @@ function FinancialsPanel({ caseId, companyName, documents, financials, onRefresh
     try {
       const res = await fetchReports.mutateAsync({ caseId, symbol: symbol.trim(), companyName });
       const n = res.yearsFound?.length ?? 0;
-      toast({ title: `Financials fetched · ${n} year${n === 1 ? "" : "s"}`, description: "You can now generate the memo." });
+      const linked = res.reportsLinked ? ` and ${res.reportsLinked} annual report${res.reportsLinked === 1 ? "" : "s"} linked` : "";
+      toast({ title: `Financials fetched · ${n} year${n === 1 ? "" : "s"}`, description: `Peers and filings saved${linked}. You can now generate the memo.` });
       setSuggestedTicker("");
       onRefresh();
     } catch (e) {
@@ -255,14 +256,20 @@ function FinancialsPanel({ caseId, companyName, documents, financials, onRefresh
 
       {annualReports.length > 0 && (
         <div className="space-y-2">
-          <h4 className="text-sm font-semibold">Fetched Reports</h4>
+          <h4 className="text-sm font-semibold">Annual reports</h4>
           {annualReports.map(doc => (
             <div key={doc.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border">
               <div className="flex items-center gap-3">
                 <PiFileTextLight className="h-5 w-5 text-primary shrink-0" />
                 <div>
-                  <p className="text-sm font-medium">{doc.filename}</p>
-                  <p className="text-xs text-muted-foreground">{doc.fiscal_year} · {doc.source?.toUpperCase()} · {doc.extracted_data ? "Extracted ✓" : "No extraction"}</p>
+                  {doc.storage_path?.startsWith("http") ? (
+                    <a href={doc.storage_path} target="_blank" rel="noreferrer" className="text-sm font-medium hover:underline underline-offset-2">{doc.filename}</a>
+                  ) : (
+                    <p className="text-sm font-medium">{doc.filename}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {doc.fiscal_year} · {doc.source?.toUpperCase()} · {doc.storage_path?.startsWith("http") ? "Source filing — opens on bseindia.com" : doc.extracted_data ? "Extracted ✓" : "No extraction"}
+                  </p>
                 </div>
               </div>
               <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive"

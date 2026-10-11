@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listSections, updateSection, bulkUpdateSections, listRiskFlags, insertActivity, updateCase, getCase, getCaseExtractedData, nullIfMissing } from "../lib/supabase-db.js";
+import { listSections, updateSection, bulkUpdateSections, listRiskFlags, replaceRiskFlags, insertActivity, updateCase, getCase, getCaseExtractedData, nullIfMissing } from "../lib/supabase-db.js";
 import { PYTHON_URL, internalHeaders, wakePython } from "../lib/python.js";
 import { ListSectionsParams, UpdateSectionBody, GenerateMemoParams, ListRiskFlagsParams } from "@workspace/api-zod";
 
@@ -79,7 +79,9 @@ router.post("/:id/generate", async (req, res) => {
   };
 
   const researchBrief = [
-    `Sector: ${c.sector}. Facility: ${c.facility_type.replace(/_/g, " ")}, INR ${Number(c.facility_amount).toLocaleString("en-IN")} Lakhs. RM: ${c.rm_name}.`,
+    // facility_amount is stored in rupees. It used to be labelled "Lakhs" here,
+    // which turned a ₹1 Cr term loan into "₹100 crore" / "₹1,000 Cr" in the memo.
+    `Sector: ${c.sector}. Facility: ${c.facility_type.replace(/_/g, " ")} of ₹${(Number(c.facility_amount) / 1e7).toLocaleString("en-IN", { maximumFractionDigits: 2 })} Cr. RM: ${c.rm_name}.`,
     extracted?.research ? `\n\nResearch findings:\n${(Array.isArray(extracted.research) ? extracted.research : [extracted.research]).map((r: unknown) => typeof r === "object" && r !== null ? ((r as Record<string, unknown>).content || (r as Record<string, unknown>).brief || JSON.stringify(r)) : String(r)).join("\n---\n").slice(0, 4000)}` : "",
     extracted?.organogram ? `\n\nGroup structure: ${JSON.stringify(extracted.organogram).slice(0, 1000)}` : "",
   ].join("");
@@ -120,7 +122,8 @@ router.post("/:id/generate", async (req, res) => {
   // Wake-up: Render free tier sleeps after 15 min idle. wakePython holds each
   // ping long enough for the cold start (~30-50s) to complete.
   if (!await wakePython()) {
-    return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds." });
+    // `upstream_unavailable` tells the SPA's customFetch this is a retryable cold start.
+    return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds.", code: "upstream_unavailable" });
   }
 
   try {
@@ -133,6 +136,7 @@ router.post("/:id/generate", async (req, res) => {
         company_name: c.borrower_name,
         research_brief: researchBrief,
         peers,
+        facility: { type: c.facility_type, amount_inr: Number(c.facility_amount) },
       }),
       signal: AbortSignal.timeout(900_000),
     });
@@ -180,6 +184,16 @@ router.post("/:id/generate", async (req, res) => {
       updates.push({ sectionKey: uiKey, values: { content, confidence } });
     }
     if (updates.length) await bulkUpdateSections(id, updates);
+
+    // Persist the engine's deterministic risk flags. They were computed on every
+    // run and discarded, so the Risk Flags panel always read 0.
+    const engineFlags = Array.isArray(camSections["_risk_flags"]) ? camSections["_risk_flags"] as Record<string, unknown>[] : [];
+    await replaceRiskFlags(id, engineFlags.map((f) => ({
+      case_id: id,
+      risk_type: String(f.title ?? f.ratio_key ?? "Risk"),
+      severity: ["high", "medium", "low"].includes(String(f.severity)) ? String(f.severity) : "medium",
+      description: String(f.description ?? ""),
+    })));
   } catch (e) {
     console.error("[generate] Python service error:", e);
     return res.status(502).json({ error: "AI engine request failed. Please try again." });
@@ -199,7 +213,8 @@ router.post("/:id/generate", async (req, res) => {
 router.get("/:id/risk-flags", async (req, res) => {
   const { id } = ListRiskFlagsParams.parse({ id: Number(req.params.id) });
   const flags = await listRiskFlags(id);
-  res.json(flags);
+  // The UI reads camelCase (riskType, isAcknowledged); raw rows rendered blank titles.
+  res.json(flags.map((f) => ({ ...f, caseId: f.case_id, riskType: f.risk_type, isAcknowledged: f.is_acknowledged })));
 });
 
 router.get("/:id/export-pdf", async (req, res) => {

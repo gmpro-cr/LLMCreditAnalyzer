@@ -115,6 +115,9 @@ class DraftSectionsRequest(BaseModel):
     research_brief: str = ""
     regenerate: Optional[str] = None
     peers: list = Field(default_factory=list)
+    # {"type": "term_loan", "amount_inr": 10000000} — the case's own facility, so
+    # the memo can't drift to a different type or scale (it did: ₹1 Cr → "₹1,000 Cr").
+    facility: dict = Field(default_factory=dict)
 
 
 class ExportDocxRequest(BaseModel):
@@ -1021,6 +1024,14 @@ def draft_cam_sections_endpoint(data: DraftSectionsRequest):
 
     if not financials:
         raise HTTPException(400, "financials is required")
+
+    # `peers` was accepted here but never reached the drafting code. The prompt
+    # builders read everything from `financials`, so merge both in.
+    financials = {**financials}
+    if data.peers:
+        financials["peers"] = data.peers
+    if data.facility:
+        financials["facility"] = data.facility
 
     # Callers (e.g. the api-server) may not pre-compute ratios; do it here so the
     # ratio-covenant table and ratio-aware narrative are populated.

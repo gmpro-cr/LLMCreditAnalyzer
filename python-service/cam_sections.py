@@ -28,6 +28,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Optional
 
 from credit_score import compute_scorecard, format_scorecard_md
+from cam_tables import _inr
 from ews_checklist import format_ews_checklist_md
 from validators import audit_memo_figures, audit_recommendation_consistency
 
@@ -147,9 +148,11 @@ SECTION_PROMPTS = {
     ),
     "proposed_structure": (
         "Generate the Proposed Credit Facility Structure section. Include:\n"
-        "1. Facility details: Type (Working Capital — Cash Credit/Overdraft), Amount (₹ Cr), Tenor, "
-        "Purpose, Disbursement mode.\n"
-        "2. Drawing Power (DP) Calculation using Indian banking norms (Tandon Committee Method II):\n"
+        "1. Facility details: Type and Amount EXACTLY as given under PROPOSED FACILITY in the context "
+        "(never change, round or rescale the amount), Tenor, Purpose, Disbursement mode.\n"
+        "2. ONLY if the facility is Working Capital, Cash Credit or Overdraft — Drawing Power (DP) "
+        "Calculation using Indian banking norms (Tandon Committee Method II). For a Term Loan, LC or BG, "
+        "skip the DP table and instead give a repayment / cash-flow cover view (DSCR) for the term facility:\n"
         "   Present a markdown table:\n"
         "   | Item | Amount (₹ Cr) |\n"
         "   | Inventory (at cost) | [value or 'As per stock statement'] |\n"
@@ -164,7 +167,7 @@ SECTION_PROMPTS = {
         "   | **Drawing Power (min of Bank Financing & Limit)** | [DP] |\n"
         "   Use actual balance sheet figures where available. Flag '[Requires stock statement]' where live data is needed.\n"
         "3. Security structure:\n"
-        "   - Primary: Hypothecation of entire current assets (stock, book debts) — first charge\n"
+        "   - Primary: for WC — hypothecation of current assets (stock, book debts); for term loans — charge on the assets financed\n"
         "   - Collateral: [as applicable]\n"
         "   - Guarantee: Corporate/personal guarantee if applicable\n"
         "4. Pricing: Interest rate (Base Rate / MCLR + spread), processing fee, review frequency.\n"
@@ -172,14 +175,14 @@ SECTION_PROMPTS = {
         "Use actual financial data from the context where available."
     ),
     "peer_comparison": (
-        "Write a Peer Comparison section with:\n"
-        "1. A markdown table comparing the borrower against 3-4 named peer companies on these metrics:\n"
-        "   Company | Revenue (₹ Cr) | EBITDA Margin % | PAT Margin % | D/E Ratio | Interest Coverage | ROCE % | Credit Rating\n"
-        "   Use the peer list and financial data provided. If peer financials are not in the data, "
-        "   use approximate publicly known figures with a note '(approximate)'.\n"
-        "2. A 2-3 sentence narrative on how the borrower compares to peers — strengths and gaps.\n"
-        "3. Industry median benchmarks for the sector where available.\n"
-        "Base this on the sector and peers provided in the context."
+        "Write the Peer Comparison commentary.\n"
+        "1. Note:\n"
+        "   (DO NOT write a table — a verified peer table is inserted automatically above your text.)\n"
+        "2. Write 3-4 sentences comparing the borrower with the companies under PEER DATA in the context:\n"
+        "   scale, profitability (ROCE, PAT margin), growth and valuation.\n"
+        "Cite ONLY figures that appear under PEER DATA or the borrower's financials. Never use recalled,\n"
+        "estimated or 'approximate' figures. If the context has no PEER DATA, write one sentence stating\n"
+        "that peer data was not available and the RM should add listed peers in the Data Room."
     ),
 }
 
@@ -389,6 +392,13 @@ def _fmt(v, decimals=2):
 
 def _build_context_text(financials: Dict, ratios: Dict, company_name: str, research_brief: str, max_chars: int = 0) -> str:
     lines = [f"COMPANY: {company_name}"]
+    fac = financials.get("facility") or {}
+    if fac.get("type") and fac.get("amount_inr"):
+        amt = float(fac["amount_inr"])
+        lines.append(
+            f"PROPOSED FACILITY (use exactly this type and amount everywhere): "
+            f"{fac['type'].replace('_', ' ').title()} of ₹{amt / 1e7:,.2f} Cr (₹{_inr(amt)})"
+        )
 
     ci = financials.get("company_info", {})
     if ci.get("industry"):
@@ -674,10 +684,20 @@ def _build_context_text(financials: Dict, ratios: Dict, company_name: str, resea
         if trend:
             lines.append("Promoter trend: " + ", ".join(f"{t['period']}: {t['pct']}%" for t in trend[-4:]))
 
-    # Peers
-    peers = financials.get("peers", [])
+    # Peers — only Screener-sourced figures, so the LLM has nothing to invent from.
+    peers = [p for p in (financials.get("peers") or []) if isinstance(p, dict) and p.get("confirmed", True)]
     if peers:
-        lines.append(f"\nPEER COMPANIES: {', '.join(str(p.get('Name', p.get('name', str(p)))) for p in peers[:5])}")
+        lines.append("\nPEER DATA (Screener.in; latest quarter; ₹ Cr):")
+        rows = [(company_name + " (borrower)", financials.get("peer_self_metrics") or {})]
+        rows += [(p.get("name", "?"), p.get("screenerData") or {}) for p in peers[:5]]
+        for name, m in rows:
+            if m:
+                lines.append(
+                    f"- {name}: MCap {m.get('market_cap_cr')}, P/E {m.get('pe')}, ROCE {m.get('roce_pct')}%, "
+                    f"qtr sales {m.get('sales_qtr_cr')} (YoY {m.get('sales_qtr_var_pct')}%), qtr PAT {m.get('np_qtr_cr')}"
+                )
+            else:
+                lines.append(f"- {name}: no figures available")
 
     # Credit ratings
     ratings = financials.get("company_info", {}).get("credit_ratings", [])
@@ -779,7 +799,7 @@ SECTION_CONFIDENCE: Dict[str, tuple] = {
     "working_capital":      ("medium", "Inferred from balance sheet; verify against stock statement"),
     "banking_arrangement":  ("low",    "Template only — RM must obtain CIBIL, CMR, and existing facility details"),
     "proposed_structure":   ("medium", "DP calculation uses balance sheet data; update with fresh stock statement"),
-    "peer_comparison":      ("medium", "Peer figures are approximate; verify against latest annual reports"),
+    "peer_comparison":      ("medium", "Peer table from Screener.in (latest quarter); narrative is AI-written — verify peer selection"),
     "key_issues":           ("medium", "Synthesised from ratios and research; RM judgement required"),
     "recommendation":       ("low",    "AI scaffold only — recommendation MUST be authored by RM"),
     "executive_summary":    ("medium", "Synthesised from all other sections; review each source section"),
@@ -798,6 +818,16 @@ def _resolve_confidence(section_key: str, financials: Dict) -> tuple:
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
+
+def _with_peer_table(content: str, financials: Dict) -> str:
+    """Prepend the deterministic peer table; never let the LLM supply peer figures."""
+    from cam_tables import peer_table
+    table = peer_table(financials)
+    if not table:
+        return ("_Peer data not available — fetch financials for a listed borrower or add "
+                "listed peers in the Data Room._\n\n" + content)
+    return table + "\n\n_Source: Screener.in peer comparison (latest reported quarter)._\n\n" + content
+
 
 def _with_tables(content: str, financials: Dict, ratios: Dict) -> str:
     """Append the deterministic spread + ratio-covenant tables to a section's prose."""
@@ -844,6 +874,8 @@ def generate_cam_sections(
         content = _draft_section(regenerate, context_text, company_name)
         if regenerate == "financial_analysis":
             content = _with_tables(content, financials, ratios)
+        elif regenerate == "peer_comparison":
+            content = _with_peer_table(content, financials)
         conf, reason = _resolve_confidence(regenerate, financials)
         return {
             regenerate: {
@@ -913,6 +945,11 @@ def generate_cam_sections(
             "low_verified":      False,
             "locked":            False,
         }
+
+    if "peer_comparison" in sections:
+        sections["peer_comparison"]["content"] = _with_peer_table(
+            sections["peer_comparison"]["content"], financials
+        )
 
     # Append computed tables to Financial Analysis (math owned by Python, not the LLM)
     if "financial_analysis" in sections:
@@ -992,6 +1029,9 @@ def generate_cam_sections(
     try:
         from risk_flags import generate_risk_flags
         flags = generate_risk_flags(ratios, financials)
+        # Returned so the API can persist them — previously computed and dropped,
+        # leaving the case's Risk Flags panel permanently at 0.
+        sections["_risk_flags"] = flags
         scorecard = sections.get("_credit_rating", {})
         rec_content = sections.get("recommendation", {}).get("content", "")
         rec_issues = audit_recommendation_consistency(rec_content, scorecard, flags)
