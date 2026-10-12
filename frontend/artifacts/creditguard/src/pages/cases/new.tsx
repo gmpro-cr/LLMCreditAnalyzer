@@ -295,11 +295,11 @@ export default function NewCase() {
   const history = selectedCompany?.financialHistory ?? [];
 
   return (
-    <div className="max-w-4xl mx-auto p-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center gap-4">
+    <div className="max-w-4xl mx-auto px-4 py-6 sm:p-8 space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-start gap-2 sm:gap-4">
         <Link
           href="/cases"
-          className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted h-10 w-10"
+          className="mt-1 inline-flex shrink-0 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted h-10 w-10 -ml-2 sm:ml-0"
         >
           <PiArrowLeftLight className="h-5 w-5 text-muted-foreground" />
           <span className="sr-only">Back</span>
@@ -560,8 +560,8 @@ export default function NewCase() {
                 control={form.control}
                 name="borrowerName"
                 render={({ field }) => (
-                  <FormItem className="col-span-2">
-                    <FormLabel>Entity / Borrower Name</FormLabel>
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Borrower name</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="e.g. Reliance Industries Limited"
@@ -598,7 +598,7 @@ export default function NewCase() {
                     <FormControl>
                       <Input
                         placeholder="e.g. ABCDE1234F"
-                        className="uppercase"
+                        className="uppercase placeholder:normal-case"
                         {...field}
                       />
                     </FormControl>
@@ -610,8 +610,8 @@ export default function NewCase() {
                 control={form.control}
                 name="sector"
                 render={({ field }) => (
-                  <FormItem className="col-span-2 md:col-span-1">
-                    <FormLabel>Industry Sector</FormLabel>
+                  <FormItem>
+                    <FormLabel>Industry sector</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="e.g. Manufacturing, IT, Healthcare"
@@ -641,7 +641,7 @@ export default function NewCase() {
                 name="facilityType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Facility Type</FormLabel>
+                    <FormLabel>Facility type</FormLabel>
                     <Select
                       onValueChange={field.onChange}
                       defaultValue={field.value}
@@ -698,7 +698,7 @@ export default function NewCase() {
                 name="rmName"
                 render={({ field }) => (
                   <FormItem className="max-w-md">
-                    <FormLabel>Relationship Manager Name</FormLabel>
+                    <FormLabel>Relationship manager</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. John Doe" {...field} />
                     </FormControl>
@@ -716,7 +716,7 @@ export default function NewCase() {
             <Button
               type="submit"
               disabled={isGenerating}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground min-w-[220px]"
+              className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground sm:flex-none sm:min-w-[220px]"
             >
               {isGenerating ? (
                 <>

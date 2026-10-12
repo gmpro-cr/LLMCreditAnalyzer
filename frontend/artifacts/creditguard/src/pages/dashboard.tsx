@@ -32,7 +32,8 @@ function Figure({ label, value, note, href }: { label: string; value: string; no
       <div className="text-xs text-muted-foreground">{note}</div>
     </>
   );
-  const cls = "block border-b border-border px-5 py-4 transition-colors sm:border-r lg:border-b-0 lg:last:border-r-0";
+  // Phones: two-up grid with the last figure spanning the row; desktop: one row of five.
+  const cls = "block border-b border-border px-4 py-3 transition-colors [&:nth-child(odd):not(:last-child)]:border-r last:col-span-2 last:border-b-0 sm:px-5 sm:py-4 lg:border-b-0 lg:border-r lg:last:col-span-1 lg:last:border-r-0";
   return href
     ? <Link href={href} className={`${cls} text-foreground hover:bg-muted/60 hover:no-underline`}>{body}</Link>
     : <div className={cls}>{body}</div>;
@@ -69,7 +70,7 @@ export default function Dashboard() {
       {statsDown ? (
         <OutageState description="The figures are safe — we can't load them right now. This usually clears in a few minutes." onRetry={() => statsQ.refetch()} isRetrying={statsQ.isFetching} compact />
       ) : (
-        <div className="grid grid-cols-1 rounded border border-border bg-card sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-2 rounded border border-border bg-card lg:grid-cols-5">
           {statsQ.isLoading || !stats ? Array.from({ length: 5 }).map((_, i) => <div key={i} className="p-5"><Skeleton className="h-14" /></div>) : (
             <>
               <Figure label="Drafts with RMs" value={String(stats.draftsInProgress)} note="Being prepared" href="/cases?status=draft" />
@@ -97,26 +98,26 @@ export default function Dashboard() {
               <table className="w-full text-sm">
                 <thead className="bg-muted text-xs text-muted-foreground">
                   <tr>
-                    <th className="px-5 py-2 text-left font-medium">Borrower</th>
-                    <th className="px-4 py-2 text-left font-medium">Facility</th>
+                    <th className="px-4 py-2 text-left font-medium sm:px-5">Borrower</th>
+                    <th className="hidden px-4 py-2 text-left font-medium md:table-cell">Facility</th>
                     <th className="px-4 py-2 text-right font-medium">Amount</th>
-                    <th className="px-4 py-2 text-left font-medium">Status</th>
-                    <th className="px-4 py-2 text-right font-medium">Reviewed</th>
-                    <th className="px-5 py-2 text-left font-medium">Updated</th>
+                    <th className="px-4 py-2 text-left font-medium"><span className="sr-only sm:not-sr-only">Status</span></th>
+                    <th className="hidden px-4 py-2 text-right font-medium md:table-cell">Reviewed</th>
+                    <th className="hidden px-5 py-2 text-left font-medium md:table-cell">Updated</th>
                   </tr>
                 </thead>
                 <tbody>
                   {open.map((c) => (
                     <tr key={c.id} className="cursor-pointer border-t border-border/70 hover:bg-muted/60" onClick={() => setLocation(`/cases/${c.id}`)}>
-                      <td className="px-5 py-3">
+                      <td className="px-4 py-3 sm:px-5">
                         <Link href={`/cases/${c.id}`} className="font-medium text-foreground hover:text-primary">{c.borrowerName}</Link>
-                        <div className="text-xs text-muted-foreground">{c.sector} · RM {c.rmName}</div>
+                        <div className="text-xs text-muted-foreground">{c.sector} · RM {c.rmName}<span className="md:hidden"> · {facilityLabel(c.facilityType)}</span></div>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{facilityLabel(c.facilityType)}</td>
+                      <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">{facilityLabel(c.facilityType)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatCr(c.facilityAmount)}</td>
                       <td className="px-4 py-3"><StatusChip status={c.status} /></td>
-                      <td className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground">{c.memoProgress}%</td>
-                      <td className="whitespace-nowrap px-5 py-3 text-muted-foreground">{formatDate(c.updatedAt ?? c.createdAt)}</td>
+                      <td className="hidden px-4 py-3 text-right text-xs tabular-nums text-muted-foreground md:table-cell">{c.memoProgress}%</td>
+                      <td className="hidden whitespace-nowrap px-5 py-3 text-muted-foreground md:table-cell">{formatDate(c.updatedAt ?? c.createdAt)}</td>
                     </tr>
                   ))}
                 </tbody>

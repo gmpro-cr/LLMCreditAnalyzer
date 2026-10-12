@@ -172,14 +172,14 @@ function FetchedFinancialsCard({ financials }: { financials: FetchedFinancials }
         <table className="w-full text-sm tabular-nums">
           <thead>
             <tr className="bg-muted text-xs text-muted-foreground">
-              <th className="px-4 py-2 text-left font-medium"><span className="sr-only">Line item</span></th>
+              <th className="sticky left-0 bg-muted px-4 py-2 text-left font-medium"><span className="sr-only">Line item</span></th>
               {years.map((y) => <th key={y} className="px-4 py-2 text-right font-medium">{fy(y)}</th>)}
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.label} className="border-t border-border/70">
-                <td className="px-4 py-2 text-muted-foreground">{r.label}</td>
+                <td className="sticky left-0 whitespace-nowrap bg-card px-4 py-2 text-muted-foreground">{r.label}</td>
                 {years.map((y, i) => <td key={y} className="px-4 py-2 text-right">{fmt(r.values?.[i])}</td>)}
               </tr>
             ))}
@@ -250,9 +250,9 @@ function FinancialsPanel({ caseId, companyName, documents, financials, onRefresh
       {hasFetched && financials && <FetchedFinancialsCard financials={financials} />}
 
       {annualReports.some(d => d.storage_path?.startsWith("http")) && (
-        <div className="flex items-start gap-3 p-4 rounded-lg border bg-background">
+        <div className="flex flex-wrap items-start gap-3 p-4 rounded-lg border bg-background sm:flex-nowrap">
           <PiBookOpenTextLight className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
+          <div className="min-w-[60%] flex-1">
             <p className="text-sm font-medium">
               {analyseAr.isPending ? "Reading the annual report…" : analysed ? `Annual report ${analysed.fiscal_year ?? ""} analysed` : "Annual report not analysed yet"}
             </p>
@@ -271,7 +271,7 @@ function FinancialsPanel({ caseId, companyName, documents, financials, onRefresh
       )}
 
       {annualReports.length === 0 && !hasFetched && suggestedTicker && !fetchReports.isPending && (
-        <div className="flex items-start gap-3 p-4 bg-primary/5 border border-primary/20 rounded-lg">
+        <div className="flex flex-wrap items-start gap-3 p-4 bg-primary/5 border border-primary/20 rounded-lg sm:flex-nowrap">
           <PiBuildingsLight className="h-5 w-5 text-primary shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium">Listed company detected — {suggestedTicker}</p>
@@ -297,7 +297,7 @@ function FinancialsPanel({ caseId, companyName, documents, financials, onRefresh
         <h4 className="text-sm font-semibold mb-2">{hasFetched ? "Refetch financials" : "Fetch financials (listed companies)"}</h4>
         <div className="flex gap-2">
           <Input placeholder="BSE/NSE Symbol (e.g. RELIANCE)" value={symbol}
-            onChange={e => setSymbol(e.target.value.toUpperCase())} className="max-w-xs"
+            onChange={e => setSymbol(e.target.value.toUpperCase())} className="min-w-0 flex-1 sm:max-w-xs"
             onKeyDown={e => e.key === "Enter" && handleFetch()} />
           <Button onClick={handleFetch} disabled={fetchReports.isPending} variant={suggestedTicker && !hasFetched ? "default" : "outline"}>
             {fetchReports.isPending
@@ -312,10 +312,10 @@ function FinancialsPanel({ caseId, companyName, documents, financials, onRefresh
         <div className="space-y-2">
           <h4 className="text-sm font-semibold">Annual reports</h4>
           {annualReports.map(doc => (
-            <div key={doc.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border">
-              <div className="flex items-center gap-3">
+            <div key={doc.id} className="flex items-center justify-between gap-2 p-3 bg-muted/30 rounded-lg border">
+              <div className="flex min-w-0 items-center gap-3">
                 <PiFileTextLight className="h-5 w-5 text-primary shrink-0" />
-                <div>
+                <div className="min-w-0">
                   {doc.storage_path?.startsWith("http") ? (
                     <a href={doc.storage_path} target="_blank" rel="noreferrer" className="text-sm font-medium hover:underline underline-offset-2">{doc.filename}</a>
                   ) : (
@@ -715,22 +715,23 @@ export default function DataRoomTab({ caseId, companyName, facilityType, initial
   ];
 
   return (
-    <div className="flex h-full">
-      <div className="w-52 shrink-0 border-r bg-muted/10 p-3 space-y-1">
+    <div className="flex h-full flex-col md:flex-row">
+      {/* Phones: panel switcher is a horizontal scroll strip so the panel keeps the full width. */}
+      <div className="flex shrink-0 gap-1 overflow-x-auto border-b bg-muted/10 p-2 md:w-52 md:flex-col md:space-y-1 md:gap-0 md:overflow-visible md:border-b-0 md:border-r md:p-3">
         {panels.map(p => (
           <button key={p.key} onClick={() => setActivePanel(p.key)}
-            className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors text-left ${activePanel === p.key ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}>
+            className={`flex shrink-0 items-center gap-2 whitespace-nowrap px-3 py-2 rounded-md text-sm transition-colors text-left md:w-full ${activePanel === p.key ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}>
             <p.icon className="h-4 w-4 shrink-0" />{p.label}
           </button>
         ))}
         {documents.length > 0 && (
-          <div className="pt-3 px-3 border-t mt-3">
+          <div className="hidden pt-3 px-3 border-t mt-3 md:block">
             <p className="text-xs text-muted-foreground">{documents.length} document{documents.length !== 1 ? "s" : ""} in room</p>
           </div>
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
         {activePanel === "financials" && <FinancialsPanel caseId={caseId} companyName={companyName} documents={documents} financials={extractedData?.financials as FetchedFinancials | undefined} onRefresh={handleRefresh} />}
         {activePanel === "research" && <ResearchPanel caseId={caseId} extractedData={extractedData} onRefresh={handleRefresh} />}
         {activePanel === "group" && (

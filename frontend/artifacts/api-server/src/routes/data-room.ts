@@ -65,7 +65,7 @@ router.post("/:id/data-room/fetch-reports", async (req, res) => {
   if (!c) return res.status(404).json({ error: "Case not found" });
 
   if (!await wakePython()) {
-    return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds." });
+    return res.status(503).json({ error: "AI engine is starting up. Please try again in a minute.", code: "upstream_unavailable" });
   }
 
   let pyRes: Response;
@@ -263,7 +263,7 @@ router.post("/:id/data-room/run-research", async (req, res) => {
   if (!c) return res.status(404).json({ error: "Case not found" });
 
   if (!await wakePython()) {
-    return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds." });
+    return res.status(503).json({ error: "AI engine is starting up. Please try again in a minute.", code: "upstream_unavailable" });
   }
 
   let pyRes: Response;

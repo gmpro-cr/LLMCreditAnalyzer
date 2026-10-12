@@ -408,3 +408,17 @@
 .memo-doc.prose a { color: hsl(var(--primary)); }
 .memo-doc.prose table { font-size: 0.78rem; }
 .memo-doc.prose figure { font-family: var(--app-font-sans); }
+
+/* Phones: tighter document measure, shallow list indents, and wide tables
+   keep their line-item column pinned while the years scroll. */
+@media (max-width: 639px) {
+  .memo-doc.prose { font-size: 0.9375rem; line-height: 1.6; }
+  .memo-doc.prose ul, .memo-doc.prose ol { padding-left: 1.1rem; }
+  .memo-doc.prose li { padding-left: 0.15rem; }
+  .prose .table-scroll { margin-left: -1rem; margin-right: -1rem; }
+  .prose .table-scroll > table { border-left: 0; border-right: 0; }
+  .prose .table-scroll td:first-child, .prose .table-scroll th:first-child {
+    position: sticky; left: 0; z-index: 1; background: hsl(var(--card)); min-width: 7.5rem; max-width: 9.5rem;
+  }
+  .prose .table-scroll thead th:first-child { background: hsl(var(--muted)); }
+}

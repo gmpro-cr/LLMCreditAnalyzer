@@ -10,9 +10,18 @@ name: keep-warm
 # API warm never touched the database, so it kept idling. GitHub throttles this
 # cron to hours in practice — irrelevant against a 7-day window.
 
+# Render's free plan gives 750 instance hours a month per workspace, shared by
+# both services. Warm 24/7 they need ~1,490 h and get suspended mid-month, so
+# keep them warm only during Indian banking hours: 08:30–21:00 IST (03:00–15:30
+# UTC), Monday–Saturday ≈ 650 h/month. Outside these hours the app still works;
+# the first request waits for a cold start (wakePython).
+#
+# Was disabled on 2026-08-08 during the Supabase outage and never re-enabled, so
+# the engine slept all day and a Hindustan Unilever fetch failed on 2026-10-12.
+
 on:
   schedule:
-    - cron: "*/10 * * * *" # every 10 minutes
+    - cron: "*/10 3-15 * * 1-6" # every 10 min, 03:00–15:59 UTC, Mon–Sat
   workflow_dispatch: {} # allow manual runs from the Actions tab
 
 jobs:

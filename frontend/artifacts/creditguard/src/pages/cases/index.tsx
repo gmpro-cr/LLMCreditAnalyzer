@@ -107,8 +107,8 @@ export default function CasesList() {
           <Button onClick={() => setLocation("/cases/new")}>New case</Button>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-4 shrink-0">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 shrink-0">
+          <div className="relative w-full flex-1 sm:max-w-md">
             <PiMagnifyingGlassLight className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search borrower, RM or PAN"
@@ -119,7 +119,7 @@ export default function CasesList() {
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <Select value={statusFilter} onValueChange={handleStatusChange}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <PiFunnelLight className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -139,28 +139,28 @@ export default function CasesList() {
             <table className="w-full caption-bottom text-sm">
               <thead className="bg-muted text-xs text-muted-foreground">
                 <tr className="border-b border-border">
-                  <th className="h-10 px-4 text-left font-medium">Reference</th>
+                  <th className="h-10 px-4 text-left font-medium hidden md:table-cell">Reference</th>
                   <th className="h-10 px-4 text-left font-medium">Borrower</th>
-                  <th className="h-10 px-4 text-left font-medium">Facility</th>
-                  <th className="h-10 px-4 text-right font-medium">Amount</th>
+                  <th className="h-10 px-4 text-left font-medium hidden md:table-cell">Facility</th>
+                  <th className="h-10 px-4 text-right font-medium hidden md:table-cell">Amount</th>
                   <th className="h-10 px-4 text-left font-medium">Status</th>
-                  <th className="h-10 px-4 text-right font-medium">Sections reviewed</th>
-                  <th className="h-10 px-4 text-left font-medium">RM</th>
-                  <th className="h-10 px-4 text-left font-medium">Opened</th>
-                  <th className="h-10 w-[50px] px-4"><span className="sr-only">Actions</span></th>
+                  <th className="h-10 px-4 text-right font-medium hidden md:table-cell">Sections reviewed</th>
+                  <th className="h-10 px-4 text-left font-medium hidden md:table-cell">RM</th>
+                  <th className="h-10 px-4 text-left font-medium hidden md:table-cell">Opened</th>
+                  <th className="h-10 w-[50px] px-2 md:px-4"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="[&_tr:last-child]:border-0">
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="border-b transition-colors">
-                      <td className="p-4 align-middle"><Skeleton className="h-5 w-[200px]" /></td>
+                      <td className="p-4 align-middle"><Skeleton className="h-5 w-[160px] md:w-[200px]" /></td>
                       <td className="p-4 align-middle"><Skeleton className="h-5 w-[120px]" /></td>
-                      <td className="p-4 align-middle text-right"><Skeleton className="h-5 w-[100px] ml-auto" /></td>
+                      <td className="p-4 align-middle text-right hidden md:table-cell"><Skeleton className="h-5 w-[100px] ml-auto" /></td>
                       <td className="p-4 align-middle"><Skeleton className="h-6 w-[80px] rounded-full" /></td>
-                      <td className="p-4 align-middle"><Skeleton className="h-2 w-[100px]" /></td>
+                      <td className="p-4 align-middle hidden md:table-cell"><Skeleton className="h-2 w-[100px]" /></td>
                       <td className="p-4 align-middle"><Skeleton className="h-5 w-[120px]" /></td>
-                      <td className="p-4 align-middle"><Skeleton className="h-5 w-[80px]" /></td>
+                      <td className="p-4 align-middle hidden md:table-cell"><Skeleton className="h-5 w-[80px]" /></td>
                       <td className="p-4 align-middle"><Skeleton className="h-8 w-8 rounded-md" /></td>
                     </tr>
                   ))
@@ -185,18 +185,22 @@ export default function CasesList() {
                       className="group cursor-pointer border-b border-border/70 transition-colors hover:bg-muted/60"
                       onClick={() => setLocation(`/cases/${c.id}`)}
                     >
-                      <td className="whitespace-nowrap px-4 py-3 align-middle font-mono text-xs text-muted-foreground">{caseRef(c.id, c.createdAt)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 align-middle font-mono text-xs text-muted-foreground hidden md:table-cell">{caseRef(c.id, c.createdAt)}</td>
                       <td className="px-4 py-3 align-middle">
                         <a href={`/cases/${c.id}`} onClick={(e) => { e.preventDefault(); setLocation(`/cases/${c.id}`); }} className="font-medium text-foreground hover:text-primary">{c.borrowerName}</a>
                         <div className="mt-0.5 text-xs text-muted-foreground">{c.sector}</div>
+                        {/* Phones: the hidden columns collapse into this line. */}
+                        <div className="mt-1 text-xs text-muted-foreground md:hidden">
+                          <span className="font-mono">{caseRef(c.id, c.createdAt)}</span> · {facilityLabel(c.facilityType)} <span className="whitespace-nowrap tabular-nums text-foreground">{formatCr(c.facilityAmount)}</span>
+                        </div>
                       </td>
-                      <td className="px-4 py-3 align-middle text-muted-foreground">{facilityLabel(c.facilityType)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right align-middle tabular-nums">{formatCr(c.facilityAmount)}</td>
+                      <td className="px-4 py-3 align-middle text-muted-foreground hidden md:table-cell">{facilityLabel(c.facilityType)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right align-middle tabular-nums hidden md:table-cell">{formatCr(c.facilityAmount)}</td>
                       <td className="px-4 py-3 align-middle"><StatusChip status={c.status} /></td>
-                      <td className="px-4 py-3 text-right align-middle text-xs tabular-nums text-muted-foreground">{c.memoProgress}%</td>
-                      <td className="px-4 py-3 align-middle text-muted-foreground">{c.rmName}</td>
-                      <td className="whitespace-nowrap px-4 py-3 align-middle text-muted-foreground">{formatDate(c.createdAt)}</td>
-                      <td className="px-4 py-3 align-middle" onClick={e => e.stopPropagation()}>
+                      <td className="px-4 py-3 text-right align-middle text-xs tabular-nums text-muted-foreground hidden md:table-cell">{c.memoProgress}%</td>
+                      <td className="px-4 py-3 align-middle text-muted-foreground hidden md:table-cell">{c.rmName}</td>
+                      <td className="whitespace-nowrap px-4 py-3 align-middle text-muted-foreground hidden md:table-cell">{formatDate(c.createdAt)}</td>
+                      <td className="px-2 py-3 align-middle md:px-4" onClick={e => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="h-8 w-8 p-0 opacity-60 transition-opacity group-hover:opacity-100 focus-visible:opacity-100">

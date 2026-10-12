@@ -137,3 +137,22 @@ def test_figure_audit_ignores_numbers_of_other_ratios():
     r = {"debt_equity": 0.76, "dscr": 2.9}
     assert audit_memo_figures("covenants on TOL/TNW, Debt/Equity, DSCR (2.90x) and ICR", r) == []
     assert audit_memo_figures("Debt/Equity stood at 1.90x", r)  # a real mismatch still flags
+
+
+def test_negative_working_capital_cycle_is_not_weak_liquidity():
+    import copy
+    deep = copy.deepcopy(DEEP)
+    r = deep["rows"]
+    r["cash_conversion_cycle"] = [-60, -62, -70, -72, -89]
+    r["st_borrowings"] = [0] * 5
+    r["trade_payables"] = [600, 650, 700, 760, 800]    # current ratio < 1
+    r["lt_borrowings"] = [20] * 5
+    r["borrowings"] = [30] * 5
+    c = cma.build(deep, FAC)
+    assert c["actuals"][-1]["current_ratio"] < 1
+    assert c["assessment"]["liquidity"]["rating"] == "Strong"
+    assert "Negative cash-conversion cycle" in c["assessment"]["liquidity"]["basis"]
+
+
+def test_zero_amount_reads_nil():
+    assert cam_v2.fa(0) == "Nil" and cam_v2.fa(0.0) == "Nil" and cam_v2.fa(None) == "—"

@@ -18,29 +18,38 @@ export function internalHeaders(extra?: Record<string, string>): Record<string, 
 /**
  * Wake the Render free-tier engine and return once it answers /health.
  *
- * IMPORTANT: each ping uses a long timeout. When the service is asleep Render
- * holds the inbound request open while the instance cold-starts (~30-50s) and
- * only then returns 200. A short per-ping timeout aborts before the wake
- * completes, so the service never finishes spinning up and the caller 503s.
+ * One wake attempt is shared by every caller in this process. The case page,
+ * the Data Room and the client's own retries each used to run a wake loop at
+ * once; against a sleeping service that flood drew "429 Too Many Requests"
+ * from Render and the instance never came up (Hindustan Unilever, 2026-10-12).
+ *
+ * Each ping is held open long (Render holds the request during spin-up and
+ * answers once ready). A 429 means "back off": wait, then try again.
  */
-export async function wakePython(maxMs = 120_000): Promise<boolean> {
-  // Hold a SINGLE request open across the whole cold start. Render keeps the
-  // connection during spin-up (~40-90s, occasionally more) and returns 200 once
-  // ready. Short per-ping timeouts that abort mid-wake can reset Render's
-  // spin-up, so we use one long-held attempt that spans the budget, then a brief
-  // retry only if time remains.
+let inflight: Promise<boolean> | null = null;
+
+export function wakePython(maxMs = 150_000): Promise<boolean> {
+  if (!inflight) {
+    inflight = doWake(maxMs).finally(() => { inflight = null; });
+  }
+  return inflight;
+}
+
+async function doWake(maxMs: number): Promise<boolean> {
   const deadline = Date.now() + maxMs;
+  let backoff = 3_000;
   while (Date.now() < deadline) {
     const remaining = deadline - Date.now();
     try {
       const ping = await fetch(`${PYTHON_URL()}/health`, {
-        signal: AbortSignal.timeout(Math.max(5_000, remaining - 1_000)),
+        signal: AbortSignal.timeout(Math.max(5_000, Math.min(remaining - 1_000, 90_000))),
       });
       if (ping.ok) return true;
+      if (ping.status === 429) backoff = Math.min(backoff * 2, 20_000);
     } catch {
       /* timed out / connection failed — retry if budget remains */
     }
-    await new Promise((r) => setTimeout(r, 2_000));
+    await new Promise((r) => setTimeout(r, Math.min(backoff, Math.max(0, deadline - Date.now()))));
   }
   return false;
 }

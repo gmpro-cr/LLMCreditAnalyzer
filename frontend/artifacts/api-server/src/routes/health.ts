@@ -45,6 +45,7 @@ router.get("/python-wake", async (_req, res) => {
 // Wakeup probe for the Python engine — called at app load to warm up the
 // Render free-tier instance before the user tries to generate a memo.
 router.get("/python-health", async (_req, res) => {
+  // Report only — never a second wake loop alongside wakePython().
   try {
     const resp = await fetch(`${PYTHON_URL()}/health`, {
       signal: AbortSignal.timeout(10000),

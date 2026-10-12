@@ -137,8 +137,12 @@ def project(act: List[Dict[str, Any]], fac: Dict[str, Any], years: int = 2) -> D
     payout = min((sum(payouts) / len(payouts) / 100) if payouts else 0.3, 0.9)
     debts = [a["total_debt"] for a in act[-2:] if a["total_debt"]]
     avg_debt = sum(debts) / len(debts) if debts else None
+    # Effective finance-cost rate: reported finance costs include lease and other
+    # finance charges, so on a lightly-borrowed balance sheet the implied rate is
+    # high (HUL FY26 ~26%). Capping it at 16% halved projected interest; 30% keeps
+    # the projection close to the reported run-rate.
     rate = (last["interest"] / avg_debt) if last["interest"] and avg_debt else fac["rate_pct"] / 100
-    rate = min(max(rate, 0.04), 0.16)
+    rate = min(max(rate, 0.04), 0.30)
 
     term0 = last["term_debt"] or 0.0
     st = last["st_debt"] or 0.0
@@ -223,6 +227,10 @@ def assess(act: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     de, ds, tt = last["debt_ebitda"] or 99, last.get("dscr") or 0, last["tol_tnw"] or 99
     cr = last["current_ratio"] or 0
     cfo_pos = all((a["cfo"] or 0) > 0 for a in act[-3:])
+    ccc = last.get("ccc")
+    # A negative cash-conversion cycle (suppliers fund the business — FMCG) makes a
+    # sub-1x current ratio structural rather than a liquidity weakness.
+    negative_wc = ccc is not None and ccc < 0 and cfo_pos and (last["debt_ebitda"] or 99) < 1.0
     return {
         "sales": {"rating": _band(c >= 10 and (last["sales_growth"] or 0) >= 0, c >= 0),
                   "basis": f"3-yr sales CAGR {c:.1f}%, latest YoY {last['sales_growth'] or 0:.1f}%"},
@@ -234,9 +242,14 @@ def assess(act: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         "leverage": {"rating": _band(de <= 2 and ds >= 1.5 and tt <= 1.5, de <= 3.5 and ds >= 1.25 and tt <= 3),
                      "basis": f"Total debt/EBITDA {de:.2f}x, pro forma DSCR {ds:.2f}x, TOL/TNW {tt:.2f}x"},
         # Bank bands: >= 1.33x (Tandon II benchmark) strong, >= 1.0x moderate.
-        "liquidity": {"rating": _band(cr >= 1.33 and cfo_pos, cr >= 1.0 and cfo_pos),
-                      "basis": f"Current ratio {cr:.2f}x (approx., Screener classification); operating cash "
-                               f"flow {'positive in each' if cfo_pos else 'negative in at least one'} of the last 3 years"},
+        "liquidity": ({"rating": "Strong",
+                       "basis": f"Negative cash-conversion cycle ({ccc:.0f} days) — suppliers fund working capital; "
+                                f"current ratio {cr:.2f}x is structural; operating cash flow positive in each of the last 3 years; "
+                                f"debt/EBITDA {last['debt_ebitda']:.2f}x"}
+                      if negative_wc else
+                      {"rating": _band(cr >= 1.33 and cfo_pos, cr >= 1.0 and cfo_pos),
+                       "basis": f"Current ratio {cr:.2f}x (approx., Screener classification); operating cash "
+                                f"flow {'positive in each' if cfo_pos else 'negative in at least one'} of the last 3 years"}),
     }
 
 

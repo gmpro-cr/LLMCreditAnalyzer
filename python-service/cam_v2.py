@@ -85,6 +85,8 @@ def fa(v) -> str:
     n = as_number(v)
     if n is None:
         return "—"
+    if n == 0:
+        return "Nil"
     if abs(n) >= 100:
         return _inr(n)
     return f"{n:,.1f}" if abs(n) >= 1 or n == 0 else f"{n:,.2f}"
@@ -285,8 +287,9 @@ def assumptions_md(ctx: Dict[str, Any]) -> str:
         f"(3-yr average), tax {fp(a.get('tax_rate_pct'))}, dividend payout {fp(a.get('dividend_payout_pct'))}; "
         f"other income and exceptional items excluded.",
         f"Debt: existing term debt of ₹{fa(a.get('existing_term_debt_cr'))} Cr assumed to amortise over "
-        f"{EXISTING_DEBT_AMORT_YEARS} years (₹{fa(a.get('existing_principal_pa_cr'))} Cr p.a.); short-term/WC lines "
-        f"of ₹{fa(a.get('wc_lines_cr'))} Cr assumed to roll over; blended interest cost {fp(a.get('interest_rate_pct'), 2)}.",
+        f"{EXISTING_DEBT_AMORT_YEARS} years (₹{fa(a.get('existing_principal_pa_cr'))} Cr p.a.); "
+        + (f"short-term/WC lines of ₹{fa(a.get('wc_lines_cr'))} Cr assumed to roll over; " if a.get('wc_lines_cr') else "no short-term/WC borrowings; ")
+        + f"effective finance-cost rate {fp(a.get('interest_rate_pct'), 2)} (reported finance costs incl. lease and other charges ÷ average debt).",
         (f"Proposed {fac['type'].replace('_', ' ')} of ₹{fac['amount_cr']:,.2f} Cr drawn at the start of the first "
          f"projected year and repaid ₹{fac['annual_principal']:,.2f} Cr p.a."
          + ("" if fac["tenor_from_rm"] else f" (indicative {fac['tenor_years']}-year tenor — {RM} actual tenor)"))
@@ -775,6 +778,7 @@ RULES = """WRITING RULES (a bank credit committee reads this):
 - Account conduct, CIBIL/CRILC status, defaults and wilful-defaulter status come ONLY from RM INPUTS or from the
   auditor's CARO confirmations (cite them as "per the statutory auditor's CARO report"); otherwise write
   "[RM to provide: ...]". Never state on your own that conduct is satisfactory or that there is no default history.
+- Zero amounts are "nil" in prose, never "₹0.0 Cr".
 - The current ratio is APPROXIMATE (Screener's classification of current items): describe it as "tight on an
   approximate classification, to be verified from the audited balance sheet" — never as a covenant breach.
 - Annual-report notes are often in ₹ million: convert to ₹ crore (divide by 10) before quoting.
@@ -1057,7 +1061,9 @@ def generate(financials: Dict[str, Any], company: str, research: str = "", rm: D
         # amounts in a sentence about the PROPOSED facility can be mis-scaled copies.
         issues = [i for i in (audit_facility_amounts(prose.get(k, ""), fac_cr) if uses_llm else [])
                   if re.search(r"propos|this facility|the facility|this loan|the loan", i.get("excerpt", ""), re.I)
-                  and not re.search(r"existing|sanctioned|limit|total|system|aggregate|consolidated", i.get("excerpt", ""), re.I)]
+                  and not re.search(r"existing|sanctioned|limit|total|system|aggregate|consolidated|"
+                                    r"capex|capital expenditure|plant|manufactur|factory|capacity|acqui|invest",
+                                    i.get("excerpt", ""), re.I)]
         if issues:
             content += ("\n\n**Automated check:** this section cites "
                         + ", ".join(f"₹{i['stated_cr']:,.2f} Cr" for i in issues)

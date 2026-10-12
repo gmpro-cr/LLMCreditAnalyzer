@@ -104,7 +104,7 @@ function SectionSheet({
   return (
     <article
       id={`section-${section.sectionKey}`}
-      className="scroll-mt-24 rounded border border-border bg-card px-6 pb-7 pt-6 shadow-[0_1px_2px_hsl(212_43%_13%/0.06)] sm:px-12 sm:pt-9"
+      className="scroll-mt-24 rounded border border-border bg-card px-4 pb-6 pt-5 shadow-[0_1px_2px_hsl(212_43%_13%/0.06)] sm:px-12 sm:pt-9"
     >
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span>Section {index} of {total}</span>
