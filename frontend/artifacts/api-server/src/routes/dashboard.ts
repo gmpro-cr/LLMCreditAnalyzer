@@ -11,7 +11,7 @@ const router = Router();
 // 503 `database_unavailable`.
 
 router.get("/stats", async (_req, res) => {
-  const { data: allCases, error } = await supabase.from("cases").select("status, updated_at");
+  const { data: allCases, error } = await supabase.from("cases").select("status, updated_at, facility_amount");
   if (error) throw error;
   const cases = allCases ?? [];
   const now = new Date();
@@ -22,8 +22,10 @@ router.get("/stats", async (_req, res) => {
     draftsInProgress: cases.filter((c) => c.status === "draft").length,
     pendingReview: cases.filter((c) => c.status === "in_review").length,
     approvedThisMonth: cases.filter((c) => c.status === "approved" && new Date(c.updated_at) >= startOfMonth).length,
-    avgDraftTimeHours: 2.3,
-    timeSavedHours: cases.length * 6.2,
+    // Real figures only. The former avgDraftTimeHours (a constant 2.3) and
+    // timeSavedHours (cases × 6.2) were invented and are gone.
+    proposedExposureCr: Math.round(cases.reduce((s, c) => s + Number(c.facility_amount || 0), 0) / 1e5) / 100,
+    rejected: cases.filter((c) => c.status === "rejected").length,
   });
 });
 

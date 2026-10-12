@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listSections, updateSection, bulkUpdateSections, insertSections, listRiskFlags, replaceRiskFlags, insertActivity, updateCase, getCase, getCaseExtractedData, listCaseDocuments, nullIfMissing } from "../lib/supabase-db.js";
+import { listSections, updateSection, bulkUpdateSections, insertSections, listRiskFlags, replaceRiskFlags, insertActivity, updateCase, getCase, getCaseExtractedData, listCaseDocuments, insertCaseDocument, updateCaseDocument, supabase, nullIfMissing } from "../lib/supabase-db.js";
 import { MEMO_SECTIONS, sortSections, blankSectionRows } from "../lib/sections.js";
 import { PYTHON_URL, internalHeaders, wakePython } from "../lib/python.js";
 import { ListSectionsParams, UpdateSectionBody, GenerateMemoParams, ListRiskFlagsParams } from "@workspace/api-zod";
@@ -186,6 +186,20 @@ router.post("/:id/generate", async (req, res) => {
         const sec = camSections[k] as { ai_generated?: boolean; drafted?: boolean } | undefined;
         return !!sec?.ai_generated && !sec.drafted;
       });
+      // Workspace summary (headline figures, sources, open RM items) — stored as
+      // its own Data Room row like rm_inputs, so no schema change is needed.
+      const meta = {
+        ...((camSections["_summary"] as Record<string, unknown>) || {}),
+        info_requests: camSections["_info_requests"] ?? [],
+        generated_at: new Date().toISOString(),
+      };
+      try {
+        const metaDoc = docs.find((d) => d.doc_type === "cam_meta");
+        if (metaDoc) await updateCaseDocument(Number(metaDoc.id), { extracted_data: meta });
+        else await insertCaseDocument({ case_id: id, doc_type: "cam_meta", filename: "CAM summary", storage_path: "", fiscal_year: null, extracted_data: meta, source: "engine" });
+      } catch (e) {
+        console.error("[generate] could not save CAM summary:", e);
+      }
       const flags = Array.isArray(camSections["_risk_flags"]) ? camSections["_risk_flags"] as Record<string, unknown>[] : [];
       await replaceRiskFlags(id, flags.map((f) => ({
         case_id: id,
@@ -258,6 +272,19 @@ router.post("/:id/generate", async (req, res) => {
   await insertActivity({ case_id: id, borrower_name: c.borrower_name, action: failedSections.length ? `AI generation completed — ${failedSections.length} section(s) not drafted` : "AI generation completed — all sections drafted", actor: "CreditGuard AI" });
 
   return res.json({ message: "Memo generated successfully", caseId: id, failedSections });
+});
+
+// Case workspace: CAM summary (figures, sources, open items) + this case's audit trail.
+router.get("/:id/workspace", async (req, res) => {
+  const id = Number(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid case id" });
+  const [docs, activity] = await Promise.all([
+    listCaseDocuments(id),
+    supabase.from("activity_log").select("action, actor, timestamp").eq("case_id", id).order("timestamp", { ascending: false }).limit(12),
+  ]);
+  if (activity.error) throw activity.error;
+  const meta = docs.find((d: Record<string, unknown>) => d.doc_type === "cam_meta");
+  return res.json({ summary: (meta?.extracted_data as Record<string, unknown>) ?? null, activity: activity.data ?? [] });
 });
 
 router.get("/:id/risk-flags", async (req, res) => {

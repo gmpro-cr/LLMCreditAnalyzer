@@ -946,6 +946,46 @@ def compose(ctx: Dict[str, Any], prose: Dict[str, str]) -> Dict[str, str]:
     return {k: to_crore_text("\n\n".join(x for x in parts if x and str(x).strip())) for k, parts in s.items()}
 
 
+def summary(ctx: Dict[str, Any]) -> Dict[str, Any]:
+    """Headline figures, provenance and open items for the case workspace UI.
+    Same numbers as the memo (one source: cma.py)."""
+    cm, ar, deep = ctx["cma"], ctx["ar"], ctx["deep"] or {}
+    a = (cm.get("actuals") or [{}])[-1]
+    asmt = cm.get("assessment") or {}
+    sc = ctx.get("scorecard") or {}
+    sources = []
+    if deep.get("years"):
+        sources.append({"label": f"Screener.in — {cm['basis'].lower()} statements, {len(deep['years'])} years"
+                                 + (f" + {len(((deep.get('quarters') or {}).get('periods') or [])[-5:])} quarters" if deep.get('quarters') else ""),
+                        "url": deep.get("url")})
+    if ar.get("topics"):
+        pages = sorted({p for v in (ar.get("pages_used") or {}).values() for p in v})
+        sources.append({"label": f"Annual report {ar.get('fiscal_year') or ''} (BSE filing)"
+                                 + (f" — pp. {', '.join(str(p) for p in pages[:8])}" if pages else ""),
+                        "url": ar.get("source_url")})
+    if ctx.get("research"):
+        sources.append({"label": "Web research brief", "url": None})
+    if ctx["fin"].get("peers"):
+        sources.append({"label": "Screener.in peer comparison (latest quarter)", "url": None})
+    return {
+        "basis": cm["basis"],
+        "year": _fy(a.get("year")),
+        "metrics": {k: a.get(k) for k in ("sales", "sales_growth", "ebitda_margin", "pat", "net_worth", "total_debt",
+                                          "debt_ebitda", "tol_tnw", "dscr", "icr", "current_ratio")},
+        "ebitda_margin_avg3": round(sum(x["ebitda_margin"] for x in (cm.get("actuals") or [])[-3:] if x.get("ebitda_margin") is not None)
+                                    / max(1, len([x for x in (cm.get("actuals") or [])[-3:] if x.get("ebitda_margin") is not None])), 1)
+                              if cm.get("actuals") else None,
+        "rating": rating_summary(ar) or None,
+        "grade": sc.get("grade") if sc.get("rated") else None,
+        "grade_score": sc.get("score") if sc.get("rated") else None,
+        "assessment": {k: v.get("rating") for k, v in asmt.items()},
+        "facility": cm["facility"],
+        "sources": sources,
+        "group_entities": len((ctx.get("group") or {}).get("entities") or []),
+        "group_verified": bool((ctx.get("group") or {}).get("verified")),
+    }
+
+
 def build_ctx(financials: Dict[str, Any], company: str, research: str, rm: Dict[str, Any],
               ar: Dict[str, Any], group: Dict[str, Any], sector: str = "") -> Dict[str, Any]:
     deep = financials.get("deep") or {}
@@ -1038,4 +1078,5 @@ def generate(financials: Dict[str, Any], company: str, research: str = "", rm: D
         out["_credit_rating"] = ctx.get("scorecard") or {}
         out["_info_requests"] = [{"priority": p, "item": i, "why": w} for p, i, w in info_requests(ctx)]
         out["_section_order"] = [{"key": k, "title": t} for k, t, _u in SECTIONS]
+        out["_summary"] = summary(ctx)
     return out
