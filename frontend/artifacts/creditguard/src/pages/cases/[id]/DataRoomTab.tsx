@@ -124,6 +124,8 @@ type FetchedFinancials = {
   source?: string;
   screener_url?: string;
   profit_loss?: { years?: string[]; revenue?: number[]; ebitda?: number[]; pat?: number[] };
+  // The deep spread the detailed CAM is built from (screener_deep.py).
+  deep?: { basis?: string; url?: string; years?: string[]; rows?: Record<string, (number | null)[]> };
 };
 
 /** True when the case has financials the memo generator can use — mirrors the
@@ -139,43 +141,51 @@ const formatCr = (v: number | undefined) =>
   typeof v === "number" ? `₹${v.toLocaleString("en-IN")} Cr` : "—";
 
 function FetchedFinancialsCard({ financials }: { financials: FetchedFinancials }) {
-  const pl = financials.profit_loss;
-  const years = pl?.years ?? [];
+  // Show what the CAM actually uses: the 5-year deep spread when present.
+  const deep = financials.deep?.years?.length ? financials.deep : null;
+  const years = deep ? deep.years! : financials.profit_loss?.years ?? [];
   if (years.length === 0) return null;
-  const rows: { label: string; values?: number[] }[] = [
-    { label: "Revenue", values: pl?.revenue },
-    { label: "EBITDA", values: pl?.ebitda },
-    { label: "PAT", values: pl?.pat },
-  ];
+  const pl = financials.profit_loss;
+  const rows: { label: string; values?: (number | null | undefined)[] }[] = deep
+    ? [
+        { label: "Revenue", values: deep.rows?.sales },
+        { label: "EBITDA", values: deep.rows?.ebitda },
+        { label: "PAT", values: deep.rows?.pat },
+        { label: "Total debt", values: deep.rows?.borrowings },
+        { label: "Net worth", values: deep.rows?.net_worth },
+      ]
+    : [{ label: "Revenue", values: pl?.revenue }, { label: "EBITDA", values: pl?.ebitda }, { label: "PAT", values: pl?.pat }];
+  const fmt = (v?: number | null) => (typeof v === "number" ? v.toLocaleString("en-IN", { maximumFractionDigits: 0 }) : "—");
+  const fy = (y: string) => { const m = y.match(/(\d{4})/); return m ? `FY${m[1].slice(2)}` : y; };
   return (
-    <div className="rounded-lg border bg-background">
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <div className="flex items-center gap-2">
-          <PiCheckCircleLight className="h-4 w-4 text-emerald-600" />
-          <p className="text-sm font-medium">Financials ready · {years.length} years</p>
-        </div>
-        {financials.screener_url && (
-          <a href={financials.screener_url} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
-            Source: Screener.in
-          </a>
+    <div className="rounded border border-border bg-card">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-3">
+        <p className="text-sm font-semibold">
+          {deep ? `${deep.basis ?? "Consolidated"} financials · ${years.length} years` : `Financials · ${years.length} years`}
+          <span className="ml-2 font-normal text-muted-foreground">₹ Cr</span>
+        </p>
+        {(deep?.url || financials.screener_url) && (
+          <a href={deep?.url || financials.screener_url} target="_blank" rel="noreferrer" className="text-xs">Source: Screener.in</a>
         )}
       </div>
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-xs text-muted-foreground">
-            <th className="text-left font-normal px-4 py-2" />
-            {years.map(y => <th key={y} className="text-right font-normal px-4 py-2">{y}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(r => (
-            <tr key={r.label} className="border-t">
-              <td className="px-4 py-2 text-muted-foreground">{r.label}</td>
-              {years.map((y, i) => <td key={y} className="px-4 py-2 text-right tabular-nums">{formatCr(r.values?.[i])}</td>)}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm tabular-nums">
+          <thead>
+            <tr className="bg-muted text-xs text-muted-foreground">
+              <th className="px-4 py-2 text-left font-medium"><span className="sr-only">Line item</span></th>
+              {years.map((y) => <th key={y} className="px-4 py-2 text-right font-medium">{fy(y)}</th>)}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.label} className="border-t border-border/70">
+                <td className="px-4 py-2 text-muted-foreground">{r.label}</td>
+                {years.map((y, i) => <td key={y} className="px-4 py-2 text-right">{fmt(r.values?.[i])}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -265,7 +275,7 @@ function FinancialsPanel({ caseId, companyName, documents, financials, onRefresh
           <PiBuildingsLight className="h-5 w-5 text-primary shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium">Listed company detected — {suggestedTicker}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Pull the last 3 years of financials automatically.</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Pull five years of financials and the latest annual report automatically.</p>
           </div>
           <Button size="sm" onClick={handleFetch}>
             <PiMagnifyingGlassLight className="mr-2 h-3.5 w-3.5" /> Fetch Now
@@ -295,7 +305,7 @@ function FinancialsPanel({ caseId, companyName, documents, financials, onRefresh
               : <><PiMagnifyingGlassLight className="mr-2 h-4 w-4" /> {hasFetched ? "Refetch" : "Fetch"}</>}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground mt-1">Pulls 3 years of P&amp;L, balance sheet and cash flow by NSE/BSE symbol. Unlisted borrower? Upload statements below.</p>
+        <p className="text-xs text-muted-foreground mt-1">Pulls five years of consolidated statements, quarterly results, shareholding and peers by NSE/BSE symbol, then reads the latest annual report. Unlisted borrower? Upload statements below.</p>
       </div>
 
       {annualReports.length > 0 && (
@@ -669,12 +679,15 @@ function SummaryPanel({ completeness, documents, extractedData }: {
 
 // ── Main DataRoomTab ───────────────────────────────────────────────────────
 
-type DataRoomPanel = "financials" | "research" | "group" | "rm" | "documents" | "summary";
+export type DataRoomPanel = "financials" | "research" | "group" | "rm" | "documents" | "summary";
 
 const WC_TYPES = ["working_capital", "cash_credit", "overdraft", "wc", "cc", "od"];
 
-export default function DataRoomTab({ caseId, companyName, facilityType }: { caseId: number; companyName: string; facilityType?: string }) {
-  const [activePanel, setActivePanel] = useState<DataRoomPanel>("financials");
+export default function DataRoomTab({ caseId, companyName, facilityType, initialPanel = "financials" }: {
+  caseId: number; companyName: string; facilityType?: string; initialPanel?: DataRoomPanel;
+}) {
+  const [activePanel, setActivePanel] = useState<DataRoomPanel>(initialPanel);
+  useEffect(() => setActivePanel(initialPanel), [initialPanel]);
   const queryClient = useQueryClient();
   const { data, isLoading, refetch } = useGetDataRoom(caseId);
 

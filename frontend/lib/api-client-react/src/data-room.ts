@@ -204,3 +204,47 @@ export const useSaveGroupStructure = () =>
         headers: { "Content-Type": "application/json" },
       }),
   });
+
+// ── Case workspace: CAM summary + audit trail ─────────────────────────────
+
+export interface CamSummary {
+  basis?: string;
+  year?: string;
+  metrics?: Record<string, number | null>;
+  ebitda_margin_avg3?: number | null;
+  rating?: string | null;
+  grade?: string | null;
+  grade_score?: number | null;
+  assessment?: Record<string, string>;
+  sources?: { label: string; url?: string | null }[];
+  info_requests?: { priority: string; item: string; why: string }[];
+  group_entities?: number;
+  group_verified?: boolean;
+  generated_at?: string;
+}
+
+export interface CaseWorkspace {
+  summary: CamSummary | null;
+  activity: { action: string; actor: string; timestamp: string }[];
+}
+
+export const getCaseWorkspaceQueryKey = (caseId: number) => ["caseWorkspace", caseId] as const;
+
+export const useGetCaseWorkspace = (caseId: number) =>
+  useQuery({
+    queryKey: getCaseWorkspaceQueryKey(caseId),
+    queryFn: () => customFetch<CaseWorkspace>(`/api/cases/${caseId}/workspace`),
+    enabled: !!caseId,
+  });
+
+// ── Risk flag review (acknowledgement + mitigation) ──────────────────────
+
+export const useUpdateRiskFlag = () =>
+  useMutation({
+    mutationFn: ({ caseId, flagId, isAcknowledged, mitigation }: { caseId: number; flagId: number; isAcknowledged?: boolean; mitigation?: string }) =>
+      customFetch<{ id: number; isAcknowledged: boolean; mitigation: string | null }>(`/api/cases/${caseId}/risk-flags/${flagId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isAcknowledged, mitigation }),
+        headers: { "Content-Type": "application/json" },
+      }),
+  });

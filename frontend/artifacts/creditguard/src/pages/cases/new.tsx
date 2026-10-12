@@ -305,9 +305,9 @@ export default function NewCase() {
           <span className="sr-only">Back</span>
         </Link>
         <div>
-          <h1 className="text-3xl tracking-[-0.02em]">New CAM Request</h1>
+          <h1 className="text-[32px] leading-tight">New case</h1>
           <p className="text-muted-foreground mt-1">
-            Provide initial parameters to generate the draft memo.
+            Identify the borrower and the proposed facility. Financials and filings are fetched in the next step.
           </p>
         </div>
       </div>
@@ -316,7 +316,7 @@ export default function NewCase() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <PiGlobeLight className="h-4 w-4 text-primary" />
-            Lookup from Public Sources
+            Find a listed company
             <Badge variant="outline" className="ml-2 text-[10px] py-0">NSE / BSE</Badge>
           </CardTitle>
           <CardDescription>
@@ -541,7 +541,7 @@ export default function NewCase() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl font-display tracking-tight">
                 <PiBuildingsLight className="h-5 w-5 text-primary" />
-                Borrower Details
+                Borrower details
                 {selectedCompany && (
                   <Badge
                     variant="outline"
@@ -629,7 +629,7 @@ export default function NewCase() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl font-display tracking-tight">
                 <PiBriefcaseLight className="h-5 w-5 text-primary" />
-                Facility Request
+                Proposed facility
               </CardTitle>
               <CardDescription>
                 The credit facility parameters being proposed.
@@ -726,7 +726,7 @@ export default function NewCase() {
               ) : (
                 <>
                   <PiFileTextLight className="mr-2 h-4 w-4" />
-                  Create & Generate Memo
+                  Create case
                 </>
               )}
             </Button>

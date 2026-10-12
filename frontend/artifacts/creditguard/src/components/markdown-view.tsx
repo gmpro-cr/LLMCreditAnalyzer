@@ -11,6 +11,44 @@ function fixTableBlankLines(text: string): string {
   return text.replace(/([^\n|])\n(\|)/g, "$1\n\n$2");
 }
 
+// Right-align a table column only when its body cells are figures (₹ amounts,
+// %, x multiples, days, "—"); text columns (risks, remarks) stay left-aligned.
+type HNode = { type: string; tagName?: string; value?: string; children?: HNode[]; properties?: Record<string, unknown> };
+const NUM = /^[-+−]?\s*(?:₹|Rs\.?)?\s*[\d,]+(?:\.\d+)?\s*(?:%|x|Cr|cr|days|d|bps|pp)?$|^[—–-]$/;
+const text = (n: HNode): string => n.type === "text" ? (n.value ?? "") : (n.children ?? []).map(text).join("");
+function rehypeNumericColumns() {
+  return (tree: HNode) => {
+    const walk = (n: HNode) => {
+      // Wide tables (a 10-year spread) scroll inside their own box instead of
+      // spilling out of the memo sheet.
+      (n.children ?? []).forEach((c, i) => {
+        if (c.tagName === "table" && n.tagName !== "div") {
+          (n.children as HNode[])[i] = { type: "element", tagName: "div", properties: { className: ["table-scroll"] }, children: [c] };
+        }
+      });
+      if (n.tagName === "table") {
+        const rows: HNode[] = [];
+        const collect = (x: HNode) => { if (x.tagName === "tr") rows.push(x); else (x.children ?? []).forEach(collect); };
+        collect(n);
+        const cells = (r: HNode) => (r.children ?? []).filter((c) => c.tagName === "td" || c.tagName === "th");
+        const body = rows.filter((r) => cells(r).some((c) => c.tagName === "td"));
+        const width = Math.max(0, ...rows.map((r) => cells(r).length));
+        for (let j = 1; j < width; j++) {
+          const vals = body.map((r) => text(cells(r)[j] ?? { type: "text", value: "" }).trim()).filter(Boolean);
+          const numeric = vals.length > 0 && vals.filter((v) => NUM.test(v)).length / vals.length >= 0.6;
+          if (!numeric) continue;
+          for (const r of rows) {
+            const c = cells(r)[j];
+            if (c) c.properties = { ...(c.properties ?? {}), className: ["num"] };
+          }
+        }
+      }
+      (n.children ?? []).forEach(walk);
+    };
+    walk(tree);
+  };
+}
+
 // The detailed CAM embeds the group diagram as a ```organogram JSON block;
 // split it out and render it as SVG between the markdown parts.
 const ORG_BLOCK = /```organogram\s*\n([\s\S]*?)\n```/g;
@@ -29,15 +67,15 @@ function parts(content: string): ({ kind: "md"; text: string } | { kind: "org"; 
   return out;
 }
 
-export function MarkdownView({ content, className = "" }: { content: string; className?: string }) {
+export function MarkdownView({ content, className = "", variant = "ui" }: { content: string; className?: string; variant?: "ui" | "document" }) {
   if (!content?.trim()) return null;
   return (
-    <div className={`prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-h2:text-base prose-h3:text-sm prose-p:leading-relaxed prose-p:my-2 prose-li:my-0.5 prose-table:text-xs prose-th:bg-muted/50 ${className}`}>
+    <div className={`prose max-w-none dark:prose-invert prose-p:my-2.5 prose-li:my-0.5 prose-headings:font-semibold ${variant === "document" ? "memo-doc" : "prose-sm"} ${className}`}>
       {parts(content).map((p, i) =>
         p.kind === "org"
           ? (p.data ? <Organogram key={i} data={p.data} /> : null)
           : (
-            <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+            <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize, rehypeNumericColumns]}>
               {fixTableBlankLines(p.text)}
             </ReactMarkdown>
           ))}

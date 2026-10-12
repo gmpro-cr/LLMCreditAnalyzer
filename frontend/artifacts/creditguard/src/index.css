@@ -45,6 +45,13 @@
   --color-chart-4: hsl(var(--chart-4));
   --color-chart-5: hsl(var(--chart-5));
 
+  --color-ok: hsl(var(--ok));
+  --color-ok-bg: hsl(var(--ok-bg));
+  --color-warn: hsl(var(--warn));
+  --color-warn-bg: hsl(var(--warn-bg));
+  --color-risk: hsl(var(--risk));
+  --color-risk-bg: hsl(var(--risk-bg));
+
   --color-sidebar: hsl(var(--sidebar));
   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
   --color-sidebar-border: hsl(var(--sidebar-border));
@@ -76,61 +83,65 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  /* Modern slate-blue — clean, professional, trustworthy */
-  --primary: 213 94% 48%;
+  /* Direction A "credit file": ink navy text, one teal accent, quiet greys. */
+  --primary: 196 83% 24%;            /* #0B5671 */
   --primary-foreground: 0 0% 100%;
 
-  /* Light cool-gray background */
-  --background: 220 20% 97%;
-  --foreground: 222 39% 14%;
+  --background: 210 14% 93%;         /* #E9ECEF desk */
+  --foreground: 212 43% 13%;         /* #13202F ink */
 
-  /* Clean borders */
-  --border: 220 14% 90%;
-  --input: 220 14% 90%;
-  --ring: 213 94% 48%;
+  --border: 213 14% 86%;             /* #D5DAE0 */
+  --input: 213 12% 80%;
+  --ring: 196 83% 24%;
 
-  /* Pure white cards */
   --card: 0 0% 100%;
-  --card-foreground: 222 39% 14%;
-  --card-border: 220 14% 90%;
+  --card-foreground: 212 43% 13%;
+  --card-border: 213 14% 86%;
 
-  /* Light sidebar — same surface family as the app, primary accents */
   --sidebar: 0 0% 100%;
-  --sidebar-foreground: 222 39% 14%;
-  --sidebar-border: 220 14% 90%;
-  --sidebar-primary: 213 94% 48%;
+  --sidebar-foreground: 212 43% 13%;
+  --sidebar-border: 213 14% 86%;
+  --sidebar-primary: 196 83% 24%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 16% 94%;
-  --sidebar-accent-foreground: 222 39% 14%;
-  --sidebar-ring: 213 94% 48%;
+  --sidebar-accent: 210 20% 95%;
+  --sidebar-accent-foreground: 212 43% 13%;
+  --sidebar-ring: 196 83% 24%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 39% 14%;
-  --popover-border: 220 14% 90%;
+  --popover-foreground: 212 43% 13%;
+  --popover-border: 213 14% 86%;
 
-  --secondary: 220 16% 94%;
-  --secondary-foreground: 222 39% 14%;
+  --secondary: 210 20% 95%;
+  --secondary-foreground: 212 43% 13%;
 
-  --muted: 220 16% 94%;
-  --muted-foreground: 220 9% 46%;
+  --muted: 210 20% 95%;              /* #EEF1F4 */
+  --muted-foreground: 214 11% 41%;   /* #5D6876 — 5.5:1 on white */
 
-  --accent: 220 16% 94%;
-  --accent-foreground: 222 39% 14%;
+  --accent: 199 33% 92%;             /* #E3ECF0 teal tint */
+  --accent-foreground: 196 83% 20%;
 
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 56% 39%;          /* #9B2C2C */
+  --destructive-foreground: 0 0% 100%;
 
-  --chart-1: 160 84% 39%; /* Emerald */
+  /* status (text on white / tinted chip backgrounds) */
+  --ok: 150 39% 30%;                 /* #2F6B4F */
+  --ok-bg: 147 24% 95%;
+  --warn: 39 100% 27%;               /* #8A5A00 */
+  --warn-bg: 41 75% 92%;
+  --risk: 0 56% 39%;
+  --risk-bg: 0 56% 96%;
+
+--chart-1: 160 84% 39%; /* Emerald */
   --chart-2: 213 94% 48%; /* Modern Blue */
   --chart-3: 43 74% 66%; /* Gold */
   --chart-4: 199 89% 48%; /* Sky */
   --chart-5: 280 65% 60%; /* Purple */
 
-  --app-font-sans: 'Geist', 'Plus Jakarta Sans', sans-serif;
-  --app-font-serif: 'Fraunces', Georgia, serif;
-  --app-font-mono: 'JetBrains Mono', monospace;
+  --app-font-sans: 'Geist', system-ui, sans-serif;
+  --app-font-serif: 'Source Serif 4', Georgia, serif;
+  --app-font-mono: 'Geist Mono', ui-monospace, monospace;
   
-  --radius: 0.375rem;
+  --radius: 0.25rem;
 
   --shadow-2xs: 0px 1px 2px 0px rgba(8,18,42,0.05);
   --shadow-xs: 0px 1px 2px 0px rgba(8,18,42,0.06);
@@ -219,18 +230,9 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-feature-settings: "tnum" 0;
   }
 
-  body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 9999;
-    opacity: 0.025;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
-  }
 
   h1, h2, h3 {
     text-wrap: balance;
@@ -331,7 +333,8 @@
      Section labels (h3/h4) stay in the sans for clarity in dense UI. */
   h1, h2 {
     font-family: var(--app-font-serif);
-    font-weight: 500;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
 
   /* Financial figures line up and compare cleanly */
@@ -348,8 +351,8 @@
 @layer utilities {
   .font-display {
     font-family: var(--app-font-serif);
-    font-weight: 500;
-    letter-spacing: -0.02em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
   .tabular {
     font-variant-numeric: tabular-nums;
@@ -357,52 +360,51 @@
   }
 }
 
-/* ─── Premium financial tables (CAM spread, ratios) — the hero content ─── */
+/* ─── CAM tables: quiet header, figures right-aligned in tabular sans ─── */
 .prose table {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  margin: 1.25rem 0;
+  border-collapse: collapse;
+  margin: 1rem 0 1.25rem;
+  font-family: var(--app-font-sans);
   font-size: 0.8125rem;
+  line-height: 1.45;
   font-variant-numeric: tabular-nums;
   border: 1px solid hsl(var(--border));
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--shadow-xs);
 }
 .prose thead th {
-  background: hsl(var(--primary));
-  color: hsl(var(--primary-foreground));
-  font-family: var(--app-font-sans);
-  font-weight: 600;
-  font-size: 0.6875rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 0.6rem 0.85rem;
-  text-align: right;
-  border: none;
-}
-.prose thead th:first-child {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  font-weight: 500;
+  font-size: 0.75rem;
+  padding: 0.5rem 0.75rem;
   text-align: left;
+  border-bottom: 1px solid hsl(var(--border));
+  vertical-align: bottom;
 }
 .prose tbody td {
-  padding: 0.5rem 0.85rem;
-  border: none;
-  border-top: 1px solid hsl(var(--border));
+  padding: 0.45rem 0.75rem;
+  border-top: 1px solid hsl(var(--border) / 0.7);
+  vertical-align: top;
+  color: hsl(var(--foreground));
+}
+.prose th.num, .prose td.num {
   text-align: right;
-  font-family: var(--app-font-mono);
-  font-size: 0.78rem;
   white-space: nowrap;
 }
-.prose tbody td:first-child {
-  text-align: left;
-  font-family: var(--app-font-sans);
-  font-weight: 500;
-  white-space: normal;
-}
-.prose tbody tr:nth-child(even) td {
-  background: hsl(var(--muted) / 0.45);
-}
 .prose tbody tr:hover td {
-  background: hsl(var(--accent) / 0.7);
+  background: hsl(var(--muted) / 0.6);
 }
+
+.prose .table-scroll { overflow-x: auto; margin: 1rem 0 1.25rem; }
+.prose .table-scroll > table { margin: 0; }
+.prose td:first-child { min-width: 9rem; }
+
+/* Memo body reads as a document: serif text, sans tables and labels. */
+.memo-doc.prose { font-family: var(--app-font-serif); font-size: 1rem; line-height: 1.65; color: hsl(var(--foreground)); }
+.memo-doc.prose p, .memo-doc.prose li { max-width: 72ch; }
+.memo-doc.prose strong { font-weight: 600; }
+.memo-doc.prose em { color: hsl(var(--muted-foreground)); font-size: 0.875rem; font-family: var(--app-font-sans); font-style: normal; }
+.memo-doc.prose h2, .memo-doc.prose h3 { font-family: var(--app-font-sans); font-size: 0.875rem; font-weight: 600; letter-spacing: 0; margin: 1.5rem 0 0.5rem; }
+.memo-doc.prose a { color: hsl(var(--primary)); }
+.memo-doc.prose table { font-size: 0.78rem; }
+.memo-doc.prose figure { font-family: var(--app-font-sans); }

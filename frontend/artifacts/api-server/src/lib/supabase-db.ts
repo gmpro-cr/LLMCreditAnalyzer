@@ -109,14 +109,28 @@ export async function listRiskFlags(caseId: number) {
   return data ?? [];
 }
 
-/** Replace a case's flags with a fresh engine run. Acknowledgements reset —
- *  the flags are recomputed from the latest financials. */
+/** Replace a case's flags with a fresh engine run. A flag of the same type that
+ *  the RM already acknowledged keeps its acknowledgement and mitigation note —
+ *  a regenerate must not silently erase a recorded review decision. */
 export async function replaceRiskFlags(caseId: number, rows: Record<string, unknown>[]) {
+  const prior = await listRiskFlags(caseId);
+  const kept = new Map(prior.filter((f) => f.is_acknowledged || f.mitigation).map((f) => [f.risk_type, f]));
+  rows = rows.map((r) => {
+    const k = kept.get(r.risk_type as string);
+    return k ? { ...r, is_acknowledged: k.is_acknowledged, mitigation: k.mitigation } : r;
+  });
   const del = await supabase.from("risk_flags").delete().eq("case_id", caseId);
   if (del.error) throw del.error;
   if (rows.length === 0) return;
   const { error } = await supabase.from("risk_flags").insert(rows);
   if (error) throw error;
+}
+
+export async function updateRiskFlag(caseId: number, flagId: number, values: Record<string, unknown>) {
+  const { data, error } = await supabase.from("risk_flags").update(values)
+    .eq("case_id", caseId).eq("id", flagId).select().single();
+  if (error) throw error;
+  return data;
 }
 
 // ── Activity Log ──────────────────────────────────────────────────────────

@@ -1,49 +1,66 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { PiListLight } from "react-icons/pi";
-import { Sidebar } from "./Sidebar";
+import { Sidebar, AccountMenu, CreditGuardMark, NAVIGATION } from "./Sidebar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [location] = useLocation();
 
-  // Close the mobile drawer whenever the route changes.
+  // Close the mobile menu whenever the route changes.
   useEffect(() => setOpen(false), [location]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Desktop sidebar */}
-      <div className="hidden lg:flex">
-        <Sidebar />
-      </div>
+    <div className="flex min-h-[100dvh] flex-col bg-background">
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-50 focus:rounded focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:shadow">
+        Skip to content
+      </a>
+      <header className="sticky top-0 z-40 border-b border-border bg-card">
+        <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-8 px-4 sm:px-8">
+          <button
+            onClick={() => setOpen(true)}
+            aria-label="Open navigation"
+            className="-ml-1 inline-flex h-9 w-9 items-center justify-center rounded text-foreground/70 transition-colors hover:bg-muted md:hidden"
+          >
+            <PiListLight className="h-5 w-5" />
+          </button>
+          <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-[-0.01em] text-foreground">
+            <CreditGuardMark className="h-5 w-5 text-primary" />
+            CreditGuard
+          </Link>
+          <nav className="hidden h-full items-stretch gap-6 text-[13px] md:flex" aria-label="Main">
+            {NAVIGATION.map((item) => {
+              const active = item.match(location);
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`flex items-center border-b-2 transition-colors ${active ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                >
+                  {item.name}
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="ml-auto flex items-center gap-4">
+            <span className="hidden rounded-[3px] border border-border px-2 py-0.5 text-xs text-muted-foreground sm:inline">
+              Demo workspace
+            </span>
+            <AccountMenu />
+          </div>
+        </div>
+      </header>
 
-      {/* Mobile drawer */}
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent
-          side="left"
-          className="w-60 border-sidebar-border p-0 [&>button]:text-sidebar-foreground/70"
-        >
+        <SheetContent side="left" className="w-64 p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <Sidebar />
         </SheetContent>
       </Sheet>
 
-      <main className="flex-1 overflow-y-auto">
-        {/* Mobile top bar */}
-        <header className="lg:hidden sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur">
-          <button
-            onClick={() => setOpen(true)}
-            aria-label="Open navigation"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground/70 transition-colors hover:bg-muted active:scale-95"
-          >
-            <PiListLight className="h-5 w-5" />
-          </button>
-          <span className="font-semibold text-sm tracking-[-0.02em]">CreditGuard AI</span>
-        </header>
-
-        <div className="mx-auto w-full max-w-7xl">{children}</div>
-      </main>
+      <main id="main" className="flex-1">{children}</main>
     </div>
   );
 }

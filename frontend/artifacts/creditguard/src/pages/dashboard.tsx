@@ -1,231 +1,166 @@
 import { useLocation, Link } from "wouter";
 import {
-  PiFileTextLight,
-  PiPulseLight,
-  PiCheckCircleLight,
-  PiClockCountdownLight,
-  PiArrowRightLight,
-  PiPlusLight,
-} from "react-icons/pi";
-import { useGetDashboardStats, useGetRecentActivity, getGetDashboardStatsQueryKey, getGetRecentActivityQueryKey } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+  useGetDashboardStats,
+  useGetRecentActivity,
+  useListCases,
+  getGetDashboardStatsQueryKey,
+  getGetRecentActivityQueryKey,
+  getListCasesQueryKey,
+} from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OutageState } from "@/components/outage-state";
 import { isDataUnavailable } from "@/lib/query-state";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { StatusChip } from "@/components/status";
+import { formatCr, formatDate, formatDateTime, facilityLabel } from "@/lib/format";
+
+// Stats are real counts only (see api-server routes/dashboard.ts).
+type Stats = {
+  totalCases: number;
+  draftsInProgress: number;
+  pendingReview: number;
+  approvedThisMonth: number;
+  rejected?: number;
+  proposedExposureCr?: number;
+};
+
+function Figure({ label, value, note, href }: { label: string; value: string; note: string; href?: string }) {
+  const body = (
+    <>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 text-2xl font-semibold tabular-nums tracking-[-0.01em] text-foreground">{value}</div>
+      <div className="text-xs text-muted-foreground">{note}</div>
+    </>
+  );
+  const cls = "block border-b border-border px-5 py-4 transition-colors sm:border-r lg:border-b-0 lg:last:border-r-0";
+  return href
+    ? <Link href={href} className={`${cls} text-foreground hover:bg-muted/60 hover:no-underline`}>{body}</Link>
+    : <div className={cls}>{body}</div>;
+}
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
-  const {
-    data: stats,
-    isLoading: statsLoading,
-    isError: statsError,
-    refetch: refetchStats,
-    isFetching: statsFetching,
-  } = useGetDashboardStats({ query: { queryKey: getGetDashboardStatsQueryKey() } });
-  const {
-    data: activity,
-    isLoading: activityLoading,
-    isError: activityError,
-    refetch: refetchActivity,
-    isFetching: activityFetching,
-  } = useGetRecentActivity({ query: { queryKey: getGetRecentActivityQueryKey() } });
+  const statsQ = useGetDashboardStats({ query: { queryKey: getGetDashboardStatsQueryKey() } });
+  const activityQ = useGetRecentActivity({ query: { queryKey: getGetRecentActivityQueryKey() } });
+  const casesQ = useListCases({}, { query: { queryKey: getListCasesQueryKey({}) } });
 
-  const statsUnavailable = isDataUnavailable(statsError, statsLoading, stats);
-  const activityUnavailable = isDataUnavailable(activityError, activityLoading, activity);
+  const stats = statsQ.data as Stats | undefined;
+  const statsDown = isDataUnavailable(statsQ.isError, statsQ.isLoading, statsQ.data);
+  const activityDown = isDataUnavailable(activityQ.isError, activityQ.isLoading, activityQ.data);
+  const casesDown = isDataUnavailable(casesQ.isError, casesQ.isLoading, casesQ.data);
+
+  const open = (casesQ.data ?? [])
+    .filter((c) => c.status === "draft" || c.status === "in_review" || c.status === "rejected")
+    .sort((a, b) => new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime())
+    .slice(0, 8);
+
+  const today = new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
 
   return (
-    <div className="p-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="mx-auto flex max-w-[1440px] flex-col gap-6 px-4 py-8 sm:px-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl tracking-[-0.02em]">Dashboard</h1>
-          <p className="text-muted-foreground mt-1.5 text-sm font-light">Overview of your credit appraisal pipeline.</p>
+          <h1 className="text-[32px] leading-tight">Pipeline</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{today}</p>
         </div>
-        <Button
-          onClick={() => setLocation("/cases/new")}
-          className="transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-        >
-          <PiPlusLight className="mr-2 h-4 w-4" />
-          New CAM Request
-        </Button>
+        <Button onClick={() => setLocation("/cases/new")}>New case</Button>
       </div>
 
-      {statsLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Skeleton className="h-[120px] rounded-xl" />
-          <Skeleton className="h-[120px] rounded-xl" />
-          <Skeleton className="h-[100px] rounded-xl" />
-          <Skeleton className="h-[100px] rounded-xl" />
-        </div>
-      ) : statsUnavailable ? (
-        // Never fall through to the cards on error: `stats?.x ?? 0` would
-        // render a real-looking 0 for every KPI and misstate the pipeline.
-        <Card>
-          <CardContent className="p-0">
-            <OutageState
-              title="Can't load your pipeline"
-              description="These figures are unavailable right now, so we're not showing them rather than showing zeros."
-              onRetry={() => refetchStats()}
-              isRetrying={statsFetching}
-            />
-          </CardContent>
-        </Card>
+      {statsDown ? (
+        <OutageState description="The figures are safe — we can't load them right now. This usually clears in a few minutes." onRetry={() => statsQ.refetch()} isRetrying={statsQ.isFetching} compact />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Featured top row: Active Cases + Drafts */}
-          <Card
-            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 group"
-            onClick={() => setLocation("/cases")}
-          >
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-2 rounded-lg bg-primary/8 text-primary">
-                  <PiFileTextLight className="h-5 w-5" />
-                </div>
-                <PiArrowRightLight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-              </div>
-              <div className="text-[2.75rem] font-display leading-none tracking-tight tabular">
-                {stats?.totalCases ?? 0}
-              </div>
-              <div className="mt-2 text-sm font-medium text-foreground/80">Total active cases</div>
-              <div className="text-xs text-muted-foreground mt-0.5">Across all RM portfolios</div>
-            </CardContent>
-          </Card>
-
-          <Card
-            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 group"
-            onClick={() => setLocation("/cases?status=draft")}
-          >
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-2 rounded-lg bg-primary/8 text-primary">
-                  <PiPulseLight className="h-5 w-5" />
-                </div>
-                <PiArrowRightLight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-              </div>
-              <div className="text-[2.75rem] font-display leading-none tracking-tight tabular">
-                {stats?.draftsInProgress ?? 0}
-              </div>
-              <div className="mt-2 text-sm font-medium text-foreground/80">Drafts in progress</div>
-              <div className="text-xs text-muted-foreground mt-0.5">Actively being worked on</div>
-            </CardContent>
-          </Card>
-
-          {/* Supporting row: Approved + Time saved — smaller */}
-          <Card
-            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 group"
-            onClick={() => setLocation("/cases?status=approved")}
-          >
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <PiCheckCircleLight className="h-4 w-4 text-muted-foreground/60" />
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Approved this month</span>
-                  </div>
-                  <div className="text-2xl font-semibold tabular-nums">
-                    {stats?.approvedThisMonth ?? 0}
-                  </div>
-                </div>
-                <PiArrowRightLight className="h-4 w-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card
-            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 group"
-            onClick={() => setLocation("/cases")}
-          >
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <PiClockCountdownLight className="h-4 w-4 text-muted-foreground/60" />
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg time saved</span>
-                  </div>
-                  <div className="text-2xl font-semibold tabular-nums">
-                    {stats?.timeSavedHours ?? 0}
-                    <span className="text-base font-medium ml-0.5 text-muted-foreground">h</span>
-                  </div>
-                </div>
-                <span className="text-[11px] text-muted-foreground/50 text-right leading-snug max-w-[80px]">per memo vs manual</span>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 rounded border border-border bg-card sm:grid-cols-2 lg:grid-cols-5">
+          {statsQ.isLoading || !stats ? Array.from({ length: 5 }).map((_, i) => <div key={i} className="p-5"><Skeleton className="h-14" /></div>) : (
+            <>
+              <Figure label="Drafts with RMs" value={String(stats.draftsInProgress)} note="Being prepared" href="/cases?status=draft" />
+              <Figure label="In credit review" value={String(stats.pendingReview)} note="Awaiting a credit officer" href="/cases?status=in_review" />
+              <Figure label="Approved this month" value={String(stats.approvedThisMonth)} note="Ready for sanction" href="/cases?status=approved" />
+              <Figure label="Returned to RM" value={String(stats.rejected ?? 0)} note="Needs rework" href="/cases?status=rejected" />
+              <Figure label="Proposed exposure" value={stats.proposedExposureCr != null ? `₹${stats.proposedExposureCr.toLocaleString("en-IN", { maximumFractionDigits: 2 })} Cr` : "—"} note={`Across ${stats.totalCases} case${stats.totalCases === 1 ? "" : "s"}`} />
+            </>
+          )}
         </div>
       )}
 
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <PiPulseLight className="h-4.5 w-4.5 text-primary" />
-            Recent activity
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {activityLoading ? (
-            <div className="space-y-4">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </div>
-          ) : activityUnavailable ? (
-            <OutageState
-              title="Can't load recent activity"
-              onRetry={() => refetchActivity()}
-              isRetrying={activityFetching}
-              compact
-            />
-          ) : activity && activity.length > 0 ? (
-            <div className="space-y-5">
-              {activity.map((item, index) => (
-                <div key={item.id} className="flex gap-4 relative">
-                  {index !== activity.length - 1 && (
-                    <div className="absolute top-7 bottom-[-20px] left-[11px] w-px bg-border/60" />
-                  )}
-                  <div className="relative z-10 flex h-5.5 w-5.5 shrink-0 mt-0.5 items-center justify-center rounded-full bg-primary/8 ring-[6px] ring-card">
-                    <div className="h-1.5 w-1.5 rounded-full bg-primary/60" />
-                  </div>
-                  <div className="flex flex-1 flex-col pb-1">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <p className="text-sm font-medium leading-snug">{item.borrowerName}</p>
-                      <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
-                        {formatDateTime(item.timestamp)}
-                      </span>
-                    </div>
-                    <div className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5 flex-wrap">
-                      <span className="font-medium text-foreground/80">{item.actor}</span>
-                      <span>{item.action.toLowerCase()}</span>
-                      {(() => {
-                        const caseId = item.caseId ?? (item as any).case_id;
-                        return caseId ? (
-                          <Link
-                            href={`/cases/${caseId}`}
-                            className="inline-flex items-center gap-1 text-primary hover:underline underline-offset-2 ml-1 text-xs"
-                          >
-                            View case <PiArrowRightLight className="h-3 w-3" />
-                          </Link>
-                        ) : null;
-                      })()}
-                    </div>
-                  </div>
-                </div>
-              ))}
+      <div className="flex flex-wrap items-start gap-6">
+        <section className="min-w-0 flex-[999_1_620px] rounded border border-border bg-card">
+          <div className="flex items-baseline justify-between border-b border-border px-5 py-3.5">
+            <h2 className="font-sans text-[15px] font-semibold tracking-normal">Open cases</h2>
+            <Link href="/cases" className="text-[13px]">All cases</Link>
+          </div>
+          {casesDown ? (
+            <div className="p-6"><OutageState description="Your cases are safe — we can't load them right now." onRetry={() => casesQ.refetch()} isRetrying={casesQ.isFetching} compact /></div>
+          ) : casesQ.isLoading ? (
+            <div className="space-y-2 p-5">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
+          ) : open.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-5 py-2 text-left font-medium">Borrower</th>
+                    <th className="px-4 py-2 text-left font-medium">Facility</th>
+                    <th className="px-4 py-2 text-right font-medium">Amount</th>
+                    <th className="px-4 py-2 text-left font-medium">Status</th>
+                    <th className="px-4 py-2 text-right font-medium">Reviewed</th>
+                    <th className="px-5 py-2 text-left font-medium">Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {open.map((c) => (
+                    <tr key={c.id} className="cursor-pointer border-t border-border/70 hover:bg-muted/60" onClick={() => setLocation(`/cases/${c.id}`)}>
+                      <td className="px-5 py-3">
+                        <Link href={`/cases/${c.id}`} className="font-medium text-foreground hover:text-primary">{c.borrowerName}</Link>
+                        <div className="text-xs text-muted-foreground">{c.sector} · RM {c.rmName}</div>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{facilityLabel(c.facilityType)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatCr(c.facilityAmount)}</td>
+                      <td className="px-4 py-3"><StatusChip status={c.status} /></td>
+                      <td className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground">{c.memoProgress}%</td>
+                      <td className="whitespace-nowrap px-5 py-3 text-muted-foreground">{formatDate(c.updatedAt ?? c.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
-              <div className="h-10 w-10 rounded-xl bg-muted/60 flex items-center justify-center">
-                <PiPulseLight className="h-5 w-5 text-muted-foreground/40" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground/70">No recent activity</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Activity will appear here as cases are worked on.</p>
-              </div>
+            <div className="px-6 py-12 text-center">
+              <p className="text-sm font-medium">No open cases</p>
+              <p className="mt-1 text-sm text-muted-foreground">Start a case to draft a credit appraisal memorandum.</p>
+              <Button className="mt-4" size="sm" onClick={() => setLocation("/cases/new")}>New case</Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </section>
+
+        <section className="min-w-0 flex-[1_1_340px] rounded border border-border bg-card lg:max-w-[420px]">
+          <div className="border-b border-border px-5 py-3.5">
+            <h2 className="font-sans text-[15px] font-semibold tracking-normal">Recent activity</h2>
+          </div>
+          {activityDown ? (
+            <div className="p-6"><OutageState description="Activity is safe — we can't load it right now." onRetry={() => activityQ.refetch()} isRetrying={activityQ.isFetching} compact /></div>
+          ) : activityQ.isLoading ? (
+            <div className="space-y-2 p-5">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-9" />)}</div>
+          ) : activityQ.data?.length ? (
+            <ul className="divide-y divide-border/70">
+              {activityQ.data.slice(0, 10).map((item) => {
+                const raw = item as unknown as { case_id?: number; borrower_name?: string };
+                const caseId = item.caseId ?? raw.case_id;
+                const name = item.borrowerName ?? raw.borrower_name;
+                return (
+                  <li key={item.id} className="px-5 py-2.5 text-[13px]">
+                    <div className="flex items-baseline justify-between gap-3">
+                      {caseId ? <Link href={`/cases/${caseId}`} className="truncate font-medium text-foreground hover:text-primary">{name}</Link> : <span className="truncate font-medium">{name}</span>}
+                      <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{formatDateTime(item.timestamp)}</span>
+                    </div>
+                    <div className="text-muted-foreground">{item.action}{item.actor && item.actor !== "CreditGuard AI" ? ` · ${item.actor}` : ""}</div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="px-5 py-8 text-center text-sm text-muted-foreground">Activity appears here as cases are worked on.</p>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

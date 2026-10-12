@@ -88,7 +88,7 @@ const FILL: Record<Box["kind"], string> = {
 export function Organogram({ data }: { data: OrganogramData }) {
   const lay = layoutOrganogram(data);
   return (
-    <figure className="not-prose my-4 overflow-x-auto rounded-lg border bg-card p-3">
+    <figure className="not-prose my-4 overflow-x-auto rounded border border-border bg-card p-3 font-sans">
       <svg viewBox={`-2 -2 ${lay.width + 4} ${lay.height + 4}`} className="w-full min-w-[560px]" role="img"
         aria-label={`Group structure of ${data.borrower}`}>
         {lay.lines.map((l, i) => (
@@ -126,11 +126,6 @@ export function Organogram({ data }: { data: OrganogramData }) {
           );
         })}
       </svg>
-      {!data.verified && (
-        <figcaption className="mt-2 text-xs text-muted-foreground">
-          Auto-extracted from the annual report. Verify it in Data Room → Group Structure.
-        </figcaption>
-      )}
     </figure>
   );
 }

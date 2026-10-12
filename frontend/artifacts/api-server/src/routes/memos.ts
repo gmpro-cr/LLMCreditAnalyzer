@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listSections, updateSection, bulkUpdateSections, insertSections, listRiskFlags, replaceRiskFlags, insertActivity, updateCase, getCase, getCaseExtractedData, listCaseDocuments, insertCaseDocument, updateCaseDocument, supabase, nullIfMissing } from "../lib/supabase-db.js";
+import { listSections, updateSection, bulkUpdateSections, insertSections, listRiskFlags, replaceRiskFlags, updateRiskFlag, insertActivity, updateCase, getCase, getCaseExtractedData, listCaseDocuments, insertCaseDocument, updateCaseDocument, supabase, nullIfMissing } from "../lib/supabase-db.js";
 import { MEMO_SECTIONS, sortSections, blankSectionRows } from "../lib/sections.js";
 import { PYTHON_URL, internalHeaders, wakePython } from "../lib/python.js";
 import { ListSectionsParams, UpdateSectionBody, GenerateMemoParams, ListRiskFlagsParams } from "@workspace/api-zod";
@@ -268,7 +268,8 @@ router.post("/:id/generate", async (req, res) => {
   const progress = allSections.length
     ? Math.round((allSections.filter((s) => s.is_reviewed).length / allSections.length) * 100)
     : 0;
-  await updateCase(id, { memo_progress: Math.max(progress, 10), updated_at: new Date().toISOString() });
+  // memo_progress is the share of sections reviewed — never a placeholder 10%.
+  await updateCase(id, { memo_progress: progress, updated_at: new Date().toISOString() });
   await insertActivity({ case_id: id, borrower_name: c.borrower_name, action: failedSections.length ? `AI generation completed — ${failedSections.length} section(s) not drafted` : "AI generation completed — all sections drafted", actor: "CreditGuard AI" });
 
   return res.json({ message: "Memo generated successfully", caseId: id, failedSections });
@@ -285,6 +286,27 @@ router.get("/:id/workspace", async (req, res) => {
   if (activity.error) throw activity.error;
   const meta = docs.find((d: Record<string, unknown>) => d.doc_type === "cam_meta");
   return res.json({ summary: (meta?.extracted_data as Record<string, unknown>) ?? null, activity: activity.data ?? [] });
+});
+
+// Record (or withdraw) the RM's acknowledgement of a risk flag, with the mitigation.
+router.patch("/:id/risk-flags/:flagId", async (req, res) => {
+  const id = Number(req.params.id);
+  const flagId = Number(req.params.flagId);
+  if (isNaN(id) || isNaN(flagId)) return res.status(400).json({ error: "Invalid id" });
+  const { isAcknowledged, mitigation } = req.body ?? {};
+  const values: Record<string, unknown> = {};
+  if (typeof isAcknowledged === "boolean") values.is_acknowledged = isAcknowledged;
+  if (typeof mitigation === "string") values.mitigation = mitigation.slice(0, 4000) || null;
+  if (!Object.keys(values).length) return res.status(400).json({ error: "Nothing to update" });
+  const c = await getCase(id).catch(nullIfMissing);
+  if (!c) return res.status(404).json({ error: "Case not found" });
+  const f = await updateRiskFlag(id, flagId, values).catch(nullIfMissing);
+  if (!f) return res.status(404).json({ error: "Risk flag not found" });
+  if (typeof isAcknowledged === "boolean") {
+    await insertActivity({ case_id: id, borrower_name: c.borrower_name, actor: c.rm_name,
+      action: `${isAcknowledged ? "Acknowledged" : "Reopened"} risk flag: ${f.risk_type}` });
+  }
+  return res.json({ ...f, caseId: f.case_id, riskType: f.risk_type, isAcknowledged: f.is_acknowledged });
 });
 
 router.get("/:id/risk-flags", async (req, res) => {
