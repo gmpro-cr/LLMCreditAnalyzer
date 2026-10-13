@@ -221,6 +221,8 @@ export interface CamSummary {
   group_entities?: number;
   group_verified?: boolean;
   generated_at?: string;
+  /** Sections the last run could not draft (AI provider busy); cleared as they are redrafted. */
+  failed_sections?: string[];
 }
 
 export interface CaseWorkspace {
@@ -235,6 +237,17 @@ export const useGetCaseWorkspace = (caseId: number) =>
     queryKey: getCaseWorkspaceQueryKey(caseId),
     queryFn: () => customFetch<CaseWorkspace>(`/api/cases/${caseId}/workspace`),
     enabled: !!caseId,
+  });
+
+/** Redraft only the given sections (retry after some failed); the rest of the memo is untouched. */
+export const useRedraftSections = () =>
+  useMutation({
+    mutationFn: ({ caseId, sections }: { caseId: number; sections: string[] }) =>
+      customFetch<{ failedSections?: string[] }>(`/api/cases/${caseId}/generate`, {
+        method: "POST",
+        body: JSON.stringify({ sections }),
+        headers: { "Content-Type": "application/json" },
+      }),
   });
 
 // ── Risk flag review (acknowledgement + mitigation) ──────────────────────

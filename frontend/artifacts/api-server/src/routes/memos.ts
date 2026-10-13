@@ -53,6 +53,20 @@ router.post("/:id/generate", async (req, res) => {
 
   const pythonUrl = PYTHON_URL();
 
+  // Optional {sections: [...]}: redraft only these (retry after a partial failure).
+  // Everything else — other sections, the summary, risk flags — is left as it is.
+  const requested: string[] = Array.isArray(req.body?.sections)
+    ? [...new Set((req.body.sections as unknown[]).filter((k): k is string => typeof k === "string" && MEMO_SECTIONS.some((s) => s.key === k)))]
+    : [];
+  const partial = requested.length > 0;
+
+  // Every failure past validation goes into the audit trail, so the case page can
+  // offer a retry even after a reload, and the trail shows what happened.
+  const fail = async (status: number, body: { error: string; code?: string }) => {
+    await insertActivity({ case_id: id, borrower_name: c.borrower_name, action: `AI generation failed — ${body.error}`, actor: "CreditGuard AI" }).catch(() => {});
+    return res.status(status).json(body);
+  };
+
   // Load any collected data from the Data Room
   const extracted = await getCaseExtractedData(id).catch(() => null);
 
@@ -136,7 +150,7 @@ router.post("/:id/generate", async (req, res) => {
   // ping long enough for the cold start (~30-50s) to complete.
   if (!await wakePython()) {
     // `upstream_unavailable` tells the SPA's customFetch this is a retryable cold start.
-    return res.status(503).json({ error: "AI engine is starting up. Please try again in 30 seconds.", code: "upstream_unavailable" });
+    return fail(503, { error: "AI engine is starting up. Please try again in 30 seconds.", code: "upstream_unavailable" });
   }
 
   let failedSections: string[] = [];
@@ -155,6 +169,7 @@ router.post("/:id/generate", async (req, res) => {
         annual_report: (arDoc?.extracted_data as Record<string, unknown>) || {},
         group_structure: (organogram.group_structure as Record<string, unknown>) || {},
         sector: c.sector || "",
+        ...(partial ? { regenerate: requested } : {}),
       }),
       signal: AbortSignal.timeout(900_000),
     });
@@ -162,7 +177,7 @@ router.post("/:id/generate", async (req, res) => {
     if (!pyRes.ok) {
       const errText = await pyRes.text().catch(() => "");
       console.error("[generate] Python service returned", pyRes.status, errText.slice(0, 200));
-      return res.status(502).json({ error: `AI engine error (${pyRes.status}). Please try again.` });
+      return fail(502, { error: `AI engine error (${pyRes.status}). Please try again.` });
     }
 
     const pyData = await pyRes.json() as Record<string, unknown>;
@@ -188,20 +203,31 @@ router.post("/:id/generate", async (req, res) => {
       });
       // Workspace summary (headline figures, sources, open RM items) — stored as
       // its own Data Room row like rm_inputs, so no schema change is needed.
-      const meta = {
-        ...((camSections["_summary"] as Record<string, unknown>) || {}),
-        info_requests: camSections["_info_requests"] ?? [],
-        generated_at: new Date().toISOString(),
-      };
+      const metaDoc = docs.find((d) => d.doc_type === "cam_meta");
+      const prevMeta = (metaDoc?.extracted_data as Record<string, unknown> | null) || {};
+      // failed_sections drives the "Redraft N sections" prompt on the case page.
+      const meta = partial
+        ? {
+            ...prevMeta,
+            failed_sections: [...new Set([
+              ...((prevMeta.failed_sections as string[] | undefined) ?? []).filter((k) => !requested.includes(k)),
+              ...failedSections,
+            ])],
+          }
+        : {
+            ...((camSections["_summary"] as Record<string, unknown>) || {}),
+            info_requests: camSections["_info_requests"] ?? [],
+            failed_sections: failedSections,
+            generated_at: new Date().toISOString(),
+          };
       try {
-        const metaDoc = docs.find((d) => d.doc_type === "cam_meta");
         if (metaDoc) await updateCaseDocument(Number(metaDoc.id), { extracted_data: meta });
         else await insertCaseDocument({ case_id: id, doc_type: "cam_meta", filename: "CAM summary", storage_path: "", fiscal_year: null, extracted_data: meta, source: "engine" });
       } catch (e) {
         console.error("[generate] could not save CAM summary:", e);
       }
       const flags = Array.isArray(camSections["_risk_flags"]) ? camSections["_risk_flags"] as Record<string, unknown>[] : [];
-      await replaceRiskFlags(id, flags.map((f) => ({
+      if (!partial) await replaceRiskFlags(id, flags.map((f) => ({
         case_id: id,
         risk_type: String(f.title ?? f.ratio_key ?? "Risk"),
         severity: ["high", "medium", "low"].includes(String(f.severity)) ? String(f.severity) : "medium",
@@ -260,7 +286,7 @@ router.post("/:id/generate", async (req, res) => {
     }
   } catch (e) {
     console.error("[generate] Python service error:", e);
-    return res.status(502).json({ error: "AI engine request failed. Please try again." });
+    return fail(502, { error: e instanceof Error && e.name === "TimeoutError" ? "The AI engine took too long to respond. Please try again." : "AI engine request failed. Please try again." });
   }
 
   // Recompute progress from actual reviewed sections (don't regress existing progress)
@@ -270,7 +296,8 @@ router.post("/:id/generate", async (req, res) => {
     : 0;
   // memo_progress is the share of sections reviewed — never a placeholder 10%.
   await updateCase(id, { memo_progress: progress, updated_at: new Date().toISOString() });
-  await insertActivity({ case_id: id, borrower_name: c.borrower_name, action: failedSections.length ? `AI generation completed — ${failedSections.length} section(s) not drafted` : "AI generation completed — all sections drafted", actor: "CreditGuard AI" });
+  const verb = partial ? `AI redraft of ${requested.length} section(s)` : "AI generation";
+  await insertActivity({ case_id: id, borrower_name: c.borrower_name, action: failedSections.length ? `${verb} completed — ${failedSections.length} section(s) not drafted` : `${verb} completed — all ${partial ? "requested " : ""}sections drafted`, actor: "CreditGuard AI" });
 
   return res.json({ message: "Memo generated successfully", caseId: id, failedSections });
 });

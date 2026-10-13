@@ -9,6 +9,7 @@ import {
   useGenerateMemo,
   useGetDataRoom,
   useGetCaseWorkspace,
+  useRedraftSections,
   getGetCaseQueryKey,
   getListSectionsQueryKey,
   getListRiskFlagsQueryKey,
@@ -43,7 +44,8 @@ const GROUPS: { title: string; keys: string[] }[] = [
 
 type Status = { label: string; tone: "ok" | "warn" | "muted" };
 
-function sectionStatus(s: MemoSection, groupVerified: boolean): Status {
+function sectionStatus(s: MemoSection, groupVerified: boolean, failed = false): Status {
+  if (failed) return { label: "Not drafted", tone: "warn" };
   if (s.isReviewed) return { label: "Reviewed", tone: "ok" };
   if (!s.content?.trim()) return { label: "Not drafted", tone: "muted" };
   if (s.sectionKey === "group_organogram" && !groupVerified) return { label: "Verify", tone: "warn" };
@@ -71,7 +73,7 @@ function Chip({ children, className = "" }: { children: React.ReactNode; classNa
 // ── One memo section, rendered as a document sheet ─────────────────────────
 
 function SectionSheet({
-  section, index, total, generatedAt, caseId, onSave, dpProps,
+  section, index, total, generatedAt, caseId, onSave, dpProps, failed, onRedraft, redrafting,
 }: {
   section: MemoSection;
   index: number;
@@ -80,6 +82,10 @@ function SectionSheet({
   caseId: number;
   onSave: (id: number, key: string, data: Partial<Pick<MemoSection, "content" | "isReviewed" | "isLocked">>) => Promise<void>;
   dpProps?: React.ComponentProps<typeof DrawingPowerCalculator>;
+  /** The last run could not draft this section's commentary. */
+  failed?: boolean;
+  onRedraft?: () => void;
+  redrafting?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [content, setContent] = useState(section.content);
@@ -116,6 +122,20 @@ function SectionSheet({
         {generatedAt && drafted && <span className="ml-auto">Generated {formatDateTime(generatedAt)}</span>}
       </div>
       <h2 className="mt-3 text-2xl text-foreground">{section.sectionTitle}</h2>
+
+      {(failed || redrafting) && !section.isLocked && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded border border-warn/25 bg-warn-bg px-4 py-3 text-sm" role="status">
+          <PiWarningLight className="h-4 w-4 shrink-0 text-warn" />
+          <p className="min-w-[12rem] flex-1 text-foreground">
+            {redrafting ? "Redrafting this section…" : "The AI commentary for this section wasn't drafted — the AI service was busy. The tables below are complete."}
+          </p>
+          {onRedraft && (
+            <Button size="sm" variant="outline" onClick={onRedraft} disabled={redrafting}>
+              {redrafting ? <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" />Redrafting</> : "Redraft this section"}
+            </Button>
+          )}
+        </div>
+      )}
 
       <div className="mt-5">
         {isEditing && !section.isLocked ? (
@@ -267,12 +287,17 @@ export default function CaseDetail() {
     useListSections(id, { query: { enabled: !!id, queryKey: getListSectionsQueryKey(id) } });
   const { data: riskFlags } = useListRiskFlags(id, { query: { enabled: !!id, queryKey: getListRiskFlagsQueryKey(id) } });
   const { data: dataRoom } = useGetDataRoom(id);
-  const { data: workspace } = useGetCaseWorkspace(id);
+  const { data: workspace, refetch: refetchWorkspace } = useGetCaseWorkspace(id);
 
   const updateSection = useUpdateSection();
   const updateCase = useUpdateCase();
   const generateMemo = useGenerateMemo();
+  const redraftSections = useRedraftSections();
   const [generating, setGenerating] = useState(false);
+  const [redrafting, setRedrafting] = useState<string[]>([]);
+  // A failed run stays on screen with a retry until the next attempt. "connection"
+  // means the browser lost the response — the server may still finish the draft.
+  const [genError, setGenError] = useState<{ kind: "failed" | "connection"; message: string } | null>(null);
   const [startedAt, setStartedAt] = useState(0);
   const [tab, setTab] = useState<"memo" | "dataroom">("memo");
   const [roomPanel, setRoomPanel] = useState<DataRoomPanel>("financials");
@@ -287,38 +312,79 @@ export default function CaseDetail() {
 
   const openRoom = (panel: DataRoomPanel) => { setRoomPanel(panel); setTab("dataroom"); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
+  const refreshMemo = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: getListSectionsQueryKey(id) }),
+    queryClient.invalidateQueries({ queryKey: getGetCaseQueryKey(id) }),
+    queryClient.invalidateQueries({ queryKey: getCaseWorkspaceQueryKey(id) }),
+    queryClient.invalidateQueries({ queryKey: getListRiskFlagsQueryKey(id) }),
+  ]);
+
+  const reportPartial = (failed: string[], noun: string) => {
+    if (failed.length) {
+      toast({
+        title: `${noun} — ${failed.length} section${failed.length === 1 ? "" : "s"} not drafted`,
+        description: "The AI service was busy. Use “Redraft” on those sections to try them again.",
+        variant: "destructive",
+      });
+    } else {
+      toast({ title: noun, description: "Review each section before submitting." });
+    }
+  };
+
   const handleGenerate = async () => {
     if (missingFinancials) { openRoom("financials"); return; }
     setTab("memo");
+    setGenError(null);
     setStartedAt(Date.now());
     setGenerating(true);
     try {
       const result = await generateMemo.mutateAsync({ id }) as unknown as { failedSections?: string[] };
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: getListSectionsQueryKey(id) }),
-        queryClient.invalidateQueries({ queryKey: getGetCaseQueryKey(id) }),
-        queryClient.invalidateQueries({ queryKey: getCaseWorkspaceQueryKey(id) }),
-        queryClient.invalidateQueries({ queryKey: getListRiskFlagsQueryKey(id) }),
-      ]);
-      const failed = result?.failedSections ?? [];
-      if (failed.length) {
-        toast({
-          title: `Draft ready — ${failed.length} section${failed.length === 1 ? "" : "s"} not drafted`,
-          description: `The AI service was busy for: ${failed.map((k) => k.replace(/_/g, " ")).join(", ")}. They keep their previous text; regenerate in a minute.`,
-          variant: "destructive",
-        });
-      } else {
-        toast({ title: "Draft ready", description: "All sections drafted. Review each one before submitting." });
-      }
+      await refreshMemo();
+      reportPartial(result?.failedSections ?? [], "Draft ready");
     } catch (e) {
       const data = e && typeof e === "object" && "data" in e ? (e as { data?: { error?: string; code?: string } }).data : undefined;
       if (data?.code === "no_financial_data") {
         await queryClient.invalidateQueries({ queryKey: getDataRoomQueryKey(id) });
         openRoom("financials");
+        toast({ title: "Add financials first", description: data.error, variant: "destructive" });
+      } else if (!(e && typeof e === "object" && "status" in e)) {
+        // No HTTP response at all: the connection dropped, not necessarily the run.
+        setGenError({ kind: "connection", message: "The connection dropped while the draft was being written. The server may still finish it." });
+      } else {
+        setGenError({ kind: "failed", message: data?.error || (e instanceof Error ? e.message : "Could not reach the AI service.") });
       }
-      toast({ title: "Generation failed", description: data?.error || (e instanceof Error ? e.message : "Could not reach the AI service. Try again."), variant: "destructive" });
+      await queryClient.invalidateQueries({ queryKey: getCaseWorkspaceQueryKey(id) });
     } finally {
       setGenerating(false);
+    }
+  };
+
+  // Did a draft land after the dropped connection? Then the run actually succeeded.
+  const checkForDraft = async () => {
+    const r = await refetchWorkspace();
+    const at = r.data?.summary?.generated_at;
+    if (at && new Date(at).getTime() >= startedAt) {
+      setGenError(null);
+      await refreshMemo();
+      reportPartial(r.data?.summary?.failed_sections ?? [], "Draft ready");
+    } else {
+      toast({ title: "Not finished yet", description: "No new draft yet. Check again in a minute, or retry." });
+    }
+  };
+
+  const handleRedraft = async (keys: string[]) => {
+    if (!keys.length || redrafting.length) return;
+    setRedrafting(keys);
+    try {
+      const result = await redraftSections.mutateAsync({ caseId: id, sections: keys });
+      await refreshMemo();
+      reportPartial(result?.failedSections ?? [], keys.length === 1 ? "Section redrafted" : "Sections redrafted");
+    } catch (e) {
+      const data = e && typeof e === "object" && "data" in e ? (e as { data?: { error?: string } }).data : undefined;
+      toast({ title: "Redraft failed", description: data?.error || "Could not reach the AI service. Try again in a minute.", variant: "destructive" });
+      await queryClient.invalidateQueries({ queryKey: getCaseWorkspaceQueryKey(id) });
+    } finally {
+      setRedrafting([]);
     }
   };
 
@@ -347,6 +413,14 @@ export default function CaseDetail() {
     return [...known, ...rest];
   }, [sections]);
   const reviewed = ordered.filter((s) => s.isReviewed).length;
+  // Sections the last run couldn't draft (locked ones are the RM's own text — leave them).
+  const failedKeys = (summary?.failed_sections ?? []).filter((k) => ordered.some((s) => s.sectionKey === k && !s.isLocked));
+  // A failure from an earlier visit is read back from the audit trail, so the retry
+  // survives a reload. Only the most recent run counts.
+  const lastRun = workspace?.activity.find((a) => /^AI (generation|redraft)/.test(a.action));
+  const shownError = genError ?? (lastRun?.action.startsWith("AI generation failed — ")
+    ? { kind: "failed" as const, message: `${lastRun.action.replace("AI generation failed — ", "")} (${formatDateTime(lastRun.timestamp)})` }
+    : null);
   const openItems = (summary?.info_requests ?? []).filter((r) => r.priority === "Before sanction");
 
   if (isDataUnavailable(caseError, caseLoading, caseData)) {
@@ -448,7 +522,7 @@ export default function CaseDetail() {
                 <div key={g.title}>
                   <div className="mb-1 mt-3 text-xs text-muted-foreground">{g.title}</div>
                   {items.map((s) => {
-                    const st = sectionStatus(s, !!summary?.group_verified);
+                    const st = sectionStatus(s, !!summary?.group_verified, failedKeys.includes(s.sectionKey));
                     return (
                       <a key={s.sectionKey} href={`#section-${s.sectionKey}`}
                         className="flex items-start justify-between gap-3 rounded-sm px-2 py-1 leading-snug text-foreground hover:bg-card hover:no-underline">
@@ -475,6 +549,37 @@ export default function CaseDetail() {
               </div>
             )}
             {generating && <GenerationProgress startedAt={startedAt} />}
+            {!generating && shownError && (
+              <div className="mb-4 flex flex-wrap items-start gap-4 rounded border border-risk/25 bg-risk-bg p-5" role="alert">
+                <PiWarningLight className="mt-0.5 h-5 w-5 shrink-0 text-risk" />
+                <div className="min-w-[14rem] flex-1">
+                  <p className="text-sm font-medium">{shownError.kind === "connection" ? "Lost connection while drafting" : hasContent ? "The last regeneration failed" : "The draft could not be generated"}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {shownError.message}
+                    {shownError.kind === "failed" && hasContent ? " The memorandum below is the previous draft, unchanged." : ""}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {shownError.kind === "connection" && <Button size="sm" variant="outline" onClick={checkForDraft}>Check for the draft</Button>}
+                  <Button size="sm" onClick={handleGenerate}>{hasContent ? "Retry regeneration" : "Retry"}</Button>
+                </div>
+              </div>
+            )}
+            {!generating && !shownError && failedKeys.length > 0 && (
+              <div className="mb-4 flex flex-wrap items-start gap-4 rounded border border-warn/25 bg-warn-bg p-5" role="status">
+                <PiWarningLight className="mt-0.5 h-5 w-5 shrink-0 text-warn" />
+                <div className="min-w-[14rem] flex-1">
+                  <p className="text-sm font-medium">{failedKeys.length} section{failedKeys.length === 1 ? "" : "s"} not drafted</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    The AI service was busy for {failedKeys.map((k) => ordered.find((s) => s.sectionKey === k)?.sectionTitle ?? k).join(", ")}.
+                    {" "}Redrafting them leaves the rest of the memorandum as it is.
+                  </p>
+                </div>
+                <Button size="sm" onClick={() => handleRedraft(failedKeys)} disabled={redrafting.length > 0}>
+                  {redrafting.length ? <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" />Redrafting…</> : `Redraft ${failedKeys.length === 1 ? "this section" : `these ${failedKeys.length} sections`}`}
+                </Button>
+              </div>
+            )}
             {sectionsLoading ? (
               <div className="space-y-4"><Skeleton className="h-96" /><Skeleton className="h-96" /></div>
             ) : hasContent ? (
@@ -488,12 +593,15 @@ export default function CaseDetail() {
                     generatedAt={summary?.generated_at}
                     caseId={id}
                     onSave={handleUpdateSection}
+                    failed={failedKeys.includes(s.sectionKey)}
+                    redrafting={redrafting.includes(s.sectionKey)}
+                    onRedraft={() => handleRedraft([s.sectionKey])}
                     dpProps={(caseData.facilityType === "working_capital" || caseData.facilityType === "overdraft") && s.sectionKey === "facility_assessment"
                       ? { proposedLimit: Math.round((caseData.facilityAmount ?? 0) / 1e7) } : undefined}
                   />
                 ))}
               </div>
-            ) : !generating && (
+            ) : !generating && !shownError && (
               <div className="rounded border border-border bg-card px-8 py-16 text-center">
                 <h2 className="text-2xl">No draft yet</h2>
                 <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">

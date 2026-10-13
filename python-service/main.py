@@ -80,7 +80,7 @@ def _check_upload_size(content: bytes) -> None:
 
 
 # ── Request models (replace untyped `data: dict` bodies) ────────────────────
-from typing import Any, Optional  # noqa: E402
+from typing import Any, List, Optional, Union  # noqa: E402
 
 
 class FetchAnnualReportsRequest(BaseModel):
@@ -114,7 +114,8 @@ class DraftSectionsRequest(BaseModel):
     ratios: dict = Field(default_factory=dict)
     company_name: str = Field(default="Unknown Borrower", max_length=200)
     research_brief: str = ""
-    regenerate: Optional[str] = None
+    # One section key or a list of them: redraft only those (retry after a partial failure).
+    regenerate: Optional[Union[str, List[str]]] = None
     peers: list = Field(default_factory=list)
     # {"type": "term_loan", "amount_inr": 10000000} — the case's own facility, so
     # the memo can't drift to a different type or scale (it did: ₹1 Cr → "₹1,000 Cr").
@@ -1125,7 +1126,7 @@ def draft_cam_sections_endpoint(data: DraftSectionsRequest):
     ratios         = data.ratios
     company_name   = data.company_name
     research_brief = data.research_brief
-    regenerate     = data.regenerate   # single section key or None
+    regenerate     = data.regenerate   # section key, list of keys, or None
 
     if not financials:
         raise HTTPException(400, "financials is required")
@@ -1162,7 +1163,9 @@ def draft_cam_sections_endpoint(data: DraftSectionsRequest):
 
     try:
         logger.info(f"[CAM] Drafting sections for {company_name}, regenerate={regenerate!r}")
-        sections = generate_cam_sections(financials, ratios, company_name, research_brief, regenerate)
+        # The legacy generator redrafts one key at a time; a multi-key retry redrafts everything.
+        legacy_key = regenerate if isinstance(regenerate, str) else (regenerate[0] if regenerate and len(regenerate) == 1 else None)
+        sections = generate_cam_sections(financials, ratios, company_name, research_brief, legacy_key)
     except Exception as e:
         logger.error(f"CAM section generation failed: {e}", exc_info=True)
         raise HTTPException(500, "CAM section generation failed. Please try again.")

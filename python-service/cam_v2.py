@@ -13,7 +13,7 @@ import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import cma as cma_mod
 import organogram as og
@@ -1023,14 +1023,19 @@ def _alternates(cm: Dict[str, Any]) -> Dict[str, list]:
 
 def generate(financials: Dict[str, Any], company: str, research: str = "", rm: Dict[str, Any] = None,
              ar: Dict[str, Any] = None, group: Dict[str, Any] = None, llm=None, sector: str = "",
-             only: Optional[str] = None) -> Dict[str, Any]:
-    """All sections (or `only` one). Returns {key: section dict} + _risk_flags / _credit_rating."""
+             only: Optional[Union[str, List[str]]] = None) -> Dict[str, Any]:
+    """All sections, or just `only` (one key or a list — used to redraft sections that
+    failed). Returns {key: section dict}; a full run adds _risk_flags / _summary etc."""
     from risk_flags import generate_risk_flags
     ctx = build_ctx(financials, company, research, rm or {}, ar or {}, group or {}, sector)
     context = build_context(ctx)
     llm_keys = [k for k, _t, uses in SECTIONS if uses and k != "executive_summary"]
-    if only:
-        llm_keys = [only] if only in llm_keys else []
+    only_keys = [only] if isinstance(only, str) else list(only or [])
+    only_keys = [k for k in only_keys if k in TITLES]
+    if only and not only_keys:
+        return {}
+    if only_keys:
+        llm_keys = [k for k in llm_keys if k in only_keys]
     groups = [llm_keys[i:i + 3] for i in range(0, len(llm_keys), 3)]
     prose: Dict[str, str] = {}
     if groups and llm:
@@ -1041,7 +1046,7 @@ def generate(financials: Dict[str, Any], company: str, research: str = "", rm: D
                     prose.update(f.result())
                 except Exception as e:  # noqa: BLE001
                     logger.error(f"[CAMv2] batch failed: {e}")
-    if llm and (only in (None, "executive_summary")):
+    if llm and (not only_keys or "executive_summary" in only_keys):
         digest = "\n\n".join(f"[{k}]\n{prose.get(k, '')[:700]}" for k in ("financial_analysis", "leverage_debt",
                                                                           "facility_assessment", "risk_summary", "recommendation"))
         prose.update(_draft(llm, context + "\n\n--- SECTION DRAFTS ---\n" + digest, company, ["executive_summary"]))
@@ -1049,7 +1054,7 @@ def generate(financials: Dict[str, Any], company: str, research: str = "", rm: D
     composed = compose(ctx, prose)
     fac_cr = ctx["cma"]["facility"]["amount_cr"]
     out: Dict[str, Any] = {}
-    keys = [only] if only else [k for k, _t, _u in SECTIONS]
+    keys = [k for k, _t, _u in SECTIONS if not only_keys or k in only_keys]
     for k in keys:
         content = scrub_assurances(strip_rupee_restatements(composed.get(k, "")),
                                    bool(_rm(ctx["rm"], "conduct", "account_conduct")))
@@ -1071,7 +1076,7 @@ def generate(financials: Dict[str, Any], company: str, research: str = "", rm: D
             conf = "low"
         out[k] = {"content": content, "title": TITLES[k], "ai_generated": uses_llm, "confidence": conf,
                   "confidence_reason": reason, "drafted": bool(prose.get(k)) or not uses_llm}
-    if not only:
+    if not only_keys:
         # Peer and industry text quote other companies' ratios (e.g. a peer's ROCE).
         combined = "\n".join(v for k, v in prose.items() if k not in ("peer_comparison", "industry_analysis"))
         mism = audit_memo_figures(combined, ctx["ratios"], _alternates(ctx["cma"]))

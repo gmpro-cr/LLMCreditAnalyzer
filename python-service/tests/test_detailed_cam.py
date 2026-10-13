@@ -106,6 +106,17 @@ def test_v2_generates_every_section_with_placeholders_and_info_list():
     assert "FY2031E" not in out["financial_analysis"]["content"] and "FY31E" in out["financial_analysis"]["content"]
 
 
+
+def test_v2_redrafts_only_the_listed_sections():
+    fin = {"deep": DEEP, "facility": FAC, "company_info": {"name": "Co Ltd"}, "peers": []}
+    prompts = []
+    llm = lambda p: (prompts.append(p), _fake_llm(p))[1]
+    out = cam_v2.generate(fin, "Co Ltd", "", {}, {}, {}, llm=llm, only=["industry_analysis", "risk_summary"])
+    assert set(out) == {"industry_analysis", "risk_summary"}  # no summary/flags on a partial redraft
+    assert all(out[k]["drafted"] for k in out)
+    assert not any("###SECTION:financial_analysis###" in p for p in prompts)
+    assert cam_v2.generate(fin, "Co Ltd", "", {}, {}, {}, llm=llm, only=["not_a_section"]) == {}
+
 def test_rating_summary_normalises_grades():
     res = {"topics": {"ratings": {"ratings": [
         {"agency": "ICRA", "rating": "[ICRA]AA+ (Stable)/[ICRA]A1+", "outlook": "Stable", "action": "reaffirmed"},
