@@ -289,10 +289,7 @@ def _ollama_call(prompt: str) -> str:
 
 
 
-# Tried in order. flash-lite returns 503 "high demand" at peak; the full flash
-# model is a separate capacity pool on the same key, so it's a free fallback.
-GEMINI_MODELS = [m.strip() for m in os.getenv(
-    "GEMINI_MODELS", "models/gemini-flash-lite-latest,models/gemini-flash-latest").split(",") if m.strip()]
+from llm_providers import GEMINI_MODELS  # tried in order
 
 
 def _gemini_call(prompt: str) -> str:

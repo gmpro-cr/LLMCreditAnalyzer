@@ -77,16 +77,8 @@ def _call_llm(prompt: str) -> str:
 
 def _gemini_call(prompt: str) -> str:
     try:
-        from google import genai
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            return ""
-        client = genai.Client(api_key=api_key, http_options=genai.types.HttpOptions(timeout=90_000))  # SDK default: no timeout
-        response = client.models.generate_content(
-            model="models/gemini-flash-lite-latest",
-            contents=prompt,
-        )
-        return response.text.strip()
+        from llm_providers import gemini_text
+        return gemini_text(prompt, timeout_ms=90_000, label="Memo")  # SDK default: no timeout
     except Exception as e:
         logger.error(f"Gemini call error: {e}")
         return ""

@@ -12,6 +12,7 @@ Configuration (env):
   OPENROUTER_API_KEY     a free-tier key works with ":free" models
   OPENROUTER_FREE_MODELS comma list, default below
   GROQ_API_KEY / GROQ_MODELS
+  GEMINI_MODELS          comma list for the primary provider, tried in order
 """
 import logging
 import os
@@ -23,6 +24,31 @@ from typing import Dict, List
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Pinned GA models first: the "-latest" aliases share one capacity pool and all
+# returned 503 "high demand" / 504 together on 2026-10-22 while gemini-2.5-flash
+# and gemini-3.5-flash answered in ~2s on the same key.
+GEMINI_MODELS = [m.strip() for m in os.getenv(
+    "GEMINI_MODELS",
+    "models/gemini-2.5-flash,models/gemini-3.5-flash,models/gemini-flash-latest,models/gemini-flash-lite-latest",
+).split(",") if m.strip()]
+
+
+def gemini_text(prompt: str, timeout_ms: int, label: str = "Gemini") -> str:
+    """First non-empty reply from GEMINI_MODELS, or "" if every model fails."""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return ""
+    from google import genai
+    for model in GEMINI_MODELS:
+        try:
+            client = genai.Client(api_key=api_key, http_options=genai.types.HttpOptions(timeout=timeout_ms))
+            text = (client.models.generate_content(model=model, contents=prompt).text or "").strip()
+            if text:
+                return text
+        except Exception as e:
+            logger.error(f"[{label}] Gemini error ({model}): {e}")
+    return ""
 
 SYSTEM = ("You are a senior credit risk analyst at an Indian commercial bank. Write formal, concise, "
           "banker-grade text. Use ONLY the data provided. Do NOT fabricate figures. When asked for JSON, "

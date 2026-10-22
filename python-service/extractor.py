@@ -217,17 +217,10 @@ def _call_llm(text: str, prompt: str, label: str) -> dict:
 
 def _call_gemini(text: str, prompt: str, label: str) -> dict:
     try:
-        from google import genai
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
+        from llm_providers import gemini_text
+        raw = gemini_text(prompt + "\n\nTEXT:\n" + text, timeout_ms=120_000, label=label)  # SDK default: no timeout
+        if not raw:
             return {}
-        client = genai.Client(api_key=api_key, http_options=genai.types.HttpOptions(timeout=120_000))  # SDK default: no timeout
-        full_prompt = prompt + "\n\nTEXT:\n" + text
-        response = client.models.generate_content(
-            model="models/gemini-flash-lite-latest",
-            contents=full_prompt,
-        )
-        raw = response.text.strip()
         raw = re.sub(r"^```json?\n?", "", raw)
         raw = re.sub(r"\n?```$", "", raw)
         result = json.loads(raw)
