@@ -59,13 +59,15 @@ PROVIDERS: Dict[str, Dict[str, str]] = {
         "url": "https://integrate.api.nvidia.com/v1/chat/completions",
         "key_env": "NVIDIA_API_KEY",
         "models_env": "NVIDIA_MODELS",
-        "default_models": "deepseek-ai/deepseek-v4.1-flash,nvidia/nemotron-3-super-120b-a12b,nvidia/nemotron-3-ultra-550b-a55b",
+        # nemotron-3-super returned 404 on this account (2026-10-22); 3.5-super-vl is the closest model in the catalog.
+        "default_models": "deepseek-ai/deepseek-v4.1-flash,nvidia/nemotron-3.5-super-vl-120b-a12b,nvidia/nemotron-3-ultra-550b-a55b",
     },
     "openrouter": {
         "url": "https://openrouter.ai/api/v1/chat/completions",
         "key_env": "OPENROUTER_API_KEY",
         "models_env": "OPENROUTER_FREE_MODELS",
-        "default_models": "nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3-ultra-550b-a55b:free",
+        # Probed 2026-10-22: 3-super:free 404s upstream; gemma-4 is often 429 but alive.
+        "default_models": "nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3.5-super-vl:free,google/gemma-4-31b-it:free",
     },
     "groq": {
         "url": "https://api.groq.com/openai/v1/chat/completions",
@@ -125,18 +127,24 @@ def call(provider: str, model: str, prompt: str, max_tokens: int = 8192) -> str:
     try:
         r = httpx.post(p["url"], json=body, headers=headers, timeout=TIMEOUT)
     except Exception as e:  # noqa: BLE001
-        logger.warning(f"[LLM] {tag} request failed: {e}")
+        # Bench timeouts too: CAM batches run in parallel, and each one used to
+        # wait the full TIMEOUT on the same stalled model (2026-10-22).
+        _bench(tag)
+        logger.warning(f"[LLM] {tag} request failed: {e}; benched {BENCH_SECONDS}s")
         return ""
     if r.status_code in (402, 404, 410, 429):
         _bench(tag)  # quota / rate limit / model retired or not on this tier
         logger.warning(f"[LLM] {tag} HTTP {r.status_code}; benched {BENCH_SECONDS}s")
         return ""
+    if r.status_code >= 500:
+        _bench(tag)  # provider overloaded
     if r.status_code >= 400:
         logger.warning(f"[LLM] {tag} HTTP {r.status_code}: {r.text[:200]}")
         return ""
     try:
         return _clean(r.json()["choices"][0]["message"].get("content") or "")
     except Exception as e:  # noqa: BLE001
+        _bench(tag)  # OpenRouter can answer 200 with an error body and no "choices"
         logger.warning(f"[LLM] {tag} bad response: {e}")
         return ""
 

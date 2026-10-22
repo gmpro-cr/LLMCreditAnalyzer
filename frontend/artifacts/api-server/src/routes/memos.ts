@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { listSections, updateSection, bulkUpdateSections, insertSections, listRiskFlags, replaceRiskFlags, updateRiskFlag, insertActivity, updateCase, getCase, getCaseExtractedData, listCaseDocuments, insertCaseDocument, updateCaseDocument, supabase, nullIfMissing } from "../lib/supabase-db.js";
 import { MEMO_SECTIONS, sortSections, blankSectionRows } from "../lib/sections.js";
-import { PYTHON_URL, internalHeaders, wakePython } from "../lib/python.js";
+import { PYTHON_URL, internalHeaders, wakePython, longEngineFetch } from "../lib/python.js";
 import { ListSectionsParams, UpdateSectionBody, GenerateMemoParams, ListRiskFlagsParams } from "@workspace/api-zod";
 
 const router = Router({ mergeParams: true });
@@ -155,7 +155,7 @@ router.post("/:id/generate", async (req, res) => {
 
   let failedSections: string[] = [];
   try {
-    const pyRes = await fetch(`${pythonUrl}/cam/draft-sections`, {
+    const pyRes = await longEngineFetch(`${pythonUrl}/cam/draft-sections`, {
       method: "POST",
       headers: internalHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
