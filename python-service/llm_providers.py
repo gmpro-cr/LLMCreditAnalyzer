@@ -78,6 +78,10 @@ PROVIDERS: Dict[str, Dict[str, str]] = {
 }
 
 BENCH_SECONDS = 60
+# A stalled model costs a full TIMEOUT per caller, and walking three of them takes
+# ~285s, so a 60s bench expired before the next batch looked (2026-10-24 verify:
+# a one-section regenerate took 578s). Stalls sit out long enough to matter.
+STALL_BENCH_SECONDS = 600
 # A healthy 3-section batch returns in ~30-70s; a stalled call should hand over
 # to the next model quickly rather than hold the whole CAM.
 TIMEOUT = httpx.Timeout(95.0, connect=10.0)
@@ -96,9 +100,9 @@ def configured() -> List[str]:
     return [n for n in order if n in PROVIDERS and os.getenv(PROVIDERS[n]["key_env"])]
 
 
-def _bench(tag: str) -> None:
+def _bench(tag: str, seconds: int = BENCH_SECONDS) -> None:
     with _lock:
-        _benched[tag] = time.monotonic() + BENCH_SECONDS
+        _benched[tag] = time.monotonic() + seconds
 
 
 def _is_benched(tag: str) -> bool:
@@ -129,22 +133,22 @@ def call(provider: str, model: str, prompt: str, max_tokens: int = 8192) -> str:
     except Exception as e:  # noqa: BLE001
         # Bench timeouts too: CAM batches run in parallel, and each one used to
         # wait the full TIMEOUT on the same stalled model (2026-10-22).
-        _bench(tag)
-        logger.warning(f"[LLM] {tag} request failed: {e}; benched {BENCH_SECONDS}s")
+        _bench(tag, STALL_BENCH_SECONDS)
+        logger.warning(f"[LLM] {tag} request failed: {e}; benched {STALL_BENCH_SECONDS}s")
         return ""
     if r.status_code in (402, 404, 410, 429):
         _bench(tag)  # quota / rate limit / model retired or not on this tier
         logger.warning(f"[LLM] {tag} HTTP {r.status_code}; benched {BENCH_SECONDS}s")
         return ""
     if r.status_code >= 500:
-        _bench(tag)  # provider overloaded
+        _bench(tag, STALL_BENCH_SECONDS)  # provider overloaded
     if r.status_code >= 400:
         logger.warning(f"[LLM] {tag} HTTP {r.status_code}: {r.text[:200]}")
         return ""
     try:
         return _clean(r.json()["choices"][0]["message"].get("content") or "")
     except Exception as e:  # noqa: BLE001
-        _bench(tag)  # OpenRouter can answer 200 with an error body and no "choices"
+        _bench(tag, STALL_BENCH_SECONDS)  # OpenRouter can answer 200 with an error body and no "choices"
         logger.warning(f"[LLM] {tag} bad response: {e}")
         return ""
 
