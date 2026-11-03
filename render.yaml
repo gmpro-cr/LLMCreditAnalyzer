@@ -62,3 +62,9 @@ services:
       # Points at the Python service above (Render URL = https://<name>.onrender.com).
       - key: PYTHON_SERVICE_URL
         value: https://creditguard-python.onrender.com
+      # The credit agent ("Investigate with AI agent" on the case page), deployed from the
+      # credit-analyst-agent repository. Without them the button says the agent is not configured.
+      - key: AGENT_SERVICE_URL
+        sync: false
+      - key: AGENT_API_TOKEN
+        sync: false

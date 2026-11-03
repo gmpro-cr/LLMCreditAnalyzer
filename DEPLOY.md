@@ -71,6 +71,17 @@ git push origin main
    curl https://creditguard-api.onrender.com/api/dashboard/stats
    ```
 
+## 2b. Optional: the credit agent
+
+The case page's **Investigate with AI agent** button calls a separate service, the credit agent. It is
+deployed from the private `credit-analyst-agent` repository (Render Blueprint, `credit-agent-api`; see that
+repo's `docs/creditguard.md`). Set two variables on `creditguard-api`:
+
+- `AGENT_SERVICE_URL`: the agent's URL, e.g. `https://credit-agent-api.onrender.com`;
+- `AGENT_API_TOKEN`: the token generated on the agent service.
+
+Without them, the button reports that the agent is not configured, and the rest of CreditGuard is unaffected.
+
 ## 3. Deploy the SPA to Vercel
 The Vercel project `creditguard-ai` is already linked (`.vercel/project.json`).
 1. Vercel project **Settings → General → Root Directory = `frontend`**.

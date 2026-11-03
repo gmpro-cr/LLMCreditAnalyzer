@@ -239,7 +239,10 @@ export class ResponseParseError extends Error {
 // the caller is better served by a prompt, honest failure. Codes NOT listed
 // here (notably `upstream_unavailable`, the Python engine's cold start) stay
 // retryable, because those really do recover within the retry window.
-const TERMINAL_ERROR_CODES = new Set(["database_unavailable"]);
+// The agent_* codes come from starting a credit-agent run: a retried start
+// can launch a second 10-20 minute investigation if the first one was
+// accepted but answered slowly, and "not configured" never recovers.
+const TERMINAL_ERROR_CODES = new Set(["database_unavailable", "agent_not_configured", "agent_refused", "agent_unreachable"]);
 
 /**
  * Peek at an error body to see whether the server flagged the failure as

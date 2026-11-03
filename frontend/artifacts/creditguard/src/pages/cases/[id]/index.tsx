@@ -17,6 +17,12 @@ import {
   getCaseWorkspaceQueryKey,
   MemoSection,
   type CamSummary,
+  useGetAgentRun,
+  useStartAgentRun,
+  useCancelAgentRun,
+  getAgentRunQueryKey,
+  AGENT_ACTIVE,
+  type AgentRun,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import DataRoomTab, { hasFinancialData, type DataRoomPanel } from "./DataRoomTab";
@@ -273,6 +279,112 @@ function GenerationProgress({ startedAt }: { startedAt: number }) {
   );
 }
 
+const AGENT_TOOL_LABEL: Record<string, string> = {
+  resolve_entity: "Identified the borrower",
+  search_filings: "Loaded financial statements",
+  compute_ratios: "Computed ratios",
+  check_risk_flags: "Checked risk flags",
+  read_document: "Read the annual report",
+  search_litigation: "Searched court and NCLT records",
+  search_news: "Searched news",
+  lookup_ratings: "Looked up credit ratings",
+  ask_rm: "Listed questions for the RM",
+  close_question: "Closed a question",
+  finish: "Finished the investigation",
+};
+
+function AgentPanel({ run, caseId, onCancel, cancelling, onRetry }: {
+  run: AgentRun; caseId: number; onCancel: () => void; cancelling: boolean; onRetry: () => void;
+}) {
+  const active = AGENT_ACTIVE.includes(run.status);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [active]);
+  const steps = run.steps ?? [];
+
+  if (active) {
+    const started = run.started_at ? new Date(run.started_at).getTime() : now;
+    const elapsed = Math.max(0, Math.floor((now - started) / 1000));
+    return (
+      <div className="mb-4 rounded border border-primary/25 bg-card p-5" role="status" aria-live="polite">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-[14rem] flex-1">
+            <p className="text-sm font-medium">
+              {run.status === "queued" ? "AI agent queued" : run.status === "writing" ? "AI agent is writing the CAM" : "AI agent is investigating"}…
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              It works through the filings, annual report, ratings and court records, then drafts all 21 sections. Usually 10–20 minutes; you can leave this page.
+              {run.stale ? " (Reconnecting to the agent…)" : ""}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs tabular-nums text-muted-foreground">{Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}</span>
+            <Button size="sm" variant="outline" onClick={onCancel} disabled={cancelling}>Cancel</Button>
+          </div>
+        </div>
+        <div className="mt-4 h-0.5 w-full overflow-hidden bg-primary/10"><div className="h-full w-1/3 animate-indeterminate bg-primary/70" /></div>
+        {steps.length > 0 && (
+          <ol className="mt-4 space-y-1.5 text-xs">
+            {steps.slice(-6).map((s) => (
+              <li key={s.id} className="flex gap-3">
+                <span className="w-8 shrink-0 font-mono text-muted-foreground">{s.id}</span>
+                <span className="min-w-0">
+                  <span className="font-medium text-foreground">{AGENT_TOOL_LABEL[s.tool] ?? s.tool.replace(/_/g, " ")}</span>
+                  <span className="text-muted-foreground"> — {s.outcome}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    );
+  }
+
+  if (run.status === "done") {
+    const gate = run.checks?.decision_gate;
+    const reasons = [...(gate?.knockouts ?? []), ...(gate?.cautions ?? [])];
+    return (
+      <div className={`mb-4 flex flex-wrap items-start gap-4 rounded border p-5 ${gate?.decision && gate.decision !== "clear" ? "border-warn/25 bg-warn-bg" : "border-border bg-card"}`} role="status">
+        <div className="min-w-[14rem] flex-1">
+          <p className="text-sm font-medium">
+            {run.imported ? "This draft was written by the AI agent" : "AI agent finished — importing the CAM…"}
+            {gate?.decision && gate.decision !== "clear" ? ` · Decision gate: ${gate.decision}` : ""}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {steps.length} investigation steps, {run.sources?.length ?? 0} sources cited
+            {run.checks?.numeric_sentences_checked ? `, ${run.checks.numeric_sentences_flagged ?? 0} of ${run.checks.numeric_sentences_checked} figure sentences flagged for checking` : ""}
+            {run.imported_at ? ` · Imported ${formatDateTime(run.imported_at)}` : ""}.
+            {run.import_error ? ` ${run.import_error}` : ""}
+          </p>
+          {reasons.length > 0 && <ul className="mt-2 list-disc pl-5 text-xs text-foreground">{reasons.map((r) => <li key={r}>{r}</li>)}</ul>}
+        </div>
+        {run.imported && (
+          <Button variant="outline" size="sm" asChild>
+            <a href={`${import.meta.env.VITE_API_URL || ""}/api/cases/${caseId}/agent/pdf`}>Agent's PDF with sources</a>
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  // failed / no_cam / cancelled
+  return (
+    <div className={`mb-4 flex flex-wrap items-start gap-4 rounded border p-5 ${run.status === "cancelled" ? "border-border bg-card" : "border-risk/25 bg-risk-bg"}`} role="alert">
+      <PiWarningLight className={`mt-0.5 h-5 w-5 shrink-0 ${run.status === "cancelled" ? "text-muted-foreground" : "text-risk"}`} />
+      <div className="min-w-[14rem] flex-1">
+        <p className="text-sm font-medium">
+          {run.status === "cancelled" ? "AI agent run cancelled" : run.status === "no_cam" ? "The AI agent wrote no CAM for this borrower" : "The AI agent run failed"}
+        </p>
+        {run.message && <p className="mt-1 text-sm text-muted-foreground">{run.message}</p>}
+      </div>
+      <Button size="sm" variant="outline" onClick={onRetry}>Run the agent again</Button>
+    </div>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function CaseDetail() {
@@ -288,6 +400,12 @@ export default function CaseDetail() {
   const { data: riskFlags } = useListRiskFlags(id, { query: { enabled: !!id, queryKey: getListRiskFlagsQueryKey(id) } });
   const { data: dataRoom } = useGetDataRoom(id);
   const { data: workspace, refetch: refetchWorkspace } = useGetCaseWorkspace(id);
+  const { data: agentRun } = useGetAgentRun(id);
+  const startAgent = useStartAgentRun();
+  const cancelAgent = useCancelAgentRun();
+  const agentActive = !!agentRun && AGENT_ACTIVE.includes(agentRun.status);
+  // The agent run whose CAM is already on screen: a run that finishes while the page is open refreshes the memo once.
+  const [agentShown, setAgentShown] = useState<string | undefined>(undefined);
 
   const updateSection = useUpdateSection();
   const updateCase = useUpdateCase();
@@ -328,6 +446,38 @@ export default function CaseDetail() {
       });
     } else {
       toast({ title: noun, description: "Review each section before submitting." });
+    }
+  };
+
+  useEffect(() => {
+    if (!agentRun) return;
+    const imported = agentRun.imported && agentRun.job_id ? agentRun.job_id : "";
+    if (agentShown === undefined) { setAgentShown(imported); return; }
+    if (imported && imported !== agentShown) {
+      setAgentShown(imported);
+      refreshMemo();
+      toast({ title: "AI agent CAM ready", description: "The agent's draft replaced the unlocked sections. Review each section before submitting." });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentRun?.imported, agentRun?.job_id]);
+
+  const handleAgent = async () => {
+    try {
+      await startAgent.mutateAsync({ caseId: id });
+      await queryClient.invalidateQueries({ queryKey: getAgentRunQueryKey(id) });
+      setTab("memo");
+      toast({ title: "AI agent started", description: "It reads the filings, annual report, ratings and court records, then drafts the CAM. This takes 10–20 minutes; you can leave this page." });
+    } catch (e) {
+      const data = e && typeof e === "object" && "data" in e ? (e as { data?: { error?: string } }).data : undefined;
+      toast({ title: "Could not start the AI agent", description: data?.error || "The agent service is unreachable. Try again in a minute.", variant: "destructive" });
+    }
+  };
+
+  const handleCancelAgent = async () => {
+    try {
+      await cancelAgent.mutateAsync({ caseId: id });
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: getAgentRunQueryKey(id) });
     }
   };
 
@@ -469,7 +619,11 @@ export default function CaseDetail() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={handleGenerate} disabled={generating}>
+              <Button variant="outline" size="sm" onClick={handleAgent} disabled={agentActive || generating || startAgent.isPending}
+                title="The AI agent investigates the borrower (filings, annual report, ratings, court records) and drafts the full CAM with cited sources">
+                {agentActive ? <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" />Agent investigating…</> : "Investigate with AI agent"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleGenerate} disabled={generating || agentActive}>
                 {generating ? <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" />Drafting…</> : missingFinancials ? "Add financials first" : hasContent ? "Regenerate draft" : "Generate draft"}
               </Button>
               <Button variant="outline" size="sm" asChild>
@@ -549,6 +703,9 @@ export default function CaseDetail() {
               </div>
             )}
             {generating && <GenerationProgress startedAt={startedAt} />}
+            {agentRun && agentRun.status !== "none" && (
+              <AgentPanel run={agentRun} caseId={id} onCancel={handleCancelAgent} cancelling={cancelAgent.isPending} onRetry={handleAgent} />
+            )}
             {!generating && shownError && (
               <div className="mb-4 flex flex-wrap items-start gap-4 rounded border border-risk/25 bg-risk-bg p-5" role="alert">
                 <PiWarningLight className="mt-0.5 h-5 w-5 shrink-0 text-risk" />
