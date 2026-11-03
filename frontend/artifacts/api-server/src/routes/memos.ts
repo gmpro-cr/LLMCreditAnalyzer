@@ -1,6 +1,7 @@
 import { Router } from "express";
-import { listSections, updateSection, bulkUpdateSections, insertSections, listRiskFlags, replaceRiskFlags, updateRiskFlag, insertActivity, updateCase, getCase, getCaseExtractedData, listCaseDocuments, insertCaseDocument, updateCaseDocument, supabase, nullIfMissing } from "../lib/supabase-db.js";
-import { MEMO_SECTIONS, sortSections, blankSectionRows } from "../lib/sections.js";
+import { listSections, updateSection, bulkUpdateSections, listRiskFlags, replaceRiskFlags, updateRiskFlag, insertActivity, updateCase, getCase, getCaseExtractedData, listCaseDocuments, supabase, nullIfMissing } from "../lib/supabase-db.js";
+import { MEMO_SECTIONS, sortSections } from "../lib/sections.js";
+import { saveDetailedCam } from "../lib/cam-save.js";
 import { PYTHON_URL, internalHeaders, wakePython, longEngineFetch } from "../lib/python.js";
 import { ListSectionsParams, UpdateSectionBody, GenerateMemoParams, ListRiskFlagsParams } from "@workspace/api-zod";
 
@@ -184,55 +185,8 @@ router.post("/:id/generate", async (req, res) => {
     const camSections = (pyData.cam_sections || pyData.sections || pyData || {}) as Record<string, unknown>;
 
     if (pyData.version === 2) {
-      // Detailed CAM: keys are already UI keys. Create rows a pre-v2 case lacks,
-      // refresh titles, and never overwrite a section the RM has locked.
-      const existing = await listSections(id);
-      const have = new Map(existing.map((s) => [s.section_key as string, s]));
-      const missing = MEMO_SECTIONS.map((s) => s.key).filter((k) => !have.has(k) && camSections[k]);
-      if (missing.length) await insertSections(blankSectionRows(id, missing));
-      const v2Updates: { sectionKey: string; values: Record<string, unknown> }[] = [];
-      for (const s of MEMO_SECTIONS) {
-        const sec = camSections[s.key] as { content?: string; confidence?: string } | undefined;
-        if (!sec?.content?.trim() || have.get(s.key)?.is_locked) continue;
-        v2Updates.push({ sectionKey: s.key, values: { content: sec.content, confidence: sec.confidence || "medium", section_title: s.title } });
-      }
-      if (v2Updates.length) await bulkUpdateSections(id, v2Updates);
-      failedSections = MEMO_SECTIONS.map((s) => s.key).filter((k) => {
-        const sec = camSections[k] as { ai_generated?: boolean; drafted?: boolean } | undefined;
-        return !!sec?.ai_generated && !sec.drafted;
-      });
-      // Workspace summary (headline figures, sources, open RM items) — stored as
-      // its own Data Room row like rm_inputs, so no schema change is needed.
-      const metaDoc = docs.find((d) => d.doc_type === "cam_meta");
-      const prevMeta = (metaDoc?.extracted_data as Record<string, unknown> | null) || {};
-      // failed_sections drives the "Redraft N sections" prompt on the case page.
-      const meta = partial
-        ? {
-            ...prevMeta,
-            failed_sections: [...new Set([
-              ...((prevMeta.failed_sections as string[] | undefined) ?? []).filter((k) => !requested.includes(k)),
-              ...failedSections,
-            ])],
-          }
-        : {
-            ...((camSections["_summary"] as Record<string, unknown>) || {}),
-            info_requests: camSections["_info_requests"] ?? [],
-            failed_sections: failedSections,
-            generated_at: new Date().toISOString(),
-          };
-      try {
-        if (metaDoc) await updateCaseDocument(Number(metaDoc.id), { extracted_data: meta });
-        else await insertCaseDocument({ case_id: id, doc_type: "cam_meta", filename: "CAM summary", storage_path: "", fiscal_year: null, extracted_data: meta, source: "engine" });
-      } catch (e) {
-        console.error("[generate] could not save CAM summary:", e);
-      }
-      const flags = Array.isArray(camSections["_risk_flags"]) ? camSections["_risk_flags"] as Record<string, unknown>[] : [];
-      if (!partial) await replaceRiskFlags(id, flags.map((f) => ({
-        case_id: id,
-        risk_type: String(f.title ?? f.ratio_key ?? "Risk"),
-        severity: ["high", "medium", "low"].includes(String(f.severity)) ? String(f.severity) : "medium",
-        description: String(f.description ?? ""),
-      })));
+      // Detailed CAM: keys are already UI keys (shared with the credit agent's import).
+      failedSections = await saveDetailedCam(id, camSections, { docs, requested });
     } else {
     const updates: { sectionKey: string; values: Record<string, unknown> }[] = [];
 
