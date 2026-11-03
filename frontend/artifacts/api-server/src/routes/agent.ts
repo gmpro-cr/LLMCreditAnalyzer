@@ -63,12 +63,14 @@ router.post("/:id/agent", async (req, res) => {
     if (!r.ok) {
       const err = await r.text().catch(() => "");
       console.error("[agent] start failed", r.status, err.slice(0, 300));
-      return res.status(502).json({ error: `The credit agent refused the request (${r.status}).` });
+      return res.status(502).json({ error: `The credit agent refused the request (${r.status}).`, code: "agent_refused" });
     }
     job = await r.json() as { job_id: string; status: string };
   } catch (e) {
     console.error("[agent] start error:", e);
-    return res.status(503).json({ error: "The credit agent is unreachable. Try again in a minute.", code: "upstream_unavailable" });
+    // Not "upstream_unavailable": the client must not auto-retry a start that may
+    // have been accepted. Refreshing the case shows any run the agent did begin.
+    return res.status(503).json({ error: "The credit agent did not answer. Refresh the case in a minute before starting it again.", code: "agent_unreachable" });
   }
 
   const state: Run = { job_id: job.job_id, status: job.status, started_at: new Date().toISOString(), imported: false, steps: [] };
@@ -137,7 +139,8 @@ router.get("/:id/agent", async (req, res) => {
     if (c) await insertActivity({ case_id: id, borrower_name: c.borrower_name, actor: ACTOR,
       action: `AI agent investigation ${next.status === "cancelled" ? "cancelled" : `ended without a CAM — ${String(next.message ?? "")}`}` }).catch(() => {});
   }
-  await updateCaseDocument(Number(doc.id), { extracted_data: next });
+  // Polled every 5 s while a run is active; only write when something changed.
+  if (JSON.stringify(next) !== JSON.stringify(run)) await updateCaseDocument(Number(doc.id), { extracted_data: next });
   return res.json(next);
 });
 

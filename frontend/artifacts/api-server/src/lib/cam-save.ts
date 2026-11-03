@@ -19,6 +19,16 @@ export interface SaveOptions {
   meta?: Record<string, unknown>;
 }
 
+/** The flag's description, with the agent's evidence kept (risk_flags has no evidence column). */
+function flagDescription(f: Record<string, unknown>): string {
+  const text = String(f.description ?? "").trim();
+  const ev = f.evidence;
+  const evidence = Array.isArray(ev) ? ev.map((e) => (typeof e === "string" ? e : JSON.stringify(e))).join("; ")
+    : ev && typeof ev === "object" ? JSON.stringify(ev) : String(ev ?? "").trim();
+  if (!evidence) return text;
+  return text ? `${text}\n\nEvidence: ${evidence}` : `Evidence: ${evidence}`;
+}
+
 /** Returns the AI sections the source could not draft. */
 export async function saveDetailedCam(caseId: number, camSections: Record<string, unknown>, opts: SaveOptions): Promise<string[]> {
   const partial = !!opts.requested?.length;
@@ -66,9 +76,10 @@ export async function saveDetailedCam(caseId: number, camSections: Record<string
   const flags = Array.isArray(camSections["_risk_flags"]) ? camSections["_risk_flags"] as Record<string, unknown>[] : [];
   if (!partial) await replaceRiskFlags(caseId, flags.map((f) => ({
     case_id: caseId,
-    risk_type: String(f.title ?? f.ratio_key ?? "Risk"),
+    // Engine flags carry title/description; the agent's carry risk/evidence.
+    risk_type: String(f.title ?? f.risk ?? f.ratio_key ?? "Risk"),
     severity: ["high", "medium", "low"].includes(String(f.severity)) ? String(f.severity) : "medium",
-    description: String(f.description ?? ""),
+    description: flagDescription(f),
   })));
   return failedSections;
 }
