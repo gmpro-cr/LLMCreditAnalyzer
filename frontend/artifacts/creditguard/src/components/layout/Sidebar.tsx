@@ -24,6 +24,7 @@ export const NAVIGATION = [
   { name: "Pipeline", href: "/", match: (l: string) => l === "/" },
   { name: "Cases", href: "/cases", match: (l: string) => l.startsWith("/cases") },
   { name: "Bank statements", href: "/bank-statement", match: (l: string) => l.startsWith("/bank-statement") },
+  { name: "GST returns", href: "/gst-returns", match: (l: string) => l.startsWith("/gst-returns") },
 ];
 
 /** Account menu shared by the desktop top bar and the mobile menu. */

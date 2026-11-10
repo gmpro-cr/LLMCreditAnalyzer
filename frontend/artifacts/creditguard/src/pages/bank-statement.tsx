@@ -255,12 +255,13 @@ export default function BankStatement() {
               Indian conventions assumed: ₹ amounts, DD/MM/YYYY dates, debit/credit columns or signed amount.
             </p>
 
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <span className="text-xs text-muted-foreground">Files are analysed in memory and not stored.</span>
               <Button onClick={onAnalyze} disabled={!file || analyzing} className="min-w-[180px]">
                 {analyzing ? (
                   <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" /> Analyzing…</>
                 ) : (
-                  <><PiPulseLight className="mr-2 h-4 w-4" /> Run Analysis</>
+                  <><PiPulseLight className="mr-2 h-4 w-4" /> Run analysis</>
                 )}
               </Button>
             </div>

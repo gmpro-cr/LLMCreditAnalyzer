@@ -23,6 +23,7 @@ const NewCase = lazy(() => import("@/pages/cases/new"));
 const CaseDetail = lazy(() => import("@/pages/cases/[id]/index"));
 const CaseRisks = lazy(() => import("@/pages/cases/[id]/risks"));
 const BankStatement = lazy(() => import("@/pages/bank-statement"));
+const GstReturns = lazy(() => import("@/pages/gst-returns"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -70,6 +71,7 @@ function Router() {
               <Route path="/cases/:id" component={CaseDetail} />
               <Route path="/cases/:id/risks" component={CaseRisks} />
               <Route path="/bank-statement" component={BankStatement} />
+              <Route path="/gst-returns" component={GstReturns} />
               <Route component={NotFound} />
             </Switch>
           </Suspense>

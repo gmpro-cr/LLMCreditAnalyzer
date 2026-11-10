@@ -23,6 +23,7 @@ from public_data import fetch_all_public_data, fetch_stock_quote, fetch_screener
 from cam_sections import generate_cam_sections, _llm
 from risk_flags import generate_risk_flags
 from bank_statement import analyze_bank_statement, export_to_excel
+from gst_returns import analyze_gst_returns, build_template as build_gst_template
 from validators import data_quality_report, apply_data_quality, apply_figure_audit
 from credit_score import compute_scorecard, format_scorecard_md
 
@@ -1308,6 +1309,68 @@ async def analyze_bank_statement_endpoint(
     except Exception as e:
         logger.error(f"Bank statement analysis failed: {e}", exc_info=True)
         raise HTTPException(500, "Analysis failed. Please try again.")
+
+
+# ── GST Returns Analysis ──────────────────────────────────────────────────────
+# Uploaded files are analysed in memory and never written to disk or the database.
+@app.post("/analyze-gst")
+async def analyze_gst_endpoint(
+    file: UploadFile = File(...),
+    bank_file: Optional[UploadFile] = File(None),
+    legal_name: str = Form(""),
+    gstin: str = Form(""),
+    financials_turnover: str = Form(""),
+):
+    """Monthly GST summary (Excel/CSV) -> turnover, tax, filing, concentration, reconciliation."""
+    if not file.filename:
+        raise HTTPException(400, "No file uploaded")
+    content = await file.read()
+    _check_upload_size(content)
+    name = file.filename.lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xls") or name.endswith(".csv")):
+        raise HTTPException(400, "Upload the GST summary as Excel (.xlsx) or CSV.")
+
+    fin: Optional[float] = None
+    if financials_turnover.strip():
+        try:
+            fin = float(financials_turnover.replace(",", ""))
+        except ValueError:
+            raise HTTPException(400, "Turnover per financials must be a number in rupees.")
+        if fin <= 0:
+            fin = None
+
+    bank_analysis = None
+    if bank_file is not None and bank_file.filename:
+        bank_bytes = await bank_file.read()
+        _check_upload_size(bank_bytes)
+        bname = bank_file.filename.lower()
+        if not bname.endswith((".csv", ".xlsx", ".xls", ".pdf")):
+            raise HTTPException(400, "Bank statement must be CSV, Excel or PDF.")
+        try:
+            bank_analysis = await asyncio.to_thread(analyze_bank_statement, bank_bytes, bank_file.filename, None, None, None)
+        except ValueError as ve:
+            raise HTTPException(400, f"Bank statement: {ve}")
+
+    try:
+        return await asyncio.to_thread(
+            analyze_gst_returns, content, file.filename, legal_name or None, gstin or None, fin, bank_analysis,
+        )
+    except ValueError as ve:
+        raise HTTPException(400, str(ve))
+    except Exception as e:
+        logger.error(f"GST analysis failed: {e}", exc_info=True)
+        raise HTTPException(500, "Analysis failed. Please try again.")
+
+
+@app.get("/gst-template")
+async def gst_template_endpoint():
+    from fastapi.responses import Response
+    data = await asyncio.to_thread(build_gst_template)
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="CreditGuard_GST_summary_template.xlsx"'},
+    )
 
 
 # ── Bank Statement Excel Export ───────────────────────────────────────────────

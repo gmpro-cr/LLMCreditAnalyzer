@@ -659,7 +659,7 @@ export default function Landing() {
                   </a>
                 </motion.div>
                 <motion.ul variants={fadeUp} className="mt-10 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-white/80">
-                  {["Public company data only", "No customer data processed", "Every section editable"].map((t) => (
+                  {["Listed borrowers drafted from public filings", "Bank and GST uploads are not stored", "Every section editable"].map((t) => (
                     <li key={t} className="flex items-center gap-2">
                       <Check className="h-3.5 w-3.5 text-white" /> {t}
                     </li>
@@ -729,7 +729,7 @@ export default function Landing() {
         <footer className="bg-foreground text-white/70">
           <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-3 border-t border-white/10 px-4 py-6 text-xs sm:px-8">
             <span className="flex items-center gap-2 text-white"><CreditGuardMark className="h-4 w-4" /> CreditGuard</span>
-            <span>© {new Date().getFullYear()} CreditGuard · Demo workspace · No customer data is processed.</span>
+            <span>© {new Date().getFullYear()} CreditGuard · Demo workspace · Bank statements and GST returns are analysed in memory and not stored.</span>
           </div>
         </footer>
       </div>
