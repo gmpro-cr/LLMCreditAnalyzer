@@ -158,7 +158,7 @@ function FetchedFinancialsCard({ financials }: { financials: FetchedFinancials }
   const fmt = (v?: number | null) => (typeof v === "number" ? v.toLocaleString("en-IN", { maximumFractionDigits: 0 }) : "—");
   const fy = (y: string) => { const m = y.match(/(\d{4})/); return m ? `FY${m[1].slice(2)}` : y; };
   return (
-    <div className="rounded border border-border bg-card">
+    <div className="panel">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-3">
         <p className="text-sm font-semibold">
           {deep ? `${deep.basis ?? "Consolidated"} financials · ${years.length} years` : `Financials · ${years.length} years`}

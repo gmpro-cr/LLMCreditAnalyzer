@@ -1,3 +1,4 @@
+import { PageHeader, PageBody } from "@/components/layout/PageHeader";
 import { useState } from "react";
 import {
   PiUploadSimpleLight,
@@ -185,27 +186,24 @@ export default function BankStatement() {
   };
 
   return (
-    <div className="p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl tracking-[-0.02em]">Bank statement analysis</h1>
-          <p className="text-muted-foreground mt-1">
-            Upload a bank statement and get a banker-grade analysis: cash flow, AMB, recurring income, EMI obligations, bounces, and a creditworthiness score.
-          </p>
-        </div>
-        {result && (
-          <div className="flex items-center gap-2">
+    <>
+      <PageHeader
+        title="Bank statement analysis"
+        subtitle="Upload a bank statement and get a banker-grade analysis: cash flow, AMB, recurring income, EMI obligations, bounces, and a creditworthiness score."
+        actions={result ? (
+          <>
             <Button onClick={onDownloadExcel} disabled={downloading}>
               {downloading ? (
                 <><PiSpinnerLight className="mr-2 h-4 w-4 animate-spin" /> Building workbook…</>
               ) : (
-                <><PiFileArrowDownLight className="mr-2 h-4 w-4" /> Download Excel Report</>
+                <><PiFileArrowDownLight className="mr-2 h-4 w-4" /> Download Excel report</>
               )}
             </Button>
-            <Button variant="outline" onClick={reset}>Analyze another statement</Button>
-          </div>
-        )}
-      </div>
+            <Button variant="outline" onClick={reset}>Analyse another statement</Button>
+          </>
+        ) : undefined}
+      />
+      <PageBody className="space-y-6">
 
       {!result && (
         <Card>
@@ -271,7 +269,8 @@ export default function BankStatement() {
       )}
 
       {result && <AnalysisReport data={result} />}
-    </div>
+      </PageBody>
+    </>
   );
 }
 

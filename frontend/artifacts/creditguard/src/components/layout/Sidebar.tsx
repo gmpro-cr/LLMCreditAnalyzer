@@ -38,7 +38,7 @@ export function AccountMenu() {
       <DropdownMenuTrigger asChild>
         <button
           aria-label={`Account: ${displayName}`}
-          className="flex h-8 w-8 items-center justify-center rounded-[6px] bg-accent text-[11px] font-semibold text-accent-foreground transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold text-white shadow-[inset_0_0_0_1px_rgb(255_255_255/0.14)] transition-colors hover:bg-white/20"
         >
           {initials}
         </button>

@@ -1,3 +1,4 @@
+import { PageHeader, PageBody } from "@/components/layout/PageHeader";
 import { useState } from "react";
 import { useParams, Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -50,7 +51,7 @@ function FlagRow({ caseId, flag }: { caseId: number; flag: RiskFlag & { mitigati
   };
 
   return (
-    <article className="rounded border border-border bg-card">
+    <article className="panel">
       <div className="flex flex-wrap items-center gap-3 border-b border-border px-5 py-3.5">
         <span className={`inline-flex rounded-[3px] border px-1.5 py-px text-xs ${sev.cls}`}>{sev.label}</span>
         <h2 className="font-sans text-[15px] font-semibold tracking-normal">{flag.riskType}</h2>
@@ -99,28 +100,23 @@ export default function CaseRisks() {
 
   return (
     <div>
-      <section className="border-b border-border bg-card">
-        <div className="mx-auto max-w-[1440px] px-4 py-5 sm:px-8">
-          <div className="text-xs text-muted-foreground">
-            <Link href="/cases" className="text-muted-foreground hover:text-foreground">Cases</Link>
-            <span className="mx-1.5">/</span>
-            <Link href={`/cases/${id}`} className="text-muted-foreground hover:text-foreground">{caseData ? caseRef(caseData.id, caseData.createdAt) : "Case"}</Link>
-            <span className="mx-1.5">/</span>Risk flags
-          </div>
-          <div className="mt-1.5 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h1 className="text-[32px] leading-tight">Risk flags</h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {caseData?.borrowerName ?? ""}{flags.length ? ` · ${flags.length} flag${flags.length === 1 ? "" : "s"}, ${open} open` : ""}.
-                {" "}Flags are computed from the financial ratios; each needs a recorded mitigation before credit review.
-              </p>
-            </div>
-            <Button variant="outline" asChild><Link href={`/cases/${id}`}>Back to memorandum</Link></Button>
-          </div>
-        </div>
-      </section>
+      <PageHeader
+        width="max-w-4xl"
+        crumbs={<>
+          <Link href="/cases" className="hover:underline">Cases</Link>
+          <span className="mx-1.5">/</span>
+          <Link href={`/cases/${id}`} className="hover:underline">{caseData ? caseRef(caseData.id, caseData.createdAt) : "Case"}</Link>
+          <span className="mx-1.5">/</span>Risk flags
+        </>}
+        title="Risk flags"
+        subtitle={<>
+          {caseData?.borrowerName ?? ""}{flags.length ? ` · ${flags.length} flag${flags.length === 1 ? "" : "s"}, ${open} open` : ""}.
+          {" "}Flags are computed from the financial ratios; each needs a recorded mitigation before credit review.
+        </>}
+        actions={<Button variant="outline" asChild><Link href={`/cases/${id}`}>Back to memorandum</Link></Button>}
+      />
 
-      <div className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-8 sm:px-8">
+      <div className="relative mx-auto -mt-16 flex max-w-4xl flex-col gap-4 px-4 pb-16 sm:px-8">
         {isLoading ? (
           <><Skeleton className="h-48" /><Skeleton className="h-48" /></>
         ) : isDataUnavailable(isError, isLoading, riskFlags) ? (
@@ -134,7 +130,7 @@ export default function CaseRisks() {
         ) : flags.length ? (
           flags.map((f) => <FlagRow key={f.id} caseId={id} flag={f} />)
         ) : (
-          <div className="rounded border border-border bg-card px-8 py-14 text-center">
+          <div className="panel px-8 py-14 text-center">
             <p className="text-sm font-medium">No ratio-based risk flags</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
               None of the computed ratios crossed a risk threshold. This is not a full credit assessment — review the Key risks section of the memorandum.

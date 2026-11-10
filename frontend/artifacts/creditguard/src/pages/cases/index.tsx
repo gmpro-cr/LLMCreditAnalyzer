@@ -47,6 +47,7 @@ import { isDataUnavailable } from "@/lib/query-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useToast } from "@/hooks/use-toast";
+import { PageHeader, PageBody } from "@/components/layout/PageHeader";
 
 export default function CasesList() {
   const [, setLocation] = useLocation();
@@ -98,28 +99,27 @@ export default function CasesList() {
 
   return (
     <>
-      <div className="mx-auto flex max-w-[1440px] flex-col gap-5 px-4 py-8 sm:px-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-[32px] leading-tight">Cases</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Every credit appraisal memorandum in this workspace.</p>
-          </div>
-          <Button onClick={() => setLocation("/cases/new")}>New case</Button>
-        </div>
-
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 shrink-0">
+      <PageHeader
+        title="Cases"
+        subtitle="Every credit appraisal memorandum in this workspace."
+        actions={<Button onClick={() => setLocation("/cases/new")}>New case</Button>}
+      />
+      <PageBody>
+        <div className="panel">
+        <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
           <div className="relative w-full flex-1 sm:max-w-md">
             <PiMagnifyingGlassLight className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search borrower, RM or PAN"
-              className="pl-9"
+              aria-label="Search cases"
+              className="border-transparent bg-muted pl-9 shadow-none"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <Select value={statusFilter} onValueChange={handleStatusChange}>
-              <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]" aria-label="Filter by status">
                 <PiFunnelLight className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -132,21 +132,23 @@ export default function CasesList() {
               </SelectContent>
             </Select>
           </div>
+          {cases && !casesUnavailable && (
+            <span className="text-xs tabular-nums text-muted-foreground sm:ml-auto">{cases.length} case{cases.length === 1 ? "" : "s"}</span>
+          )}
         </div>
-
-        <div className="overflow-hidden rounded border border-border bg-card">
+        <div className="overflow-hidden">
           <div className="relative w-full overflow-auto">
-            <table className="w-full caption-bottom text-sm">
-              <thead className="bg-muted text-xs text-muted-foreground">
-                <tr className="border-b border-border">
-                  <th className="h-10 px-4 text-left font-medium hidden md:table-cell">Reference</th>
-                  <th className="h-10 px-4 text-left font-medium">Borrower</th>
-                  <th className="h-10 px-4 text-left font-medium hidden md:table-cell">Facility</th>
-                  <th className="h-10 px-4 text-right font-medium hidden md:table-cell">Amount</th>
-                  <th className="h-10 px-4 text-left font-medium">Status</th>
-                  <th className="h-10 px-4 text-right font-medium hidden md:table-cell">Sections reviewed</th>
-                  <th className="h-10 px-4 text-left font-medium hidden md:table-cell">RM</th>
-                  <th className="h-10 px-4 text-left font-medium hidden md:table-cell">Opened</th>
+            <table className="ledger w-full caption-bottom text-sm">
+              <thead>
+                <tr>
+                  <th className="h-10 px-4 text-left hidden md:table-cell">Reference</th>
+                  <th className="h-10 px-4 text-left">Borrower</th>
+                  <th className="h-10 px-4 text-left hidden md:table-cell">Facility</th>
+                  <th className="h-10 px-4 text-right hidden md:table-cell">Amount</th>
+                  <th className="h-10 px-4 text-left">Status</th>
+                  <th className="h-10 px-4 text-right hidden md:table-cell">Sections reviewed</th>
+                  <th className="h-10 px-4 text-left hidden md:table-cell">RM</th>
+                  <th className="h-10 px-4 text-left hidden md:table-cell">Opened</th>
                   <th className="h-10 w-[50px] px-2 md:px-4"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
@@ -182,7 +184,7 @@ export default function CasesList() {
                   cases.map((c) => (
                     <tr
                       key={c.id}
-                      className="group cursor-pointer border-b border-border/70 transition-colors hover:bg-muted/60"
+                      className="group cursor-pointer border-b border-border/60"
                       onClick={() => setLocation(`/cases/${c.id}`)}
                     >
                       <td className="whitespace-nowrap px-4 py-3 align-middle font-mono text-xs text-muted-foreground hidden md:table-cell">{caseRef(c.id, c.createdAt)}</td>
@@ -195,9 +197,16 @@ export default function CasesList() {
                         </div>
                       </td>
                       <td className="px-4 py-3 align-middle text-muted-foreground hidden md:table-cell">{facilityLabel(c.facilityType)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right align-middle tabular-nums hidden md:table-cell">{formatCr(c.facilityAmount)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right align-middle font-medium tabular-nums hidden md:table-cell">{formatCr(c.facilityAmount)}</td>
                       <td className="px-4 py-3 align-middle"><StatusChip status={c.status} /></td>
-                      <td className="px-4 py-3 text-right align-middle text-xs tabular-nums text-muted-foreground hidden md:table-cell">{c.memoProgress}%</td>
+                      <td className="px-4 py-3 align-middle hidden md:table-cell">
+                        <div className="flex items-center justify-end gap-2.5">
+                          <div className="bar-track w-20" role="img" aria-label={`${c.memoProgress}% of sections reviewed`}>
+                            <div className="bar-fill" style={{ width: `${c.memoProgress}%` }} />
+                          </div>
+                          <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">{c.memoProgress}%</span>
+                        </div>
+                      </td>
                       <td className="px-4 py-3 align-middle text-muted-foreground hidden md:table-cell">{c.rmName}</td>
                       <td className="whitespace-nowrap px-4 py-3 align-middle text-muted-foreground hidden md:table-cell">{formatDate(c.createdAt)}</td>
                       <td className="px-2 py-3 align-middle md:px-4" onClick={e => e.stopPropagation()}>
@@ -260,7 +269,8 @@ export default function CasesList() {
             </table>
           </div>
         </div>
-      </div>
+        </div>
+      </PageBody>
 
       <AlertDialog open={deleteConfirmId !== null} onOpenChange={open => { if (!open) setDeleteConfirmId(null); }}>
         <AlertDialogContent>

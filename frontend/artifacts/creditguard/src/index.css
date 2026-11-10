@@ -141,16 +141,18 @@
   --app-font-serif: 'Source Serif 4', Georgia, serif;
   --app-font-mono: 'Geist Mono', ui-monospace, monospace;
   
-  --radius: 0.25rem;
+  --radius: 0.5rem;
 
-  --shadow-2xs: 0px 1px 2px 0px rgba(8,18,42,0.05);
-  --shadow-xs: 0px 1px 2px 0px rgba(8,18,42,0.06);
-  --shadow-sm: 0px 1px 3px 0px rgba(8,18,42,0.07);
-  --shadow: 0px 1px 3px 0px rgba(8,18,42,0.1), 0px 1px 2px -1px rgba(8,18,42,0.08);
-  --shadow-md: 0px 4px 6px -1px rgba(8,18,42,0.1), 0px 2px 4px -2px rgba(8,18,42,0.08);
-  --shadow-lg: 0px 10px 15px -3px rgba(8,18,42,0.1), 0px 4px 6px -4px rgba(8,18,42,0.07);
-  --shadow-xl: 0px 20px 25px -5px rgba(8,18,42,0.1), 0px 8px 10px -6px rgba(8,18,42,0.07);
-  --shadow-2xl: 0px 25px 50px -12px rgba(8,18,42,0.22);
+  /* Elevation is tinted with the ink, never neutral black. */
+  --ink: 212 43% 13%;
+  --shadow-2xs: 0 1px 1px hsl(var(--ink) / 0.05);
+  --shadow-xs: 0 1px 2px hsl(var(--ink) / 0.07);
+  --shadow-sm: 0 1px 2px hsl(var(--ink) / 0.06), 0 2px 6px -2px hsl(var(--ink) / 0.08);
+  --shadow: 0 1px 2px hsl(var(--ink) / 0.06), 0 10px 24px -14px hsl(var(--ink) / 0.22);
+  --shadow-md: 0 1px 2px hsl(var(--ink) / 0.06), 0 14px 30px -14px hsl(var(--ink) / 0.26);
+  --shadow-lg: 0 2px 4px hsl(var(--ink) / 0.06), 0 22px 44px -18px hsl(var(--ink) / 0.3);
+  --shadow-xl: 0 2px 4px hsl(var(--ink) / 0.06), 0 32px 60px -22px hsl(var(--ink) / 0.36);
+  --shadow-2xl: 0 40px 80px -28px hsl(var(--ink) / 0.5);
   
   --tracking-normal: 0em;
   --spacing: 0.25rem;
@@ -326,7 +328,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   Editorial polish — leverage the loaded Fraunces serif + tabular data
+   Editorial polish — Source Serif 4 display + tabular data
    ═══════════════════════════════════════════════════════════════════ */
 @layer base {
   /* Display headings use the serif for an editorial, banker-grade feel.
@@ -421,4 +423,80 @@
     position: sticky; left: 0; z-index: 1; background: hsl(var(--card)); min-width: 7.5rem; max-width: 9.5rem;
   }
   .prose .table-scroll thead th:first-child { background: hsl(var(--muted)); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Surfaces. One elevation language: a panel is lifted by an ink-tinted
+   shadow and carries no border; the band is the ink ground the page
+   title sits on, with panels overlapping its lower edge.
+   ═══════════════════════════════════════════════════════════════════ */
+.panel {
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: clip;
+}
+
+/* The band re-points the tokens so existing markup (buttons, tabs, chips,
+   steppers) reads correctly on ink without per-component overrides. */
+.band, .on-ink {
+  --foreground: 0 0% 100%;
+  --muted-foreground: 203 32% 78%;
+  --border: 209 32% 27%;
+  --input: 209 32% 34%;
+  --muted: 210 38% 19%;
+  --accent: 201 52% 24%;
+  --accent-foreground: 0 0% 100%;
+  --primary: 0 0% 100%;
+  --primary-foreground: 212 43% 13%;
+  --primary-border: hsl(0 0% 100%);
+  --ring: 195 70% 62%;
+  --ok: 152 46% 62%;
+  --ok-bg: 152 40% 18%;
+  --warn: 40 92% 64%;
+  --warn-bg: 38 60% 19%;
+  --risk: 2 82% 74%;
+  --risk-bg: 0 45% 22%;
+  --button-outline: rgba(255, 255, 255, 0.26);
+  --elevate-1: rgba(255, 255, 255, 0.07);
+  --elevate-2: rgba(255, 255, 255, 0.13);
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--ink));
+}
+/* Teal light rises from the band's lower edge, behind the overlapping panels. */
+.band {
+  background-image:
+    radial-gradient(56rem 15rem at 82% 100%, hsl(196 83% 32% / 0.7), transparent 70%),
+    radial-gradient(36rem 11rem at 12% 100%, hsl(196 83% 26% / 0.4), transparent 70%);
+}
+.band a, .on-ink a { color: inherit; }
+.band ::selection { background: hsl(195 70% 62% / 0.4); }
+
+/* Dot chip: status is a colour plus a word, never colour alone. */
+.chip {
+  display: inline-flex; align-items: center; gap: 0.375rem; white-space: nowrap;
+  border-radius: 999px; padding: 0.125rem 0.5rem 0.125rem 0.4375rem;
+  font-size: 0.75rem; line-height: 1.25rem; font-weight: 500;
+}
+.chip::before { content: ""; width: 0.375rem; height: 0.375rem; border-radius: 999px; background: currentColor; flex: none; }
+
+/* Data bars: thin, rounded at the data end, on a quiet track. */
+.bar-track { height: 4px; border-radius: 2px; background: hsl(var(--border) / 0.7); overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 2px; background: hsl(var(--primary)); transform-origin: left; }
+
+/* Table language shared by Pipeline and Cases. */
+.ledger thead th { background: transparent; font-weight: 500; font-size: 0.75rem; color: hsl(var(--muted-foreground)); border-bottom: 1px solid hsl(var(--border)); }
+.ledger tbody tr { transition: background-color 150ms ease-out, box-shadow 150ms ease-out; }
+.ledger tbody tr:hover { background: hsl(var(--accent) / 0.45); box-shadow: inset 2px 0 0 hsl(var(--primary)); }
+
+/* Browser surfaces wear the palette too. */
+::selection { background: hsl(196 83% 24% / 0.18); }
+:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+html { scrollbar-color: hsl(213 14% 72%) transparent; caret-color: hsl(var(--primary)); }
+a { text-underline-offset: 3px; }
+
+@keyframes bar-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: no-preference) {
+  .bar-fill { animation: bar-grow 700ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 }

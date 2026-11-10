@@ -16,20 +16,20 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-50 focus:rounded focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:shadow">
         Skip to content
       </a>
-      <header className="sticky top-0 z-40 border-b border-border bg-card">
+      <header className="on-ink sticky top-0 z-40 shadow-[0_1px_0_hsl(209_32%_22%)]">
         <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-8 px-4 sm:px-8">
           <button
             onClick={() => setOpen(true)}
             aria-label="Open navigation"
-            className="-ml-1 inline-flex h-9 w-9 items-center justify-center rounded text-foreground/70 transition-colors hover:bg-muted md:hidden"
+            className="-ml-1 inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground/80 transition-colors hover:bg-muted md:hidden"
           >
             <PiListLight className="h-5 w-5" />
           </button>
           <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-[-0.01em] text-foreground">
-            <CreditGuardMark className="h-5 w-5 text-primary" />
+            <CreditGuardMark className="h-5 w-5 text-[hsl(195_70%_62%)]" />
             CreditGuard
           </Link>
-          <nav className="hidden h-full items-stretch gap-6 text-[13px] md:flex" aria-label="Main">
+          <nav className="hidden h-full items-center gap-1 text-[13px] md:flex" aria-label="Main">
             {NAVIGATION.map((item) => {
               const active = item.match(location);
               return (
@@ -37,7 +37,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   key={item.name}
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={`flex items-center border-b-2 transition-colors ${active ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                  className={`rounded-md px-3 py-1.5 transition-colors hover:no-underline ${active ? "bg-white/10 font-medium text-foreground shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)]" : "text-muted-foreground hover:bg-white/5 hover:text-foreground"}`}
                 >
                   {item.name}
                 </Link>
@@ -45,7 +45,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
           <div className="ml-auto flex items-center gap-4">
-            <span className="hidden rounded-[3px] border border-border px-2 py-0.5 text-xs text-muted-foreground sm:inline">
+            <span className="chip hidden bg-white/[0.07] text-muted-foreground sm:inline-flex">
               Demo workspace
             </span>
             <AccountMenu />

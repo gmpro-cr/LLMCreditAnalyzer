@@ -43,10 +43,10 @@ const STEPS = [
   },
 ];
 
-const LIMITS = [
-  "It does not make credit decisions. The recommendation is a draft for the RM and credit officer to author.",
-  "Public data is not audited data. Each figure carries its source; verify against audited statements before sanction.",
-  "Borrowers without listed filings need their statements uploaded; the public-data steps do not apply to them.",
+const LIMITS: [string, string][] = [
+  ["It does not make credit decisions.", "The recommendation is a draft for the RM and credit officer to author."],
+  ["Public data is not audited data.", "Each figure carries its source; verify against audited statements before sanction."],
+  ["Unlisted borrowers need their statements uploaded.", "The public-data steps do not apply to borrowers without listed filings."],
 ];
 
 /* ─────────────────────────── shared pieces ─────────────────────────── */
@@ -281,82 +281,220 @@ function MemoAssembly() {
 
 /* ─────────────────── provenance: where a number comes from ─────────────────── */
 
-const TRACE = [
-  {
-    who: "Filing",
-    title: "Consolidated statements",
-    line: "PAT FY26 ₹1,089 Cr · finance cost · depreciation · borrowings",
-    note: "Fetched from Screener.in and the BSE annual report. Stored with its source.",
-  },
-  {
-    who: "Calculation",
-    title: "Deterministic ratios",
-    line: "DSCR = (PAT + depreciation + interest) ÷ (interest + principal due)",
-    note: "Computed in code on one stated basis. The language model never produces this number.",
-  },
-  {
-    who: "Memorandum",
-    title: "Commentary around the figure",
-    line: "“DSCR of 2.90x on a pro forma basis, including the proposed ₹250 Cr term loan.”",
-    note: "Written by the model from the computed value. Figures that disagree with the calculation are flagged.",
-  },
-];
+// Bharat Forge Ltd, consolidated, as computed in CreditGuard's own draft for the
+// ₹250 Cr term-loan example. The sentence is quoted from that draft.
+const YEARS = ["FY22", "FY23", "FY24", "FY25", "FY26"];
+const RATIOS = {
+  debt: { label: "Total debt / EBITDA", series: [3.01, 4.21, 3.1, 2.49, 2.51], limit: 3.5, test: "Covenant ≤ 3.50x", higherIsBetter: false },
+  dscr: { label: "DSCR, pro forma", series: [3.12, 1.95, 2.25, 2.71, 2.9], limit: 1.25, test: "Benchmark ≥ 1.25x", higherIsBetter: true },
+  icr: { label: "Interest coverage", series: [12.39, 5.81, 5.22, 6.46, 9.03], limit: 2, test: "Covenant ≥ 2.00x", higherIsBetter: true },
+} as const;
+type RatioKey = keyof typeof RATIOS;
+type Hot = "debt" | "ebitda" | "ratio" | null;
+
+function Ref({ k, hot, setHot, children, className = "" }: { k: Exclude<Hot, null>; hot: Hot; setHot: (h: Hot) => void; children: React.ReactNode; className?: string }) {
+  const on = hot === k;
+  return (
+    <span
+      tabIndex={0}
+      onMouseEnter={() => setHot(k)}
+      onMouseLeave={() => setHot(null)}
+      onFocus={() => setHot(k)}
+      onBlur={() => setHot(null)}
+      className={`cursor-default rounded-[4px] px-1 py-px outline-none transition-[background-color,box-shadow,color] duration-200 ${
+        on ? "bg-[hsl(195_70%_62%/0.22)] text-white shadow-[0_0_0_1px_hsl(195_70%_62%/0.7)]" : "bg-white/[0.06] shadow-[0_0_0_1px_rgb(255_255_255/0.12)]"
+      } ${className}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function RatioChart({ which, hot, setHot }: { which: RatioKey; hot: Hot; setHot: (h: Hot) => void }) {
+  const r = RATIOS[which];
+  const max = Math.max(...r.series, r.limit) * 1.15;
+  const W = 340, H = 176, base = 148, top = 16, slot = W / r.series.length, bw = 28;
+  const y = (v: number) => base - ((base - top) * v) / max;
+  const [focus, setFocus] = useState<number | null>(null);
+  return (
+    <figure>
+      <figcaption className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[12px] text-muted-foreground">
+        <span className="flex items-center gap-2"><span className="h-0 w-5" style={{ borderTop: "1.5px dashed hsl(40 92% 64%)" }} />{r.test}</span>
+        <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-[hsl(195_70%_62%)]" />{r.label}, FY26</span>
+      </figcaption>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`${r.label}, ${YEARS[0]} to ${YEARS[4]}: ${r.series.map((v, i) => `${YEARS[i]} ${v.toFixed(2)}x`).join(", ")}. ${r.test}.`}>
+        <line x1="0" x2={W} y1={base} y2={base} stroke="rgb(255 255 255 / 0.18)" />
+        <line x1="0" x2={W} y1={y(r.limit)} y2={y(r.limit)} stroke="hsl(40 92% 64%)" strokeWidth="1.25" strokeDasharray="4 4" />
+        {r.series.map((v, i) => {
+          const x = slot * i + (slot - bw) / 2;
+          const latest = i === r.series.length - 1;
+          const lit = latest ? which === "debt" && hot === "ratio" : false;
+          const breach = r.higherIsBetter ? v < r.limit : v > r.limit;
+          const show = latest || breach || focus === i;
+          return (
+            <g key={i} onMouseEnter={() => { setFocus(i); if (latest && which === "debt") setHot("ratio"); }} onMouseLeave={() => { setFocus(null); if (latest) setHot(null); }}>
+              <rect x={slot * i} y={top} width={slot} height={base - top + 20} fill="transparent" />
+              <motion.path
+                initial={false}
+                animate={{ d: `M${x},${base} V${y(v) + 4} q0,-4 4,-4 h${bw - 8} q4,0 4,4 V${base} Z` }}
+                transition={{ duration: 0.6, ease: EASE }}
+                fill={breach ? "hsl(40 92% 64%)" : latest ? "hsl(195 70% 62%)" : "hsl(195 70% 62% / 0.38)"}
+                stroke={lit ? "white" : "none"}
+                strokeWidth="1.5"
+              />
+              {show && (
+                <text x={x + bw / 2} y={y(v) - 8} textAnchor="middle" className="fill-white text-[12px] font-semibold tabular-nums">
+                  {v.toFixed(2)}x
+                </text>
+              )}
+              <text x={x + bw / 2} y={base + 16} textAnchor="middle" className="fill-[hsl(203_32%_78%)] text-[11px]">{YEARS[i]}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </figure>
+  );
+}
 
 function Provenance() {
+  const [hot, setHot] = useState<Hot>(null);
+  const [which, setWhich] = useState<RatioKey>("debt");
   return (
-    <section id="provenance" className="border-b border-border bg-card">
-      <div className="mx-auto max-w-[1200px] px-4 py-20 sm:px-8 lg:py-28">
-        <motion.div
-          variants={fadeUp}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.6 }}
-          className="max-w-[60ch]"
-        >
-          <h2 className="text-[30px] leading-tight [text-wrap:balance] sm:text-[38px]">
-            Where each number in the memorandum comes from
+    <section id="provenance" className="on-ink relative overflow-hidden bg-foreground">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(60rem_26rem_at_100%_0%,hsl(196_83%_28%/0.55),transparent_70%)]" />
+      <div className="relative mx-auto max-w-[1200px] px-4 py-20 sm:px-8 lg:py-28">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-end lg:gap-16">
+          <h2 className="text-[32px] leading-[1.1] [text-wrap:balance] sm:text-[44px]">
+            Every figure can be followed back to the filing it came from.
           </h2>
-          <p className="mt-4 text-[16px] leading-relaxed text-muted-foreground [text-wrap:pretty]">
-            Maths and language are kept apart. A credit officer can follow any figure from the filing to the sentence that cites it.
+          <p className="max-w-[52ch] text-[16px] leading-relaxed text-muted-foreground [text-wrap:pretty]">
+            Ratios are computed in code on one stated basis. The language model only writes the sentence around them, and a sentence that disagrees with the calculation is flagged.
+            <span className="mt-2 block text-[13px]">Point at a number to see where it goes.</span>
           </p>
-        </motion.div>
+        </div>
 
-        <ol className="relative mt-14 grid gap-6 lg:grid-cols-3 lg:gap-0">
-          {/* Connector drawn across the row on wide screens */}
-          <motion.span
-            aria-hidden="true"
-            initial={{ scaleX: 0 }}
-            whileInView={{ scaleX: 1 }}
-            viewport={{ once: true, amount: 0.5 }}
-            transition={{ duration: 1.4, ease: EASE, delay: 0.2 }}
-            className="absolute left-[27px] right-[calc(33.333%-47px)] top-[27px] hidden h-px origin-left bg-primary/40 lg:block"
-          />
-          {TRACE.map((t, i) => (
-            <motion.li
-              key={t.who}
-              initial={{ opacity: 0, y: 18 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.4 }}
-              transition={{ duration: 0.7, ease: EASE, delay: 0.25 + i * 0.25 }}
-              className="relative lg:px-5 first:lg:pl-0 last:lg:pr-0"
-            >
-              <div className="flex items-center gap-3">
-                <span className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-[13px] font-semibold text-primary-foreground ring-[6px] ring-card lg:h-[54px] lg:w-[54px]">
-                  {i + 1}
-                </span>
-                <span className="relative z-10 -ml-3 bg-card pl-3 pr-3 text-[13px] font-semibold text-primary">{t.who}</span>
-                {i < TRACE.length - 1 && <Arrow className="ml-auto h-4 w-4 rotate-90 text-primary/50 lg:hidden" />}
+        <div className="mt-12 grid overflow-hidden rounded-2xl bg-white/[0.04] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)] lg:grid-cols-[1fr_1fr_1.15fr]">
+          <div className="border-b border-white/10 p-6 lg:border-b-0 lg:border-r sm:p-7">
+            <div className="text-[13px] font-semibold text-[hsl(195_70%_62%)]">Filing</div>
+            <p className="mt-1 text-[13px] text-muted-foreground">Consolidated statements, FY26 · Screener.in, BSE annual report</p>
+            <dl className="mt-6 space-y-4 text-[15px]">
+              <div className="flex items-baseline justify-between gap-4 border-b border-white/10 pb-3">
+                <dt className="text-muted-foreground">Total debt</dt>
+                <dd className="tabular-nums font-semibold"><Ref k="debt" hot={hot} setHot={setHot}>₹7,309 Cr</Ref></dd>
               </div>
-              <div className="mt-5 rounded-xl border border-border bg-background/60 p-5">
-                <h3 className="text-[17px] font-semibold">{t.title}</h3>
-                <p className={`mt-3 rounded-md bg-card px-3 py-2.5 text-[13px] leading-relaxed ring-1 ring-border ${i === 2 ? "font-serif text-[14px]" : "font-mono"}`}>
-                  {t.line}
-                </p>
-                <p className="mt-3 text-[14px] leading-relaxed text-muted-foreground">{t.note}</p>
+              <div className="flex items-baseline justify-between gap-4 border-b border-white/10 pb-3">
+                <dt className="text-muted-foreground">EBITDA</dt>
+                <dd className="tabular-nums font-semibold"><Ref k="ebitda" hot={hot} setHot={setHot}>₹2,917 Cr</Ref></dd>
               </div>
-            </motion.li>
-          ))}
-        </ol>
+              <div className="flex items-baseline justify-between gap-4 text-[13px] text-muted-foreground">
+                <dt>Term debt and leases · working capital</dt>
+                <dd className="tabular-nums">₹2,246 · ₹5,062 Cr</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className="border-b border-white/10 p-6 lg:border-b-0 lg:border-r sm:p-7">
+            <div className="text-[13px] font-semibold text-[hsl(195_70%_62%)]">Calculation</div>
+            <p className="mt-1 text-[13px] text-muted-foreground">Deterministic, in code. Never generated by the model.</p>
+            <div className="mt-6 font-mono text-[15px] leading-loose tabular-nums">
+              <Ref k="debt" hot={hot} setHot={setHot}>7,309</Ref>
+              <span className="mx-2 text-muted-foreground">÷</span>
+              <Ref k="ebitda" hot={hot} setHot={setHot}>2,917</Ref>
+              <span className="mx-2 text-muted-foreground">=</span>
+              <Ref k="ratio" hot={hot} setHot={setHot} className="font-semibold">2.51x</Ref>
+            </div>
+            <div className="mt-5 flex items-center gap-2 text-[13px]">
+              <span className="chip bg-ok-bg text-ok">Complied</span>
+              <span className="text-muted-foreground">against covenant ≤ 3.50x</span>
+            </div>
+          </div>
+
+          <div className="p-6 sm:p-7">
+            <div className="text-[13px] font-semibold text-[hsl(195_70%_62%)]">Memorandum</div>
+            <p className="mt-1 text-[13px] text-muted-foreground">Leverage, Debt Profile &amp; Debt Servicing · section 9 of 21</p>
+            <blockquote className="mt-6 font-serif text-[19px] leading-[1.55] text-white">
+              “The total debt-to-EBITDA ratio improved to <Ref k="ratio" hot={hot} setHot={setHot} className="font-semibold">2.51x</Ref> in FY26 from 3.10x in FY24.”
+            </blockquote>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-6 rounded-2xl bg-white/[0.04] p-6 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)] sm:p-7 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center lg:gap-12">
+          <div>
+            <h3 className="text-[19px] font-semibold">Five years on the same basis</h3>
+            <p className="mt-2 max-w-[44ch] text-[14px] leading-relaxed text-muted-foreground">
+              The draft tests each ratio against its covenant for every year, so a credit officer sees the trend, not one flattering number. A breached year is marked in amber.
+            </p>
+            <div role="tablist" aria-label="Ratio" className="mt-5 inline-flex flex-wrap gap-1 rounded-lg bg-white/[0.06] p-1">
+              {(Object.keys(RATIOS) as RatioKey[]).map((k) => (
+                <button
+                  key={k}
+                  role="tab"
+                  aria-selected={which === k}
+                  onClick={() => setWhich(k)}
+                  className={`rounded-md px-3 py-1.5 text-[13px] transition-colors ${which === k ? "bg-white font-medium text-[hsl(212_43%_13%)]" : "text-muted-foreground hover:text-white"}`}
+                >
+                  {RATIOS[k].label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <RatioChart which={which} hot={hot} setHot={setHot} />
+        </div>
+        <p className="mt-4 text-[12px] text-muted-foreground">Example: Bharat Forge Ltd, consolidated, from CreditGuard's draft for a ₹250 Cr term loan. Published figures; not audited by CreditGuard.</p>
+      </div>
+    </section>
+  );
+}
+
+/* ───────────────────────── the memorandum it drafts ───────────────────────── */
+
+// Section order and titles as produced by the engine (python-service/cam_v2.py).
+const CONTENTS: [string, boolean][] = [
+  ["Executive Summary", true], ["Proposal & Facility Structure", true], ["Company & Business Profile", true],
+  ["Group Structure", true], ["Shareholding, Board & Management", true], ["Industry Outlook", true],
+  ["Financial Analysis — Summary", true], ["Revenue & Profitability", true], ["Leverage, Debt Profile & Debt Servicing", true],
+  ["Liquidity & Working Capital", true], ["Interim Performance", true], ["Assessment of Facilities & Sensitivity", true],
+  ["Banking Arrangement & Credit Ratings", true], ["Contingent Liabilities, Related Parties & Audit", true], ["Peer Comparison", true],
+  ["Due Diligence & Hygiene Checks", true], ["Key Risks & Mitigants", true], ["Recommendation, Terms & Covenants", true],
+  ["EWS Checklist", false], ["Reference Check", false], ["Information Required from RM", false],
+];
+
+function Contents() {
+  return (
+    <section className="border-b border-border bg-background">
+      <div className="mx-auto grid max-w-[1200px] gap-12 px-4 py-20 sm:px-8 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] lg:gap-16 lg:py-28">
+        <div className="lg:sticky lg:top-28 lg:self-start">
+          <h2 className="text-[32px] leading-[1.1] [text-wrap:balance] sm:text-[44px]">The whole memorandum, in the bank's order.</h2>
+          <p className="mt-5 max-w-[44ch] text-[16px] leading-relaxed text-muted-foreground [text-wrap:pretty]">
+            Twenty-one sections, from the executive summary to the list of what the RM still has to collect. Each section is drafted from the case's data, then edited, reviewed and locked by the RM.
+          </p>
+          <dl className="mt-8 flex gap-8 text-[13px]">
+            <div><dt className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-primary" />Drafted with commentary</dt><dd className="mt-1 font-serif text-[28px] font-semibold tabular-nums">18</dd></div>
+            <div><dt className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-warn" />Checklists for the RM</dt><dd className="mt-1 font-serif text-[28px] font-semibold tabular-nums">3</dd></div>
+          </dl>
+        </div>
+
+        <div className="relative">
+          <div aria-hidden="true" className="absolute inset-x-5 -bottom-3 top-4 rounded-2xl bg-card/70 shadow-sm" />
+          <div className="relative rounded-2xl bg-card px-6 py-7 shadow-lg sm:px-10 sm:py-9">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border pb-4">
+              <div>
+                <div className="font-serif text-[20px] font-semibold">Credit Appraisal Memorandum</div>
+                <div className="text-[12px] text-muted-foreground">Contents</div>
+              </div>
+              <span className="chip bg-accent text-accent-foreground">Draft for RM review</span>
+            </div>
+            <ol className="mt-4 gap-x-10 sm:columns-2">
+              {CONTENTS.map(([title, drafted], i) => (
+                <li key={title} className="flex break-inside-avoid items-baseline gap-3 border-b border-border/60 py-2.5 text-[14px]">
+                  <span className="w-5 shrink-0 text-right text-[12px] tabular-nums text-muted-foreground">{i + 1}</span>
+                  <span className="min-w-0 flex-1 leading-snug">{title}</span>
+                  <span aria-label={drafted ? "drafted with commentary" : "checklist for the RM"} className={`h-1.5 w-1.5 shrink-0 translate-y-[-2px] rounded-full ${drafted ? "bg-primary" : "bg-warn"}`} />
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -408,7 +546,7 @@ function Timeline() {
               <p className="mt-2 max-w-[62ch] text-[15px] leading-relaxed text-muted-foreground [text-wrap:pretty]">{s.body}</p>
               <ul className="mt-4 flex flex-wrap gap-2">
                 {s.tags.map((t) => (
-                  <li key={t} className="rounded-full bg-card px-3 py-1 text-[12px] font-medium text-foreground ring-1 ring-border">
+                  <li key={t} className="rounded-md bg-card px-2.5 py-1 text-[12px] font-medium text-foreground shadow-xs">
                     {t}
                   </li>
                 ))}
@@ -486,31 +624,22 @@ export default function Landing() {
         <main>
           {/* Hero: committed teal */}
           <section className="relative overflow-hidden bg-primary text-primary-foreground">
-            <motion.div
-              aria-hidden="true"
-              className="pointer-events-none absolute -right-[20%] -top-[30%] h-[80vmax] w-[80vmax] rounded-full bg-[radial-gradient(closest-side,hsl(190_70%_45%/0.35),transparent)]"
-              animate={{ x: [0, -40, 0], y: [0, 30, 0] }}
-              transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-            />
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:linear-gradient(white_1px,transparent_1px),linear-gradient(90deg,white_1px,transparent_1px)] [background-size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_85%)]"
+              className="pointer-events-none absolute inset-0 bg-[radial-gradient(70rem_40rem_at_85%_-10%,hsl(190_70%_40%/0.45),transparent_65%),radial-gradient(50rem_30rem_at_0%_110%,hsl(212_43%_13%/0.55),transparent_70%)]"
             />
 
             <div className="relative mx-auto grid max-w-[1200px] grid-cols-[minmax(0,1fr)] items-center gap-14 px-4 pb-20 pt-32 sm:px-8 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,1fr)] lg:gap-16 lg:pb-28 lg:pt-40">
               <motion.div variants={heroStagger} initial="hidden" animate="show">
-                <motion.p variants={fadeUp} className="text-[13px] font-medium text-white/80">
-                  Credit appraisal for Indian commercial banks
-                </motion.p>
                 <motion.h1
                   variants={fadeUp}
-                  className="mt-4 text-[38px] font-semibold leading-[1.08] tracking-[-0.025em] [text-wrap:balance] sm:text-[52px] lg:text-[58px]"
+                  className="text-[38px] font-semibold leading-[1.08] tracking-[-0.025em] [text-wrap:balance] sm:text-[52px] lg:text-[58px]"
                 >
                   Draft the CAM from filings, with every figure traced to its source.
                 </motion.h1>
                 <motion.p variants={fadeUp} className="mt-6 max-w-[54ch] text-[17px] leading-relaxed text-white/85 [text-wrap:pretty]">
-                  CreditGuard reads a listed borrower's statements and annual report, drafts a 21-section memorandum
-                  for the RM to edit, and lists what still has to be collected before sanction.
+                  For Indian commercial banks. CreditGuard reads a listed borrower's statements and annual report, drafts a
+                  21-section credit appraisal memorandum for the RM to edit, and lists what still has to be collected before sanction.
                 </motion.p>
                 <motion.div variants={fadeUp} className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
                   <motion.button
@@ -550,36 +679,31 @@ export default function Landing() {
 
           <Provenance />
           <Timeline />
+          <Contents />
 
-          <section id="limits" className="border-t border-border bg-card">
-            <div className="mx-auto grid max-w-[1200px] gap-10 px-4 py-20 sm:px-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-20 lg:py-24">
-              <motion.div variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.6 }}>
-                <h2 className="text-[30px] leading-tight sm:text-[38px]">What it doesn't do</h2>
-                <p className="mt-4 max-w-[40ch] text-[16px] leading-relaxed text-muted-foreground">
+          <section id="limits" className="bg-card">
+            <div className="mx-auto max-w-[1200px] px-4 py-20 sm:px-8 lg:py-24">
+              <div className="flex flex-wrap items-end justify-between gap-6">
+                <h2 className="text-[32px] leading-[1.1] sm:text-[44px]">What it doesn't do</h2>
+                <p className="max-w-[44ch] text-[15px] leading-relaxed text-muted-foreground">
                   A memorandum is only as trustworthy as its sources. These limits are shown inside every case too.
                 </p>
-              </motion.div>
-              <ul className="overflow-hidden rounded-xl border border-border">
-                {LIMITS.map((l, i) => (
-                  <motion.li
-                    key={l}
-                    initial={{ opacity: 0, y: 10 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, amount: 0.6 }}
-                    transition={{ duration: 0.5, ease: EASE, delay: i * 0.1 }}
-                    className="flex gap-4 border-t border-border bg-background/50 px-5 py-5 text-[15px] leading-relaxed first:border-t-0 sm:px-6"
-                  >
-                    <span className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-warn" aria-hidden="true" />
-                    {l}
-                  </motion.li>
+              </div>
+              <ul className="mt-12 grid gap-px overflow-hidden rounded-2xl bg-border md:grid-cols-3">
+                {LIMITS.map(([lead, detail]) => (
+                  <li key={lead} className="bg-card p-6 sm:p-7">
+                    <p className="font-serif text-[20px] font-semibold leading-snug">{lead}</p>
+                    <p className="mt-3 text-[14px] leading-relaxed text-muted-foreground">{detail}</p>
+                  </li>
                 ))}
               </ul>
             </div>
           </section>
 
           {/* Closing call to action */}
-          <section className="bg-foreground text-white">
-            <div className="mx-auto flex max-w-[1200px] flex-col items-start gap-8 px-4 py-16 sm:px-8 md:flex-row md:items-center md:justify-between lg:py-20">
+          <section className="relative overflow-hidden bg-primary text-white">
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(50rem_24rem_at_100%_100%,hsl(190_70%_40%/0.5),transparent_70%)]" />
+            <div className="relative mx-auto flex max-w-[1200px] flex-col items-start gap-8 px-4 py-16 sm:px-8 md:flex-row md:items-center md:justify-between lg:py-20">
               <div>
                 <h2 className="text-[26px] font-semibold leading-tight sm:text-[32px]">Open a case on a listed borrower.</h2>
                 <p className="mt-3 max-w-[52ch] text-[15px] leading-relaxed text-white/75">
@@ -593,7 +717,7 @@ export default function Landing() {
                 whileHover={{ y: -2 }}
                 whileTap={{ y: 0, scale: 0.98 }}
                 transition={{ duration: 0.2, ease: EASE }}
-                className="group inline-flex h-12 shrink-0 items-center gap-2 rounded-md bg-white px-5 text-[15px] font-semibold text-foreground disabled:opacity-60"
+                className="group inline-flex h-12 shrink-0 items-center gap-2 rounded-md bg-white px-5 text-[15px] font-semibold text-primary shadow-[0_6px_8px_-6px_rgb(0_0_0/0.35)] disabled:opacity-60"
               >
                 Open demo workspace
                 <Arrow className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />

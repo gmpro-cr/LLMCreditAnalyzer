@@ -116,7 +116,7 @@ function SectionSheet({
   return (
     <article
       id={`section-${section.sectionKey}`}
-      className="scroll-mt-24 rounded border border-border bg-card px-4 pb-6 pt-5 shadow-[0_1px_2px_hsl(212_43%_13%/0.06)] sm:px-12 sm:pt-9"
+      className="scroll-mt-24 panel px-4 pb-6 pt-5 shadow-[0_1px_2px_hsl(212_43%_13%/0.06)] sm:px-12 sm:pt-9"
     >
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span>Section {index} of {total}</span>
@@ -226,7 +226,7 @@ function FiguresStrip({ s }: { s: CamSummary }) {
   const agencies = s.rating ? s.rating.split(";").map((r) => r.split(":")[0].trim()).filter(Boolean) : [];
   const lt = s.rating ? (s.rating.split(";")[0].split(":")[1] || "").trim().split(" ")[0] : "";
   return (
-    <div className="mb-4 grid grid-cols-2 rounded border border-border bg-card sm:grid-cols-3 xl:grid-cols-6">
+    <div className="mb-4 grid grid-cols-2 panel sm:grid-cols-3 xl:grid-cols-6">
       <Figure label={`Revenue ${s.year ?? ""}`} value={fcr(m.sales)} note={growth != null ? `${growth >= 0 ? "+" : ""}${growth.toFixed(1)}% YoY` : undefined} tone={growth != null ? (growth >= 0 ? "ok" : "risk") : undefined} />
       <Figure label="EBITDA margin" value={fp(m.ebitda_margin)} note={s.ebitda_margin_avg3 != null ? `3-yr avg ${s.ebitda_margin_avg3.toFixed(1)}%` : undefined} />
       <Figure label="Total debt / EBITDA" value={fx(m.debt_ebitda)} note="Covenant ≤ 3.50x" tone={m.debt_ebitda != null && m.debt_ebitda > 3.5 ? "risk" : undefined} />
@@ -239,7 +239,7 @@ function FiguresStrip({ s }: { s: CamSummary }) {
 
 function RailBox({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded border border-border bg-card">
+    <section className="panel">
       <div className="flex items-baseline justify-between border-b border-border px-4 py-3">
         <h3 className="text-[13px] font-semibold">{title}</h3>
         {aside}
@@ -601,8 +601,8 @@ export default function CaseDetail() {
 
   return (
     <div>
-      <section className="border-b border-border bg-card">
-        <div className="mx-auto max-w-[1440px] px-4 pt-5 sm:px-8">
+      <section className="band">
+        <div className="mx-auto max-w-[1440px] px-4 pt-6 sm:px-8">
           <div className="text-xs text-muted-foreground">
             <Link href="/cases" className="text-muted-foreground hover:text-foreground">Cases</Link>
             <span className="mx-1.5">/</span>
@@ -610,7 +610,7 @@ export default function CaseDetail() {
           </div>
           <div className="mt-1.5 flex flex-wrap items-end gap-x-6 gap-y-4">
             <div className="min-w-0 flex-[1_1_520px]">
-              <h1 className="text-[32px] leading-tight text-foreground">{caseData.borrowerName}</h1>
+              <h1 className="text-[30px] leading-[1.15] text-foreground sm:text-[36px]">{caseData.borrowerName}</h1>
               <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
                 {symbol && <span>NSE: {symbol}</span>}
                 <span>{caseData.sector}</span>
@@ -637,7 +637,7 @@ export default function CaseDetail() {
               )}
               {status === "in_review" && (
                 <>
-                  <Button size="sm" variant="outline" className="border-risk/30 text-risk hover:bg-risk-bg" onClick={() => setStatus("rejected", "Returned to the RM")}>Return to RM</Button>
+                  <Button size="sm" variant="outline" className="text-risk" onClick={() => setStatus("rejected", "Returned to the RM")}>Return to RM</Button>
                   <Button size="sm" onClick={() => setStatus("approved", "Memorandum approved")}>Approve memorandum</Button>
                 </>
               )}
@@ -652,7 +652,7 @@ export default function CaseDetail() {
                 role="tab"
                 aria-selected={tab === k}
                 onClick={() => { if (k === "dataroom") setRoomPanel("financials"); setTab(k); }}
-                className={`-mb-px border-b-2 py-2.5 transition-colors ${tab === k ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                className={`border-b-2 py-3 transition-colors ${tab === k ? "border-[hsl(195_70%_62%)] font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
               >
                 {label}
               </button>
@@ -759,7 +759,7 @@ export default function CaseDetail() {
                 ))}
               </div>
             ) : !generating && !shownError && (
-              <div className="rounded border border-border bg-card px-8 py-16 text-center">
+              <div className="panel px-8 py-16 text-center">
                 <h2 className="text-2xl">No draft yet</h2>
                 <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
                   The draft is built from the Data room: financials, the latest annual report, peers and research. Every figure in it is traced to its source.

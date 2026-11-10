@@ -1,3 +1,4 @@
+import { PageHeader, PageBody } from "@/components/layout/PageHeader";
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
@@ -5,7 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   PiSparkleLight,
-  PiArrowLeftLight,
   PiBuildingsLight,
   PiUserCircleLight,
   PiBriefcaseLight,
@@ -295,24 +295,15 @@ export default function NewCase() {
   const history = selectedCompany?.financialHistory ?? [];
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 sm:p-8 space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-start gap-2 sm:gap-4">
-        <Link
-          href="/cases"
-          className="mt-1 inline-flex shrink-0 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted h-10 w-10 -ml-2 sm:ml-0"
-        >
-          <PiArrowLeftLight className="h-5 w-5 text-muted-foreground" />
-          <span className="sr-only">Back</span>
-        </Link>
-        <div>
-          <h1 className="text-[32px] leading-tight">New case</h1>
-          <p className="text-muted-foreground mt-1">
-            Identify the borrower and the proposed facility. Financials and filings are fetched in the next step.
-          </p>
-        </div>
-      </div>
-
-      <Card className="border-primary/30 bg-primary/5">
+    <>
+      <PageHeader
+        width="max-w-4xl"
+        crumbs={<><Link href="/cases" className="hover:underline">Cases</Link><span className="mx-1.5">/</span>New case</>}
+        title="New case"
+        subtitle="Identify the borrower and the proposed facility. Financials and filings are fetched in the next step."
+      />
+      <PageBody width="max-w-4xl" className="space-y-6">
+      <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <PiGlobeLight className="h-4 w-4 text-primary" />
@@ -733,6 +724,7 @@ export default function NewCase() {
           </div>
         </form>
       </Form>
-    </div>
+      </PageBody>
+    </>
   );
 }
